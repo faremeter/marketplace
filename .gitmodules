@@ -1,0 +1,3 @@
+[submodule "infra-toolbox"]
+	path = infra-toolbox
+	url = git@github.com:faremeter/infra-toolbox
