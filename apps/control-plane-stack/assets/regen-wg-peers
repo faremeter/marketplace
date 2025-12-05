@@ -1,0 +1,42 @@
+#!/bin/bash
+set -euo pipefail
+
+WG1_CONF="/etc/wireguard/wg1.conf"
+
+# Extract [Interface] section from existing config
+interface_section=$(sed -n '/^\[Interface\]/,/^\[Peer\]/{ /^\[Peer\]/d; p; }' "$WG1_CONF" | sed '/^$/d')
+
+if [[ -z "$interface_section" ]]; then
+    echo "ERROR: Could not read [Interface] section from $WG1_CONF" >&2
+    exit 1
+fi
+
+# Query active nodes with wireguard config from database
+peers=$(PGPASSWORD="$DATABASE_PASSWORD" psql -h "$DATABASE_HOST" -p "$DATABASE_PORT" -U "$DATABASE_USER" -d "$DATABASE_NAME" -t -A -F $'\t' -c "
+    SELECT wireguard_public_key, wireguard_address
+    FROM nodes
+    WHERE wireguard_public_key IS NOT NULL
+      AND wireguard_address IS NOT NULL
+      AND status IN ('active', 'pending')
+")
+
+# Build new config
+{
+    echo "$interface_section"
+    echo ""
+
+    while IFS=$'\t' read -r pubkey address; do
+        [[ -z "$pubkey" ]] && continue
+        echo "[Peer]"
+        echo "PublicKey = $pubkey"
+        echo "AllowedIPs = $address/32"
+        echo ""
+    done <<<"$peers"
+} >"$WG1_CONF"
+
+peer_count=$(echo "$peers" | grep -c . || echo 0)
+echo "Wrote $peer_count peers to $WG1_CONF"
+
+# Hot reload wireguard
+wg syncconf wg1 <(wg-quick strip wg1)
+echo "Reloaded wg1"

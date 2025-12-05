@@ -1,0 +1,11 @@
+description: Control plane infrastructure
+name: api-control-plane
+runtime:
+  name: nodejs
+  options:
+    packagemanager: pnpm
+    nodeargs: "--import tsx"
+config:
+  pulumi:tags:
+    value:
+      pulumi:template: aws-typescript

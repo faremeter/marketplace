@@ -1,0 +1,15 @@
+#!/bin/bash
+DOMAIN=$1
+FILE=$2
+
+if [[ "$FILE" != "fullchain.pem" && "$FILE" != "privkey.pem" ]]; then
+    echo "Invalid file" >&2
+    exit 1
+fi
+
+if [[ ! "$DOMAIN" =~ ^[a-zA-Z0-9-]+\.test\.api\.corbits\.dev$ ]]; then
+    echo "Invalid domain" >&2
+    exit 1
+fi
+
+cat "/etc/letsencrypt/live/${DOMAIN}/${FILE}"
