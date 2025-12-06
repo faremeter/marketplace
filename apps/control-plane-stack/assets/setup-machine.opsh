@@ -113,7 +113,7 @@ Endpoint = dashboard.ops.corbits.dev:51820
 EOF
     sudo systemctl enable --now wg-quick@wg0
 
-    # wg1: Control-plane hub for api-multi nodes (hub)
+    # Peers are managed dynamically from DB via wg-peers service
     touch /etc/wireguard/wg1.conf
     chmod 600 /etc/wireguard/wg1.conf
     cat <<EOF >/etc/wireguard/wg1.conf
@@ -121,10 +121,20 @@ EOF
 Address = ${WIREGUARD_WG1_ADDRESS}/24
 ListenPort = 51821
 PrivateKey = ${WIREGUARD_PRIVATE_KEY}
-
-${WIREGUARD_WG1_PEERS}
 EOF
     sudo systemctl enable --now wg-quick@wg1
+
+    # Install wg-peers service for dynamic peer management
+    cp ./regen-wg-peers /usr/local/bin/regen-wg-peers
+    chmod +x /usr/local/bin/regen-wg-peers
+    cp ./wg-peers.service /etc/systemd/system/wg-peers.service
+    systemctl daemon-reload
+
+    # Allow admin to trigger wg-peers service without password
+    cat <<EOF >/etc/sudoers.d/wg-peers
+admin ALL=(ALL) NOPASSWD: /bin/systemctl start wg-peers
+EOF
+    chmod 440 /etc/sudoers.d/wg-peers
 }
 
 step::30::setup-alloy() {
@@ -186,7 +196,6 @@ step::40::setup-nginx() {
 
     cp ./50_control_plane.conf /etc/nginx/sites-available/control-plane.d/.
 
-    # Copy systemd service
     cp ./control_plane.service /etc/systemd/system/control-plane.service
     systemctl daemon-reload
 

@@ -1,0 +1,7 @@
+[Unit]
+Description=Regenerate WireGuard peers from DB
+
+[Service]
+Type=oneshot
+EnvironmentFile=/home/admin/control-plane/.env
+ExecStart=/usr/local/bin/regen-wg-peers

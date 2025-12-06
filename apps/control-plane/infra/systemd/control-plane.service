@@ -1,0 +1,19 @@
+[Unit]
+Description=Control Plane API
+After=network.target postgresql.service
+
+[Service]
+Type=simple
+User=admin
+WorkingDirectory=/home/admin/control-plane
+Environment=NODE_ENV=production
+EnvironmentFile=/home/admin/control-plane/.env
+ExecStart=/usr/bin/npm start
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=control-plane
+
+[Install]
+WantedBy=multi-user.target

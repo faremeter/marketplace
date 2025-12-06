@@ -1,0 +1,40 @@
+{
+  "name": "control-plane",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "start": "tsx src/server.ts",
+    "migrate": "tsx src/db/migrate.ts",
+    "migrate:up": "tsx src/db/migrate.ts up",
+    "migrate:down": "tsx src/db/migrate.ts down"
+  },
+  "dependencies": {
+    "@aws-sdk/client-route-53": "^3.948.0",
+    "@faremeter/info": "^0.15.0",
+    "@hono/node-server": "^1.19.5",
+    "@logtape/logtape": "^1.2.2",
+    "@solana/kit": "^5.1.0",
+    "bcrypt": "^5.1.1",
+    "dotenv": "^17.2.1",
+    "hono": "^4.9.10",
+    "jsonwebtoken": "^9.0.2",
+    "kysely": "^0.27.4",
+    "pg": "^8.13.1",
+    "pg-boss": "^10.1.5",
+    "viem": "^2.41.2"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.1",
+    "@types/bcrypt": "^5.0.2",
+    "@types/jsonwebtoken": "^9.0.7",
+    "@types/node": "^20.19.11",
+    "@types/pg": "^8.11.10",
+    "eslint": "^9.39.1",
+    "prettier": "^3.7.4",
+    "tsx": "^4.20.5",
+    "typescript": "^5.9.2",
+    "typescript-eslint": "^8.48.1"
+  }
+}

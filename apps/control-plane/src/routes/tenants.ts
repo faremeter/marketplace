@@ -1,0 +1,312 @@
+import { Hono } from "hono";
+import { db } from "../server.js";
+import { syncToNode } from "../lib/sync.js";
+import { logger } from "../logger.js";
+import { encryptWalletKeys } from "../lib/crypto.js";
+import {
+  upsertNodeDnsRecord,
+  deleteNodeDnsRecord,
+  deleteAllTenantDnsRecords,
+  createHealthCheck,
+  deleteHealthCheck,
+} from "../lib/dns.js";
+import { enqueueCertProvisioning } from "../lib/queue.js";
+
+export const tenantsRoutes = new Hono();
+
+tenantsRoutes.get("/", async (c) => {
+  const tenants = await db
+    .selectFrom("tenants")
+    .selectAll()
+    .orderBy("created_at", "desc")
+    .execute();
+  return c.json(tenants);
+});
+
+tenantsRoutes.get("/:id", async (c) => {
+  const id = parseInt(c.req.param("id"));
+  const tenant = await db
+    .selectFrom("tenants")
+    .selectAll()
+    .where("id", "=", id)
+    .executeTakeFirst();
+
+  if (!tenant) {
+    return c.json({ error: "Tenant not found" }, 404);
+  }
+  return c.json(tenant);
+});
+
+tenantsRoutes.post("/", async (c) => {
+  const body = await c.req.json();
+
+  const result = await db
+    .insertInto("tenants")
+    .values({
+      name: body.name,
+      backend_url: body.backend_url,
+      wallet_config: JSON.stringify(encryptWalletKeys(body.wallet_config)),
+      default_price_usdc: body.default_price_usdc,
+      default_scheme: body.default_scheme ?? "exact",
+      upstream_auth_header: body.upstream_auth_header ?? null,
+      upstream_auth_value: body.upstream_auth_value ?? null,
+      is_active: body.is_active ?? true,
+    })
+    .returningAll()
+    .executeTakeFirstOrThrow();
+
+  return c.json(result, 201);
+});
+
+tenantsRoutes.put("/:id", async (c) => {
+  const id = parseInt(c.req.param("id"));
+  const body = await c.req.json();
+
+  const updateData: Record<string, unknown> = {};
+  if (body.name !== undefined) updateData.name = body.name;
+  if (body.backend_url !== undefined) updateData.backend_url = body.backend_url;
+  if (body.organization_id !== undefined)
+    updateData.organization_id = body.organization_id;
+  if (body.wallet_config !== undefined)
+    updateData.wallet_config = JSON.stringify(
+      encryptWalletKeys(body.wallet_config),
+    );
+  if (body.default_price_usdc !== undefined)
+    updateData.default_price_usdc = body.default_price_usdc;
+  if (body.default_scheme !== undefined)
+    updateData.default_scheme = body.default_scheme;
+  if (body.upstream_auth_header !== undefined)
+    updateData.upstream_auth_header = body.upstream_auth_header;
+  if (body.upstream_auth_value !== undefined)
+    updateData.upstream_auth_value = body.upstream_auth_value;
+  if (body.is_active !== undefined) updateData.is_active = body.is_active;
+
+  const result = await db
+    .updateTable("tenants")
+    .set(updateData)
+    .where("id", "=", id)
+    .returningAll()
+    .executeTakeFirst();
+
+  if (!result) {
+    return c.json({ error: "Tenant not found" }, 404);
+  }
+
+  const assignedNodes = await db
+    .selectFrom("tenant_nodes")
+    .select(["node_id"])
+    .where("tenant_id", "=", id)
+    .execute();
+
+  for (const { node_id } of assignedNodes) {
+    syncToNode(node_id).catch((err) => logger.error(String(err)));
+  }
+
+  return c.json(result);
+});
+
+tenantsRoutes.delete("/:id", async (c) => {
+  const id = parseInt(c.req.param("id"));
+
+  const tenant = await db
+    .selectFrom("tenants")
+    .select(["id", "name"])
+    .where("id", "=", id)
+    .executeTakeFirst();
+
+  if (!tenant) {
+    return c.json({ error: "Tenant not found" }, 404);
+  }
+
+  const tenantNodes = await db
+    .selectFrom("tenant_nodes")
+    .select(["node_id", "health_check_id"])
+    .where("tenant_id", "=", id)
+    .execute();
+
+  const result = await db
+    .deleteFrom("tenants")
+    .where("id", "=", id)
+    .returningAll()
+    .executeTakeFirst();
+
+  if (!result) {
+    return c.json({ error: "Tenant not found" }, 404);
+  }
+
+  deleteAllTenantDnsRecords(tenant.name).catch((err) =>
+    logger.error(`Failed to delete DNS for tenant ${tenant.name}: ${err}`),
+  );
+
+  for (const { node_id, health_check_id } of tenantNodes) {
+    if (health_check_id) {
+      deleteHealthCheck(health_check_id).catch((err) =>
+        logger.error(`Failed to delete health check: ${err}`),
+      );
+    }
+    syncToNode(node_id).catch((err) => logger.error(String(err)));
+  }
+
+  return c.json({ deleted: true });
+});
+
+tenantsRoutes.get("/:id/nodes", async (c) => {
+  const tenantId = parseInt(c.req.param("id"));
+
+  const tenant = await db
+    .selectFrom("tenants")
+    .select(["id", "name"])
+    .where("id", "=", tenantId)
+    .executeTakeFirst();
+
+  if (!tenant) {
+    return c.json({ error: "Tenant not found" }, 404);
+  }
+
+  const tenantNodes = await db
+    .selectFrom("tenant_nodes")
+    .innerJoin("nodes", "nodes.id", "tenant_nodes.node_id")
+    .select([
+      "tenant_nodes.id",
+      "tenant_nodes.node_id",
+      "tenant_nodes.is_primary",
+      "tenant_nodes.created_at",
+      "nodes.name as node_name",
+      "nodes.internal_ip",
+      "nodes.public_ip",
+      "nodes.status",
+    ])
+    .where("tenant_nodes.tenant_id", "=", tenantId)
+    .execute();
+
+  return c.json(tenantNodes);
+});
+
+tenantsRoutes.post("/:id/nodes", async (c) => {
+  const tenantId = parseInt(c.req.param("id"));
+  const body = await c.req.json();
+  const nodeId = body.node_id;
+  const isPrimary = body.is_primary ?? false;
+
+  if (!nodeId) {
+    return c.json({ error: "node_id is required" }, 400);
+  }
+
+  const tenant = await db
+    .selectFrom("tenants")
+    .select(["id", "name"])
+    .where("id", "=", tenantId)
+    .executeTakeFirst();
+
+  if (!tenant) {
+    return c.json({ error: "Tenant not found" }, 404);
+  }
+
+  const node = await db
+    .selectFrom("nodes")
+    .select(["id", "public_ip", "status"])
+    .where("id", "=", nodeId)
+    .executeTakeFirst();
+
+  if (!node) {
+    return c.json({ error: "Node not found" }, 404);
+  }
+
+  if (!node.public_ip) {
+    return c.json({ error: "Node does not have a public IP configured" }, 400);
+  }
+
+  const existing = await db
+    .selectFrom("tenant_nodes")
+    .select(["id"])
+    .where("tenant_id", "=", tenantId)
+    .where("node_id", "=", nodeId)
+    .executeTakeFirst();
+
+  if (existing) {
+    return c.json({ error: "Node already assigned to tenant" }, 409);
+  }
+
+  if (isPrimary) {
+    await db
+      .updateTable("tenant_nodes")
+      .set({ is_primary: false })
+      .where("tenant_id", "=", tenantId)
+      .execute();
+  }
+
+  const result = await db
+    .insertInto("tenant_nodes")
+    .values({
+      tenant_id: tenantId,
+      node_id: nodeId,
+      is_primary: isPrimary,
+    })
+    .returningAll()
+    .executeTakeFirstOrThrow();
+
+  const healthCheckId = await createHealthCheck(tenant.name, node.public_ip);
+  if (healthCheckId) {
+    await db
+      .updateTable("tenant_nodes")
+      .set({ health_check_id: healthCheckId })
+      .where("id", "=", result.id)
+      .execute();
+  }
+
+  upsertNodeDnsRecord(tenant.name, nodeId, node.public_ip, healthCheckId).catch(
+    (err) => logger.error(`Failed to create DNS record: ${err}`),
+  );
+
+  if (node.status === "active") {
+    enqueueCertProvisioning(nodeId, tenant.name).catch((err) =>
+      logger.error(
+        `Failed to enqueue cert provisioning for tenant ${tenant.name} on node ${nodeId}: ${err}`,
+      ),
+    );
+  }
+
+  syncToNode(nodeId).catch((err) => logger.error(String(err)));
+
+  return c.json(result, 201);
+});
+
+tenantsRoutes.delete("/:id/nodes/:nodeId", async (c) => {
+  const tenantId = parseInt(c.req.param("id"));
+  const nodeId = parseInt(c.req.param("nodeId"));
+
+  const tenant = await db
+    .selectFrom("tenants")
+    .select(["id", "name"])
+    .where("id", "=", tenantId)
+    .executeTakeFirst();
+
+  if (!tenant) {
+    return c.json({ error: "Tenant not found" }, 404);
+  }
+
+  const result = await db
+    .deleteFrom("tenant_nodes")
+    .where("tenant_id", "=", tenantId)
+    .where("node_id", "=", nodeId)
+    .returningAll()
+    .executeTakeFirst();
+
+  if (!result) {
+    return c.json({ error: "Node assignment not found" }, 404);
+  }
+
+  if (result.health_check_id) {
+    deleteHealthCheck(result.health_check_id).catch((err) =>
+      logger.error(`Failed to delete health check: ${err}`),
+    );
+  }
+
+  deleteNodeDnsRecord(tenant.name, nodeId).catch((err) =>
+    logger.error(`Failed to delete DNS record: ${err}`),
+  );
+
+  syncToNode(nodeId).catch((err) => logger.error(String(err)));
+
+  return c.json({ deleted: true });
+});

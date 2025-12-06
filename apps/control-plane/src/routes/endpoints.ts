@@ -1,0 +1,206 @@
+import { Hono } from "hono";
+import { db } from "../server.js";
+import { sql } from "kysely";
+import { syncToNode } from "../lib/sync.js";
+import { logger } from "../logger.js";
+
+async function syncTenantNode(tenantId: number) {
+  const tenant = await db
+    .selectFrom("tenants")
+    .select("node_id")
+    .where("id", "=", tenantId)
+    .executeTakeFirst();
+
+  if (tenant?.node_id) {
+    syncToNode(tenant.node_id).catch((err) => logger.error(String(err)));
+  }
+}
+
+export const endpointsRoutes = new Hono();
+
+endpointsRoutes.get("/", async (c) => {
+  const tenantId = parseInt(c.req.param("tenantId") ?? "");
+  const includeDeleted = c.req.query("include_deleted") === "true";
+
+  let query = db
+    .selectFrom("endpoints")
+    .selectAll()
+    .where("tenant_id", "=", tenantId)
+    .orderBy("priority", "asc")
+    .orderBy("created_at", "desc");
+
+  if (!includeDeleted) {
+    query = query.where("is_active", "=", true);
+  }
+
+  const endpoints = await query.execute();
+  return c.json(endpoints);
+});
+
+endpointsRoutes.get("/:id", async (c) => {
+  const tenantId = parseInt(c.req.param("tenantId") ?? "");
+  const id = parseInt(c.req.param("id"));
+
+  const endpoint = await db
+    .selectFrom("endpoints")
+    .selectAll()
+    .where("id", "=", id)
+    .where("tenant_id", "=", tenantId)
+    .executeTakeFirst();
+
+  if (!endpoint) {
+    return c.json({ error: "Endpoint not found" }, 404);
+  }
+  return c.json(endpoint);
+});
+
+endpointsRoutes.post("/", async (c) => {
+  const tenantId = parseInt(c.req.param("tenantId") ?? "");
+  const body = await c.req.json();
+
+  const result = await db
+    .insertInto("endpoints")
+    .values({
+      tenant_id: tenantId,
+      path_pattern: body.path_pattern,
+      price_usdc: body.price_usdc ?? null,
+      scheme: body.scheme ?? null,
+      description: body.description ?? null,
+      priority: body.priority ?? 100,
+      is_active: true,
+    })
+    .returningAll()
+    .executeTakeFirstOrThrow();
+
+  syncTenantNode(tenantId);
+
+  return c.json(result, 201);
+});
+
+endpointsRoutes.put("/:id", async (c) => {
+  const tenantId = parseInt(c.req.param("tenantId") ?? "");
+  const id = parseInt(c.req.param("id"));
+  const body = await c.req.json();
+
+  const updateData: Record<string, unknown> = {};
+  if (body.path_pattern !== undefined)
+    updateData.path_pattern = body.path_pattern;
+  if (body.price_usdc !== undefined) updateData.price_usdc = body.price_usdc;
+  if (body.scheme !== undefined) updateData.scheme = body.scheme;
+  if (body.description !== undefined) updateData.description = body.description;
+  if (body.priority !== undefined) updateData.priority = body.priority;
+  if (body.is_active !== undefined) updateData.is_active = body.is_active;
+
+  const result = await db
+    .updateTable("endpoints")
+    .set(updateData)
+    .where("id", "=", id)
+    .where("tenant_id", "=", tenantId)
+    .returningAll()
+    .executeTakeFirst();
+
+  if (!result) {
+    return c.json({ error: "Endpoint not found" }, 404);
+  }
+
+  syncTenantNode(tenantId);
+
+  return c.json(result);
+});
+
+endpointsRoutes.delete("/:id", async (c) => {
+  const tenantId = parseInt(c.req.param("tenantId") ?? "");
+  const id = parseInt(c.req.param("id"));
+
+  const result = await db
+    .updateTable("endpoints")
+    .set({
+      is_active: false,
+      deleted_at: sql`now()`,
+    })
+    .where("id", "=", id)
+    .where("tenant_id", "=", tenantId)
+    .where("is_active", "=", true)
+    .returningAll()
+    .executeTakeFirst();
+
+  if (!result) {
+    return c.json({ error: "Endpoint not found" }, 404);
+  }
+
+  syncTenantNode(tenantId);
+
+  return c.json({ deleted: true, endpoint: result });
+});
+
+endpointsRoutes.get("/:id/stats", async (c) => {
+  const tenantId = parseInt(c.req.param("tenantId") ?? "");
+  const id = parseInt(c.req.param("id"));
+  const from = c.req.query("from");
+  const to = c.req.query("to");
+
+  const endpoint = await db
+    .selectFrom("endpoints")
+    .selectAll()
+    .where("id", "=", id)
+    .where("tenant_id", "=", tenantId)
+    .executeTakeFirst();
+
+  if (!endpoint) {
+    return c.json({ error: "Endpoint not found" }, 404);
+  }
+
+  let query = db
+    .selectFrom("transactions")
+    .select([
+      sql<number>`count(*)`.as("total_transactions"),
+      sql<number>`coalesce(sum(amount_usdc), 0)`.as("total_spent_usdc"),
+    ])
+    .where("endpoint_id", "=", id);
+
+  if (from) {
+    query = query.where("created_at", ">=", new Date(from));
+  }
+  if (to) {
+    query = query.where("created_at", "<=", new Date(to));
+  }
+
+  const stats = await query.executeTakeFirst();
+
+  return c.json({
+    endpoint_id: id,
+    path_pattern: endpoint.path_pattern,
+    total_transactions: Number(stats?.total_transactions ?? 0),
+    total_spent_usdc: Number(stats?.total_spent_usdc ?? 0),
+    period: { from: from ?? null, to: to ?? null },
+  });
+});
+
+endpointsRoutes.get("/:id/transactions", async (c) => {
+  const tenantId = parseInt(c.req.param("tenantId") ?? "");
+  const id = parseInt(c.req.param("id"));
+  const limit = parseInt(c.req.query("limit") ?? "50");
+  const offset = parseInt(c.req.query("offset") ?? "0");
+
+  const endpoint = await db
+    .selectFrom("endpoints")
+    .select("id")
+    .where("id", "=", id)
+    .where("tenant_id", "=", tenantId)
+    .executeTakeFirst();
+
+  if (!endpoint) {
+    return c.json({ error: "Endpoint not found" }, 404);
+  }
+
+  const transactions = await db
+    .selectFrom("transactions")
+    .selectAll()
+    .where("endpoint_id", "=", id)
+    .orderBy("created_at", "desc")
+    .limit(limit)
+    .offset(offset)
+    .execute();
+
+  return c.json(transactions);
+});
