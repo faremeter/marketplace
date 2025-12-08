@@ -1,0 +1,11 @@
+description: Multi-tenant API proxy infrastructure
+name: api-node
+runtime:
+  name: nodejs
+  options:
+    packagemanager: pnpm
+    nodeargs: "--import tsx"
+config:
+  pulumi:tags:
+    value:
+      pulumi:template: aws-typescript

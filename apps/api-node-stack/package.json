@@ -1,0 +1,17 @@
+{
+  "name": "api-node-infrastructure",
+  "main": "index.ts",
+  "type": "module",
+  "devDependencies": {
+    "@types/node": "catalog:",
+    "typescript": "catalog:"
+  },
+  "dependencies": {
+    "@pulumi/aws": "^7.0.0",
+    "@pulumi/awsx": "^3.0.0",
+    "@pulumi/pulumi": "^3.113.0",
+    "@pulumi/tls": "catalog:",
+    "@svmkit/pulumi-runner": "catalog:",
+    "tsx": "catalog:"
+  }
+}

@@ -81,6 +81,34 @@ importers:
         specifier: 'catalog:'
         version: 4.4.0
 
+  apps/api-node-stack:
+    dependencies:
+      '@pulumi/aws':
+        specifier: ^7.0.0
+        version: 7.12.0(typescript@5.9.2)
+      '@pulumi/awsx':
+        specifier: ^3.0.0
+        version: 3.1.0(typescript@5.9.2)
+      '@pulumi/pulumi':
+        specifier: ^3.113.0
+        version: 3.210.0(typescript@5.9.2)
+      '@pulumi/tls':
+        specifier: 'catalog:'
+        version: 5.2.2(typescript@5.9.2)
+      '@svmkit/pulumi-runner':
+        specifier: 'catalog:'
+        version: 0.1.1(typescript@5.9.2)
+      tsx:
+        specifier: 'catalog:'
+        version: 4.20.5
+    devDependencies:
+      '@types/node':
+        specifier: 'catalog:'
+        version: 20.19.11
+      typescript:
+        specifier: 'catalog:'
+        version: 5.9.2
+
   apps/control-plane:
     dependencies:
       '@hono/node-server':

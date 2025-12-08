@@ -1,0 +1,302 @@
+#!/usr/bin/env opsh
+# shellcheck shell=bash
+# shellcheck source=/dev/null
+
+source ./env
+source ./lib.bash
+
+export DEBIAN_FRONTEND=noninteractive
+
+step::00::wait-for-a-stable-environment() {
+    cloud-init::wait-for-stable-environment
+}
+
+step::10::setup-sources() {
+    mkdir -p /etc/apt/keyrings/
+    apt-get update -y
+    apt-get install -y apt-transport-https wget gpg
+
+    wget -q -O - https://apt.grafana.com/gpg.key | gpg --dearmor | sudo tee /etc/apt/keyrings/grafana.gpg >/dev/null
+    cat <<EOF >/etc/apt/sources.list.d/grafana.list
+deb [signed-by=/etc/apt/keyrings/grafana.gpg] https://apt.grafana.com stable main
+EOF
+    apt-get update -y
+    apt-get dist-upgrade -y
+    apt-get auto-remove -y
+}
+
+step::20::install-packages() {
+    apt-get install -y ca-certificates nginx-extras libnginx-mod-http-lua luarocks letsencrypt python3-certbot-nginx nodejs node-corepack luarocks lua-cjson wireguard wireguard-tools alloy jq
+    for i in lua-resty-http lua-resty-string lua-resty-openssl; do luarocks install $i; done
+
+    dpkg --purge nano
+}
+
+step::25::setup-wireguard() {
+    # wg0: Connect to dashboard for logging (spoke)
+    touch /etc/wireguard/wg0.conf
+    chmod 600 /etc/wireguard/wg0.conf
+    cat <<EOF >/etc/wireguard/wg0.conf
+[Interface]
+Address = ${WIREGUARD_WG0_ADDRESS}/24
+PrivateKey = ${WIREGUARD_PRIVATE_KEY}
+
+[Peer]
+PublicKey = ${WIREGUARD_DASHBOARD_PUBKEY}
+AllowedIPs = 10.11.0.0/24
+Endpoint = dashboard.ops.corbits.dev:51820
+EOF
+    sudo systemctl enable --now wg-quick@wg0
+
+    # wg1: Connect to control-plane for config API (spoke)
+    touch /etc/wireguard/wg1.conf
+    chmod 600 /etc/wireguard/wg1.conf
+    cat <<EOF >/etc/wireguard/wg1.conf
+[Interface]
+Address = ${WIREGUARD_WG1_ADDRESS}/24
+PrivateKey = ${WIREGUARD_PRIVATE_KEY}
+
+[Peer]
+PublicKey = heo6hRHHhpFuW92u5GmHgZFZxYfsL6cM6gbmaJbK72k=
+AllowedIPs = 10.12.0.0/24
+Endpoint = api.corbits.dev:51821
+PersistentKeepalive = 25
+EOF
+    sudo systemctl enable --now wg-quick@wg1
+}
+
+step::30::setup-alloy() {
+    cat <<EOF >/etc/alloy/config.alloy
+logging {
+  level = "warn"
+}
+
+local.file_match "local_files" {
+  path_targets = [
+    {
+      __path__ = "/var/log/*.log",
+      service_name = "system-log",
+    },
+    {
+      __path__ = "/var/log/nginx/*.log",
+      service_name = "nginx-log",
+    },
+  ]
+  sync_period = "5s"
+}
+
+loki.source.file "log_scrape" {
+  targets    = local.file_match.local_files.targets
+  forward_to = [loki.write.grafana_loki.receiver]
+  tail_from_end = true
+}
+
+loki.relabel "journal" {
+  forward_to = []
+  rule {
+    source_labels = ["__journal__systemd_unit"]
+    target_label  = "unit"
+  }
+}
+
+loki.source.journal "journalctl"  {
+  forward_to    = [loki.write.grafana_loki.receiver]
+  relabel_rules = loki.relabel.journal.rules
+  labels        = {
+    component = "loki.source.journal",
+    instance = constants.hostname,
+  }
+}
+
+loki.write "grafana_loki" {
+  endpoint {
+    url = "http://10.11.0.1:3100/loki/api/v1/push"
+  }
+}
+EOF
+    systemctl enable alloy --now
+}
+
+step::35::setup-cert-scripts() {
+    # Create script to regenerate nginx TLS config from tenant-config.json
+    cat <<'GENSCRIPT' >/usr/local/bin/regen-tenant-nginx
+#!/bin/bash
+CONFIG_FILE="/etc/nginx/tenant-config.json"
+OUTPUT_FILE="/etc/nginx/sites-available/api-node"
+CONF_DIR="/etc/nginx/sites-available/api-node.d"
+
+# Generate base config (Lua setup)
+cat <<'BASE' > "$OUTPUT_FILE"
+lua_package_path '/etc/nginx/sites-available/api-node.d/?.lua;;';
+lua_shared_dict tenants 10m;
+lua_ssl_trusted_certificate /etc/ssl/certs/ca-certificates.crt;
+lua_ssl_verify_depth 2;
+
+init_by_lua_file /etc/nginx/init-config.lua;
+
+# HTTP server for ACME challenge, internal endpoints, and HTTPS redirect
+server {
+    listen 80 default_server;
+    server_name _;
+
+    location /.well-known/acme-challenge/ {
+        root /var/www/html;
+    }
+
+    location = /health {
+        return 200 'ok';
+        add_header Content-Type text/plain;
+    }
+
+    location = /internal/config {
+        allow 10.12.0.0/24;
+        deny all;
+        content_by_lua_file /etc/nginx/config-receiver.lua;
+    }
+
+    location = /internal/install-cert {
+        allow 10.12.0.0/24;
+        deny all;
+        client_max_body_size 1m;
+        content_by_lua_file /etc/nginx/cert-installer.lua;
+    }
+
+    location / {
+        return 301 https://$host$request_uri;
+    }
+}
+BASE
+
+# Get list of tenants from config file if it exists
+if [ -f "$CONFIG_FILE" ] && [ -s "$CONFIG_FILE" ]; then
+    TENANTS=$(jq -r '.config // {} | keys[]' "$CONFIG_FILE" 2>/dev/null || echo "")
+
+    for tenant in $TENANTS; do
+        CERT_PATH="/etc/letsencrypt/live/${tenant}.test.api.corbits.dev"
+        if [ -d "$CERT_PATH" ]; then
+            cat <<EOF >> "$OUTPUT_FILE"
+
+# TLS server block for tenant: ${tenant}
+server {
+    listen 443 ssl http2;
+    server_name ${tenant}.test.api.corbits.dev ${tenant}.test.api.corbits.io ${tenant}.api.corbits.dev ${tenant}.api.corbits.io;
+
+    ssl_certificate ${CERT_PATH}/fullchain.pem;
+    ssl_certificate_key ${CERT_PATH}/privkey.pem;
+
+    resolver 8.8.8.8 8.8.4.4 valid=300s;
+    resolver_timeout 5s;
+
+    location = /health {
+        return 200 'ok';
+        add_header Content-Type text/plain;
+    }
+
+    include ${CONF_DIR}/*.conf;
+}
+EOF
+        fi
+    done
+fi
+
+# Reload nginx
+nginx -t && systemctl reload nginx
+GENSCRIPT
+    chmod +x /usr/local/bin/regen-tenant-nginx
+
+    # Create webroot directory for ACME challenge
+    mkdir -p /var/www/html/.well-known/acme-challenge
+    chown -R www-data:www-data /var/www/html
+
+    # Copy cert install script (receives certs from control-plane)
+    cp ./install-tenant-cert /usr/local/bin/install-tenant-cert
+    chmod +x /usr/local/bin/install-tenant-cert
+
+    # Allow www-data (nginx) to run cert scripts as root
+    cat <<EOF >/etc/sudoers.d/cert-provisioner
+www-data ALL=(ALL) NOPASSWD: /usr/local/bin/install-tenant-cert
+www-data ALL=(ALL) NOPASSWD: /usr/local/bin/regen-tenant-nginx
+EOF
+    chmod 440 /etc/sudoers.d/cert-provisioner
+}
+
+step::40::setup-nginx() {
+    rm -f /etc/nginx/sites-enabled/default
+
+    local nginx_config="/etc/nginx/sites-available/api-node"
+
+    cp ./access.lua /etc/nginx/.
+    cp ./config-receiver.lua /etc/nginx/.
+    cp ./init-config.lua /etc/nginx/.
+    cp ./cert-installer.lua /etc/nginx/.
+
+    rm -rf "${nginx_config}.d"
+    mkdir -p "${nginx_config}.d"
+    cp ./50_proxy.conf "${nginx_config}.d/."
+
+    # Initial config (will be regenerated by regen-tenant-nginx when certs are added)
+    cat <<EOF >"$nginx_config"
+lua_package_path '${nginx_config}.d/?.lua;;';
+lua_shared_dict tenants 10m;
+lua_ssl_trusted_certificate /etc/ssl/certs/ca-certificates.crt;
+lua_ssl_verify_depth 2;
+
+init_by_lua_file /etc/nginx/init-config.lua;
+
+# HTTP server for ACME challenge and initial setup
+server {
+    listen 80 default_server;
+    server_name _;
+
+    resolver 8.8.8.8 8.8.4.4 valid=300s;
+    resolver_timeout 5s;
+
+    location /.well-known/acme-challenge/ {
+        root /var/www/html;
+    }
+
+    location = /health {
+        return 200 'ok';
+        add_header Content-Type text/plain;
+    }
+
+    location = /internal/config {
+        allow 10.12.0.0/24;
+        deny all;
+        content_by_lua_file /etc/nginx/config-receiver.lua;
+    }
+
+    location = /internal/install-cert {
+        allow 10.12.0.0/24;
+        deny all;
+        client_max_body_size 1m;
+        content_by_lua_file /etc/nginx/cert-installer.lua;
+    }
+
+    include ${nginx_config}.d/*.conf;
+}
+EOF
+    (cd /etc/nginx/sites-enabled && rm -f api-node && ln -s "../sites-available/api-node" .)
+    systemctl reload nginx
+}
+
+step::50::pull-tenant-config() {
+    local max_retries=30
+    local retry=0
+
+    while [ $retry -lt $max_retries ]; do
+        if curl -sf "http://10.12.0.1:1337/api/nodes/${NODE_ID}/sync" -o /etc/nginx/tenant-config.json; then
+            echo "Pulled tenant config successfully"
+            systemctl reload nginx
+            return 0
+        fi
+        echo "Waiting for control-plane... (attempt $((retry + 1))/$max_retries)"
+        sleep 2
+        retry=$((retry + 1))
+    done
+
+    echo "WARNING: Failed to pull tenant config after $max_retries attempts"
+    touch /etc/nginx/tenant-config.json
+}
+
+steps::run "step" "$@"
