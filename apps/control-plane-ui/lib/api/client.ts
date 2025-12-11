@@ -1,5 +1,4 @@
-const API_BASE_URL =
-  process.env.NEXT_PUBLIC_CONTROL_PLANE_API_URL ?? "http://localhost:1337";
+const API_BASE_URL = "";
 
 export class ApiError extends Error {
   constructor(
@@ -20,6 +19,7 @@ export async function apiFetch<T>(
 
   const response = await fetch(url, {
     ...options,
+    credentials: "include",
     headers: {
       "Content-Type": "application/json",
       ...options?.headers,

@@ -1,7 +1,7 @@
 *~
 *\#*
 dist
-.next
+**/.next
 git-*
 node_modules
 tsconfig.tsbuildinfo

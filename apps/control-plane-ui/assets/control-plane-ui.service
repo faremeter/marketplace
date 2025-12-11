@@ -1,0 +1,20 @@
+[Unit]
+Description=Control Plane UI
+After=network.target
+
+[Service]
+Type=simple
+User=admin
+WorkingDirectory=/home/admin/control-plane-ui
+Environment=NODE_ENV=production
+Environment=PORT=1338
+EnvironmentFile=/home/admin/control-plane-ui/.env
+ExecStart=/usr/bin/npm start
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=control-plane-ui
+
+[Install]
+WantedBy=multi-user.target

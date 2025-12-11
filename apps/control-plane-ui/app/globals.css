@@ -2,68 +2,37 @@
 @tailwind components;
 @tailwind utilities;
 
-@import "@radix-ui/colors/slate.css";
-@import "@radix-ui/colors/slate-dark.css";
-@import "@radix-ui/colors/blue.css";
-@import "@radix-ui/colors/blue-dark.css";
-
 :root {
-  --gray-1: var(--slate-1);
-  --gray-2: var(--slate-2);
-  --gray-3: var(--slate-3);
-  --gray-4: var(--slate-4);
-  --gray-5: var(--slate-5);
-  --gray-6: var(--slate-6);
-  --gray-7: var(--slate-7);
-  --gray-8: var(--slate-8);
-  --gray-9: var(--slate-9);
-  --gray-10: var(--slate-10);
-  --gray-11: var(--slate-11);
-  --gray-12: var(--slate-12);
+  /* Resend-inspired dark theme - pure black background */
+  --gray-1: #000000;
+  --gray-2: #0a0a0a;
+  --gray-3: #111111;
+  --gray-4: #191919;
+  --gray-5: #222222;
+  --gray-6: #2a2a2a;
+  --gray-7: #333333;
+  --gray-8: #444444;
+  --gray-9: #666666;
+  --gray-10: #888888;
+  --gray-11: #a1a1a1;
+  --gray-12: #ededed;
 
-  --accent-1: var(--blue-1);
-  --accent-2: var(--blue-2);
-  --accent-3: var(--blue-3);
-  --accent-4: var(--blue-4);
-  --accent-5: var(--blue-5);
-  --accent-6: var(--blue-6);
-  --accent-7: var(--blue-7);
-  --accent-8: var(--blue-8);
-  --accent-9: var(--blue-9);
-  --accent-10: var(--blue-10);
-  --accent-11: var(--blue-11);
-  --accent-12: var(--blue-12);
+  /* Resend blue accent */
+  --accent-1: #00111a;
+  --accent-2: #001d2e;
+  --accent-3: #002d47;
+  --accent-4: #003d5c;
+  --accent-5: #004d70;
+  --accent-6: #006089;
+  --accent-7: #0077a8;
+  --accent-8: #0091cc;
+  --accent-9: #00a3ff;
+  --accent-10: #33b5ff;
+  --accent-11: #70cbff;
+  --accent-12: #c2e6ff;
 
   --background: var(--gray-1);
   --foreground: var(--gray-12);
-}
-
-.dark {
-  --gray-1: var(--slate-dark-1);
-  --gray-2: var(--slate-dark-2);
-  --gray-3: var(--slate-dark-3);
-  --gray-4: var(--slate-dark-4);
-  --gray-5: var(--slate-dark-5);
-  --gray-6: var(--slate-dark-6);
-  --gray-7: var(--slate-dark-7);
-  --gray-8: var(--slate-dark-8);
-  --gray-9: var(--slate-dark-9);
-  --gray-10: var(--slate-dark-10);
-  --gray-11: var(--slate-dark-11);
-  --gray-12: var(--slate-dark-12);
-
-  --accent-1: var(--blue-dark-1);
-  --accent-2: var(--blue-dark-2);
-  --accent-3: var(--blue-dark-3);
-  --accent-4: var(--blue-dark-4);
-  --accent-5: var(--blue-dark-5);
-  --accent-6: var(--blue-dark-6);
-  --accent-7: var(--blue-dark-7);
-  --accent-8: var(--blue-dark-8);
-  --accent-9: var(--blue-dark-9);
-  --accent-10: var(--blue-dark-10);
-  --accent-11: var(--blue-dark-11);
-  --accent-12: var(--blue-dark-12);
 }
 
 @layer base {
@@ -90,5 +59,21 @@
   a {
     color: inherit;
     text-decoration: none;
+  }
+}
+
+@layer utilities {
+  .border-subtle {
+    border-color: rgba(255, 255, 255, 0.08);
+  }
+
+  .bg-subtle {
+    background-color: rgba(255, 255, 255, 0.03);
+  }
+
+  .shadow-button {
+    box-shadow:
+      0 1px 2px rgba(0, 0, 0, 0.3),
+      inset 0 1px 0 rgba(255, 255, 255, 0.1);
   }
 }
