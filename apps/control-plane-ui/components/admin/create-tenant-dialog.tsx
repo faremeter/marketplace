@@ -389,22 +389,26 @@ export function CreateTenantDialog({
                   <div className="space-y-2">
                     <div className="rounded-md border border-gray-6 bg-gray-2 p-3">
                       <div className="space-y-2 text-xs">
-                        <div className="flex items-center justify-between">
-                          <span className="text-gray-11">Solana</span>
-                          <code className="font-mono text-gray-12">
-                            {walletAddresses.solana.slice(0, 8)}...
-                            {walletAddresses.solana.slice(-6)}
-                          </code>
-                        </div>
-                        <div className="flex items-center justify-between">
-                          <span className="text-gray-11">
-                            Base / Polygon / Monad
-                          </span>
-                          <code className="font-mono text-gray-12">
-                            {walletAddresses.base.slice(0, 8)}...
-                            {walletAddresses.base.slice(-6)}
-                          </code>
-                        </div>
+                        {walletAddresses.solana && (
+                          <div className="flex items-center justify-between">
+                            <span className="text-gray-11">Solana</span>
+                            <code className="font-mono text-gray-12">
+                              {walletAddresses.solana.slice(0, 8)}...
+                              {walletAddresses.solana.slice(-6)}
+                            </code>
+                          </div>
+                        )}
+                        {walletAddresses.base && (
+                          <div className="flex items-center justify-between">
+                            <span className="text-gray-11">
+                              Base / Polygon / Monad
+                            </span>
+                            <code className="font-mono text-gray-12">
+                              {walletAddresses.base.slice(0, 8)}...
+                              {walletAddresses.base.slice(-6)}
+                            </code>
+                          </div>
+                        )}
                       </div>
                     </div>
                     <div className="flex gap-2">

@@ -21,6 +21,7 @@ interface TenantNode {
   is_active: boolean;
   is_primary: boolean;
   cert_status: "pending" | "provisioned" | "failed" | "deleting";
+  wallet_status: "pending" | "funded" | "failed";
 }
 
 export default function AdminNodesPage() {
@@ -100,10 +101,13 @@ function NodeCard({ node }: { node: Node }) {
                   Backend URL
                 </th>
                 <th className="pb-2 text-left text-xs font-medium text-gray-11">
+                  Active
+                </th>
+                <th className="pb-2 text-left text-xs font-medium text-gray-11">
                   TLS Cert
                 </th>
                 <th className="pb-2 text-left text-xs font-medium text-gray-11">
-                  Status
+                  Funding
                 </th>
               </tr>
             </thead>
@@ -145,15 +149,18 @@ function NodeCard({ node }: { node: Node }) {
                     </Tooltip.Provider>
                   </td>
                   <td className="py-2 align-middle">
-                    <CertStatusBadge status={tenant.cert_status} />
-                  </td>
-                  <td className="py-2 align-middle">
                     <InlineActiveToggle
                       tenantId={tenant.id}
                       tenantName={tenant.name}
                       isActive={tenant.is_active}
                       onUpdate={() => mutate()}
                     />
+                  </td>
+                  <td className="py-2 align-middle">
+                    <CertStatusBadge status={tenant.cert_status} />
+                  </td>
+                  <td className="py-2 align-middle">
+                    <FundingStatusBadge status={tenant.wallet_status} />
                   </td>
                 </tr>
               ))}
@@ -234,29 +241,67 @@ function CertStatusBadge({
   const config = {
     pending: {
       className: "border-yellow-800 bg-yellow-900/50 text-yellow-400",
+      label: "Pending",
       pulse: true,
     },
     provisioned: {
       className: "border-green-800 bg-green-900/50 text-green-400",
+      label: "Provisioned",
       pulse: false,
     },
     deleting: {
       className: "border-red-800 bg-red-900/50 text-red-400",
+      label: "Deleting",
       pulse: true,
     },
     failed: {
       className: "border-red-800 bg-red-900/50 text-red-400",
+      label: "Failed",
       pulse: false,
     },
   };
 
-  const { className, pulse } = config[status] ?? config.pending;
+  const { className, label, pulse } = config[status] ?? config.pending;
 
   return (
     <span
       className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs ${className} ${pulse ? "animate-pulse" : ""}`}
     >
-      {status.charAt(0).toUpperCase() + status.slice(1)}
+      {label}
+    </span>
+  );
+}
+
+function FundingStatusBadge({
+  status,
+}: {
+  status: "pending" | "funded" | "failed";
+}) {
+  const config = {
+    pending: {
+      className: "border-yellow-800 bg-yellow-900/50 text-yellow-400",
+      label: "Pending",
+      pulse: true,
+    },
+    funded: {
+      className: "border-green-800 bg-green-900/50 text-green-400",
+      label: "Funded",
+      pulse: false,
+    },
+    failed: {
+      className: "border-red-800 bg-red-900/50 text-red-400",
+      label: "Failed",
+      pulse: false,
+    },
+  };
+
+  const { className, label, pulse } = config[status] ?? config.pending;
+
+  return (
+    <span
+      className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs ${className} ${pulse ? "animate-pulse" : ""}`}
+    >
+      {label}
     </span>
   );
 }

@@ -346,13 +346,13 @@ interface WalletConfig {
   solana?: {
     "mainnet-beta"?: {
       address: string;
-      key: string;
+      key?: string;
     };
   };
   evm?: {
-    base?: { address: string; key: string };
-    polygon?: { address: string; key: string };
-    monad?: { address: string; key: string };
+    base?: { address: string; key?: string };
+    polygon?: { address: string; key?: string };
+    monad?: { address: string; key?: string };
   };
 }
 

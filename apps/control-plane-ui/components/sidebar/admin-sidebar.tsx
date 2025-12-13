@@ -9,6 +9,7 @@ import {
   CubeIcon,
   FileTextIcon,
   GearIcon,
+  ExitIcon,
 } from "@radix-ui/react-icons";
 import { UserMenu } from "./user-menu";
 import { SidebarItem } from "./sidebar-item";
@@ -48,6 +49,12 @@ export function AdminSidebar() {
           label="Settings"
         />
       </nav>
+
+      <Separator.Root className="h-px bg-white/5" />
+
+      <div className="p-4">
+        <SidebarItem href="/" icon={<ExitIcon />} label="Exit Admin" />
+      </div>
 
       <Separator.Root className="h-px bg-white/5" />
 
