@@ -10,7 +10,7 @@ import {
   createHealthCheck,
   deleteHealthCheck,
 } from "../lib/dns.js";
-import { enqueueCertProvisioning } from "../lib/queue.js";
+import { enqueueCertProvisioning, enqueueWalletFunding } from "../lib/queue.js";
 
 export const tenantsRoutes = new Hono();
 
@@ -37,8 +37,24 @@ tenantsRoutes.get("/:id", async (c) => {
   return c.json(tenant);
 });
 
+interface WalletConfig {
+  solana?: { "mainnet-beta"?: { address: string } };
+}
+
 tenantsRoutes.post("/", async (c) => {
   const body = await c.req.json();
+
+  const adminSettings = await db
+    .selectFrom("admin_settings")
+    .select(["default_sol_native_amount", "default_sol_usdc_amount"])
+    .where("id", "=", 1)
+    .executeTakeFirst();
+
+  const solAmount = adminSettings?.default_sol_native_amount ?? 0.01;
+  const usdcAmount = adminSettings?.default_sol_usdc_amount ?? 0.01;
+
+  const walletConfig = body.wallet_config as WalletConfig;
+  const solanaAddress = walletConfig?.solana?.["mainnet-beta"]?.address;
 
   const result = await db
     .insertInto("tenants")
@@ -46,6 +62,7 @@ tenantsRoutes.post("/", async (c) => {
       name: body.name,
       backend_url: body.backend_url,
       wallet_config: JSON.stringify(encryptWalletKeys(body.wallet_config)),
+      wallet_status: "pending",
       default_price_usdc: body.default_price_usdc,
       default_scheme: body.default_scheme ?? "exact",
       upstream_auth_header: body.upstream_auth_header ?? null,
@@ -54,6 +71,12 @@ tenantsRoutes.post("/", async (c) => {
     })
     .returningAll()
     .executeTakeFirstOrThrow();
+
+  if (solanaAddress) {
+    enqueueWalletFunding(result.id, solanaAddress, solAmount, usdcAmount).catch(
+      (err) => logger.error(`Failed to enqueue wallet funding: ${err}`),
+    );
+  }
 
   return c.json(result, 201);
 });

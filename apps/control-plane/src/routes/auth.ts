@@ -162,6 +162,7 @@ authRoutes.post("/login", async (c) => {
       "user_organizations.role",
     ])
     .where("user_organizations.user_id", "=", user.id)
+    .orderBy("organizations.name", "asc")
     .execute();
 
   return c.json({
@@ -197,6 +198,7 @@ authRoutes.get("/me", requireAuth, async (c) => {
       "user_organizations.role",
     ])
     .where("user_organizations.user_id", "=", user.id)
+    .orderBy("organizations.name", "asc")
     .execute();
 
   return c.json({
