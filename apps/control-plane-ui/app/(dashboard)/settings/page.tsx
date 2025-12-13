@@ -47,9 +47,17 @@ export default function SettingsPage() {
             </div>
             <div>
               <label className="block text-sm text-gray-11">Account Type</label>
-              <p className="mt-1 text-gray-12">
-                {user?.is_admin ? "Administrator" : "User"}
-              </p>
+              <div className="mt-1">
+                {user?.is_admin ? (
+                  <span className="rounded-full border border-amber-800 bg-amber-900/50 px-2 py-0.5 text-xs text-amber-400">
+                    Administrator
+                  </span>
+                ) : (
+                  <span className="rounded-full bg-gray-4 px-2 py-0.5 text-xs text-gray-11">
+                    User
+                  </span>
+                )}
+              </div>
             </div>
           </div>
         </section>
@@ -69,7 +77,19 @@ export default function SettingsPage() {
                   <label className="block text-sm text-gray-11">
                     Your Role
                   </label>
-                  <p className="mt-1 capitalize text-gray-12">{currentRole}</p>
+                  <div className="mt-1">
+                    <span
+                      className={`rounded-full px-2 py-0.5 text-xs capitalize ${
+                        currentRole === "owner"
+                          ? "border border-purple-800 bg-purple-900/50 text-purple-400"
+                          : currentRole === "admin"
+                            ? "border border-blue-800 bg-blue-900/50 text-blue-400"
+                            : "bg-gray-4 text-gray-11"
+                      }`}
+                    >
+                      {currentRole}
+                    </span>
+                  </div>
                 </div>
               </div>
             </section>
