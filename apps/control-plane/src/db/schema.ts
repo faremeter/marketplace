@@ -9,6 +9,7 @@ export interface Database {
   users: UsersTable;
   user_organizations: UserOrganizationsTable;
   tenant_nodes: TenantNodesTable;
+  admin_settings: AdminSettingsTable;
 }
 
 export interface OrganizationsTable {
@@ -46,6 +47,7 @@ export interface TenantsTable {
   node_id: number | null;
   organization_id: number | null;
   wallet_config: ColumnType<unknown, string, string>;
+  wallet_status: string;
   default_price_usdc: number;
   default_scheme: string;
   upstream_auth_header: string | null;
@@ -97,4 +99,14 @@ export interface TransactionsTable {
   network: string;
   request_path: string;
   created_at: ColumnType<Date, never, never>;
+}
+
+export interface AdminSettingsTable {
+  id: ColumnType<number, never, never>;
+  wallet_config: ColumnType<unknown, string | undefined, string> | null;
+  fee_percentage: ColumnType<number, number | undefined, number>;
+  default_sol_native_amount: ColumnType<number, number | undefined, number>;
+  default_sol_usdc_amount: ColumnType<number, number | undefined, number>;
+  created_at: ColumnType<Date, never, never>;
+  updated_at: ColumnType<Date, Date | undefined, Date>;
 }
