@@ -63,7 +63,7 @@ export function isEncrypted(value: string): boolean {
   return typeof value === "string" && value.startsWith(ENCRYPTED_PREFIX);
 }
 
-type WalletConfig = Record<string, unknown>;
+export type WalletConfig = Record<string, unknown>;
 
 export function encryptWalletKeys(config: WalletConfig): WalletConfig {
   return walkAndTransformKeys(config, (value) => {

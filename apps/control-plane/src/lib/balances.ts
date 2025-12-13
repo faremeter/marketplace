@@ -1,4 +1,4 @@
-import { createSolanaRpc, address } from "@solana/kit";
+import { Connection, PublicKey } from "@solana/web3.js";
 import { createPublicClient, http, formatUnits, erc20Abi } from "viem";
 import { base, polygon } from "viem/chains";
 import { evm, solana } from "@faremeter/info";
@@ -11,6 +11,8 @@ const SOLANA_USDC = solana.lookupKnownSPLToken("mainnet-beta", "USDC");
 const BASE_USDC = evm.lookupKnownAsset("base", "USDC");
 const POLYGON_USDC = evm.lookupKnownAsset("eip155:137", "USDC");
 const MONAD_USDC = evm.lookupKnownAsset("eip155:10143", "USDC");
+
+const SOLANA_RPC_URL = "https://api.mainnet-beta.solana.com";
 
 const monadTestnet = {
   id: 10143,
@@ -35,23 +37,19 @@ export interface WalletBalances {
 
 async function getSolanaBalances(addr: string): Promise<ChainBalances> {
   try {
-    const rpc = createSolanaRpc("https://api.mainnet-beta.solana.com");
-    const pubkey = address(addr);
+    const connection = new Connection(SOLANA_RPC_URL);
+    const pubkey = new PublicKey(addr);
 
-    const balanceResult = await rpc.getBalance(pubkey).send();
-    const nativeLamports = balanceResult.value;
-    const native = (Number(nativeLamports) / 10 ** SOLANA_DECIMALS).toFixed(4);
+    const nativeLamports = await connection.getBalance(pubkey);
+    const native = (nativeLamports / 10 ** SOLANA_DECIMALS).toFixed(4);
 
     let usdc = "0";
     if (SOLANA_USDC) {
       try {
-        const tokenAccounts = await rpc
-          .getTokenAccountsByOwner(
-            pubkey,
-            { mint: address(SOLANA_USDC.address) },
-            { encoding: "jsonParsed" },
-          )
-          .send();
+        const tokenAccounts = await connection.getParsedTokenAccountsByOwner(
+          pubkey,
+          { mint: new PublicKey(SOLANA_USDC.address) },
+        );
 
         if (tokenAccounts.value.length > 0) {
           const tokenAccount = tokenAccounts.value[0];
