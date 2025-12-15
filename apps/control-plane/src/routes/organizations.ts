@@ -6,7 +6,11 @@ import { fetchWalletBalances } from "../lib/balances.js";
 import { logger } from "../logger.js";
 import { syncToNode } from "../lib/sync.js";
 import { createHealthCheck, upsertNodeDnsRecord } from "../lib/dns.js";
-import { enqueueCertProvisioning, enqueueWalletFunding } from "../lib/queue.js";
+import {
+  enqueueCertProvisioning,
+  enqueueWalletFunding,
+  enqueueTenantDeletion,
+} from "../lib/queue.js";
 import { Keypair } from "@solana/web3.js";
 import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
 
@@ -344,6 +348,7 @@ organizationsRoutes.get("/:id/tenants", async (c) => {
       "tenants.name",
       "tenants.backend_url",
       "tenants.is_active",
+      "tenants.status",
       "tenants.wallet_status",
       "tenants.upstream_auth_header",
       "tenants.upstream_auth_value",
@@ -462,6 +467,90 @@ organizationsRoutes.put("/:id/tenants/:tenantId", async (c) => {
   }
 
   return c.json(result);
+});
+
+organizationsRoutes.delete("/:id/tenants/:tenantId", async (c) => {
+  const user = c.get("user");
+  const orgId = parseInt(c.req.param("id"));
+  const tenantId = parseInt(c.req.param("tenantId"));
+
+  const membership = await db
+    .selectFrom("user_organizations")
+    .select("role")
+    .where("user_id", "=", user.id)
+    .where("organization_id", "=", orgId)
+    .executeTakeFirst();
+
+  if (!membership && !user.is_admin) {
+    return c.json({ error: "Organization not found" }, 404);
+  }
+
+  const tenant = await db
+    .selectFrom("tenants")
+    .select(["id", "name", "status", "wallet_config", "organization_id"])
+    .where("id", "=", tenantId)
+    .executeTakeFirst();
+
+  if (!tenant || tenant.organization_id !== orgId) {
+    return c.json({ error: "Proxy not found" }, 404);
+  }
+
+  if (tenant.status === "pending") {
+    return c.json(
+      { error: "Cannot delete proxy while initialization is in progress" },
+      400,
+    );
+  }
+
+  if (tenant.status === "deleting") {
+    return c.json({ error: "Proxy is already being deleted" }, 400);
+  }
+
+  const walletConfig = tenant.wallet_config as WalletConfig | null;
+  if (walletConfig) {
+    const addresses = extractAddresses(walletConfig);
+
+    if (addresses.solana || addresses.evm) {
+      try {
+        const balances = await fetchWalletBalances(addresses);
+
+        const hasNonZeroBalance =
+          parseFloat(balances.solana?.native || "0") > 0 ||
+          parseFloat(balances.solana?.usdc || "0") > 0 ||
+          parseFloat(balances.base?.native || "0") > 0 ||
+          parseFloat(balances.base?.usdc || "0") > 0 ||
+          parseFloat(balances.polygon?.native || "0") > 0 ||
+          parseFloat(balances.polygon?.usdc || "0") > 0 ||
+          parseFloat(balances.monad?.native || "0") > 0 ||
+          parseFloat(balances.monad?.usdc || "0") > 0;
+
+        if (hasNonZeroBalance) {
+          return c.json(
+            {
+              error: "Please complete a payout before deleting this proxy",
+              hasWalletFunds: true,
+            },
+            400,
+          );
+        }
+      } catch (err) {
+        logger.error(
+          `Failed to check wallet balances for tenant ${tenantId}: ${err}`,
+        );
+        return c.json({ error: "Failed to verify wallet is empty" }, 500);
+      }
+    }
+  }
+
+  await db
+    .updateTable("tenants")
+    .set({ status: "deleting" })
+    .where("id", "=", tenantId)
+    .execute();
+
+  await enqueueTenantDeletion(tenant.id, tenant.name);
+
+  return c.json({ success: true });
 });
 
 organizationsRoutes.get("/:id/tenants/check-name", async (c) => {

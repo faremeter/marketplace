@@ -3,9 +3,15 @@
 import { useState } from "react";
 import { useAuth } from "@/lib/auth/context";
 import useSWR from "swr";
-import { api } from "@/lib/api/client";
+import { api, ApiError } from "@/lib/api/client";
 import Link from "next/link";
-import { PlusIcon } from "@radix-ui/react-icons";
+import {
+  PlusIcon,
+  TrashIcon,
+  Cross2Icon,
+  ExclamationTriangleIcon,
+} from "@radix-ui/react-icons";
+import * as Dialog from "@radix-ui/react-dialog";
 import { InlineUrlEdit } from "@/components/shared/inline-url-edit";
 import { InlineAuthEdit } from "@/components/shared/inline-auth-edit";
 import { InlineActiveToggle } from "@/components/shared/inline-active-toggle";
@@ -22,6 +28,7 @@ interface Tenant {
   name: string;
   backend_url: string;
   is_active: boolean;
+  status: string;
   wallet_status: string;
   upstream_auth_header: string | null;
   upstream_auth_value: string | null;
@@ -33,59 +40,58 @@ function getStatus(tenant: Tenant): {
   label: string;
   color: string;
 } {
-  if (tenant.nodes.length === 0) {
+  if (tenant.status === "deleting") {
     return {
-      label: "Pending",
-      color: "bg-gray-800/50 text-gray-400 border-gray-700",
+      label: "Deleting",
+      color: "bg-red-900/50 text-red-400 border-red-800",
     };
   }
 
-  const hasPendingCert = tenant.nodes.some((n) => n.cert_status === "pending");
-  const hasFailedCert = tenant.nodes.some((n) => n.cert_status === "failed");
-  const allProvisioned = tenant.nodes.every(
-    (n) => n.cert_status === "provisioned",
-  );
-
-  if (hasFailedCert) {
+  if (tenant.status === "failed") {
     return {
       label: "Failed",
       color: "bg-red-900/50 text-red-400 border-red-800",
     };
   }
-  if (hasPendingCert) {
+
+  if (tenant.status === "pending") {
+    const hasPendingCert = tenant.nodes.some(
+      (n) => n.cert_status === "pending",
+    );
+
+    if (tenant.wallet_status === "pending") {
+      return {
+        label: "Funding",
+        color: "bg-yellow-900/50 text-yellow-400 border-yellow-800",
+      };
+    }
+
+    if (hasPendingCert) {
+      return {
+        label: "Provisioning",
+        color: "bg-yellow-900/50 text-yellow-400 border-yellow-800",
+      };
+    }
+
     return {
-      label: "Provisioning",
+      label: "Initializing",
       color: "bg-yellow-900/50 text-yellow-400 border-yellow-800",
-    };
-  }
-  if (tenant.wallet_status === "pending") {
-    return {
-      label: "Funding",
-      color: "bg-yellow-900/50 text-yellow-400 border-yellow-800",
-    };
-  }
-  if (tenant.wallet_status === "failed") {
-    return {
-      label: "Failed",
-      color: "bg-red-900/50 text-red-400 border-red-800",
-    };
-  }
-  if (allProvisioned && tenant.wallet_status === "funded") {
-    return {
-      label: "Ready",
-      color: "bg-green-900/50 text-green-400 border-green-800",
     };
   }
 
   return {
-    label: "Pending",
-    color: "bg-gray-800/50 text-gray-400 border-gray-700",
+    label: "Ready",
+    color: "bg-green-900/50 text-green-400 border-green-800",
   };
 }
 
 export default function TenantsPage() {
   const { currentOrg } = useAuth();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [tenantToDelete, setTenantToDelete] = useState<Tenant | null>(null);
+  const [deletingId, setDeletingId] = useState<number | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   const {
     data: tenants,
@@ -96,6 +102,43 @@ export default function TenantsPage() {
     api.get<Tenant[]>,
     { refreshInterval: 3000 },
   );
+
+  const handleDeleteClick = (tenant: Tenant) => {
+    setTenantToDelete(tenant);
+    setDeleteError(null);
+    setDeleteDialogOpen(true);
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!tenantToDelete || !currentOrg) return;
+
+    setDeletingId(tenantToDelete.id);
+    setDeleteError(null);
+
+    try {
+      await api.delete(
+        `/api/organizations/${currentOrg.id}/tenants/${tenantToDelete.id}`,
+      );
+      setDeleteDialogOpen(false);
+      setTenantToDelete(null);
+      mutate();
+    } catch (err) {
+      if (err instanceof ApiError && err.data) {
+        const data = err.data as { error?: string; hasWalletFunds?: boolean };
+        if (data.hasWalletFunds) {
+          setDeleteError(
+            "This proxy has funds in its wallet. Please complete a payout before deleting.",
+          );
+        } else {
+          setDeleteError(data.error || "Failed to delete proxy");
+        }
+      } else {
+        setDeleteError("Failed to delete proxy");
+      }
+    } finally {
+      setDeletingId(null);
+    }
+  };
 
   if (!currentOrg) {
     return (
@@ -158,6 +201,9 @@ export default function TenantsPage() {
                 <th className="px-4 py-3 text-left text-sm font-medium text-gray-11">
                   Created
                 </th>
+                <th className="px-4 py-3 text-left text-sm font-medium text-gray-11">
+                  Actions
+                </th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-6 bg-gray-2">
@@ -215,6 +261,20 @@ export default function TenantsPage() {
                     <td className="px-4 py-3 text-sm text-gray-11">
                       {new Date(tenant.created_at).toLocaleDateString()}
                     </td>
+                    <td className="px-4 py-3">
+                      <button
+                        onClick={() => handleDeleteClick(tenant)}
+                        disabled={
+                          deletingId === tenant.id ||
+                          tenant.status === "pending" ||
+                          tenant.status === "deleting"
+                        }
+                        className="rounded p-1.5 text-gray-11 hover:bg-red-900/30 hover:text-red-400 disabled:opacity-50"
+                        title="Delete proxy"
+                      >
+                        <TrashIcon className="h-4 w-4" />
+                      </button>
+                    </td>
                   </tr>
                 );
               })}
@@ -240,6 +300,66 @@ export default function TenantsPage() {
         onSuccess={() => mutate()}
         organizationId={currentOrg.id}
       />
+
+      <Dialog.Root open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <Dialog.Portal>
+          <Dialog.Overlay className="fixed inset-0 bg-black/50" />
+          <Dialog.Content className="fixed left-1/2 top-1/2 w-full max-w-md -translate-x-1/2 -translate-y-1/2 rounded-lg border border-gray-6 bg-gray-2 p-6 shadow-lg">
+            <div className="flex items-center justify-between">
+              <Dialog.Title className="text-lg font-semibold text-gray-12">
+                Delete Proxy
+              </Dialog.Title>
+              <Dialog.Close className="rounded p-1 text-gray-11 hover:bg-gray-4 hover:text-gray-12">
+                <Cross2Icon className="h-4 w-4" />
+              </Dialog.Close>
+            </div>
+
+            <Dialog.Description asChild>
+              <div className="mt-4 space-y-3 text-sm text-gray-11">
+                <p>
+                  Are you sure you want to delete{" "}
+                  <span className="font-medium text-gray-12">
+                    {tenantToDelete?.name}
+                  </span>
+                  ?
+                </p>
+                <p>This action cannot be undone.</p>
+              </div>
+            </Dialog.Description>
+
+            <div className="mt-4 flex items-start gap-2 rounded-lg border border-amber-800 bg-amber-900/20 p-3">
+              <ExclamationTriangleIcon className="h-4 w-4 flex-shrink-0 text-amber-400" />
+              <p className="text-sm text-amber-300">
+                If this proxy has funds in its wallet, you will need to complete
+                a payout before deletion.
+              </p>
+            </div>
+
+            {deleteError && (
+              <div className="mt-4 flex items-start gap-2 rounded-lg border border-red-800 bg-red-900/20 p-3">
+                <ExclamationTriangleIcon className="h-4 w-4 flex-shrink-0 text-red-400" />
+                <p className="text-sm text-red-300">{deleteError}</p>
+              </div>
+            )}
+
+            <div className="mt-6 flex justify-end gap-3">
+              <button
+                onClick={() => setDeleteDialogOpen(false)}
+                className="rounded-md px-3 py-2 text-sm font-medium text-gray-11 hover:bg-gray-4 hover:text-gray-12"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleDeleteConfirm}
+                disabled={deletingId !== null}
+                className="rounded-md bg-red-600 px-3 py-2 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-50"
+              >
+                {deletingId !== null ? "Deleting..." : "Delete"}
+              </button>
+            </div>
+          </Dialog.Content>
+        </Dialog.Portal>
+      </Dialog.Root>
     </div>
   );
 }
