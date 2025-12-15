@@ -27,7 +27,7 @@ export function UserSidebar() {
           icon={<DashboardIcon />}
           label="Dashboard"
         />
-        <SidebarItem href="/tenants" icon={<LayersIcon />} label="Tenants" />
+        <SidebarItem href="/proxies" icon={<LayersIcon />} label="Proxies" />
         <SidebarItem href="/endpoints" icon={<Link2Icon />} label="Endpoints" />
         <SidebarItem
           href="/wallets"

@@ -1,0 +1,359 @@
+"use client";
+
+import { useState, useEffect, useRef } from "react";
+import * as Dialog from "@radix-ui/react-dialog";
+import {
+  Cross2Icon,
+  PlusIcon,
+  MinusIcon,
+  CheckCircledIcon,
+  CrossCircledIcon,
+} from "@radix-ui/react-icons";
+import { api } from "@/lib/api/client";
+import { useToast } from "@/components/ui/toast";
+
+interface CreateUserTenantDialogProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onSuccess: () => void;
+  organizationId: number;
+}
+
+export function CreateUserTenantDialog({
+  open,
+  onOpenChange,
+  onSuccess,
+  organizationId,
+}: CreateUserTenantDialogProps) {
+  const { toast } = useToast();
+
+  const [name, setName] = useState("");
+  const [backendUrl, setBackendUrl] = useState("");
+  const [authHeader, setAuthHeader] = useState("");
+  const [authValue, setAuthValue] = useState("");
+  const [defaultPrice, setDefaultPrice] = useState("0.01");
+  const [defaultScheme, setDefaultScheme] = useState("exact");
+  const [error, setError] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [nameAvailable, setNameAvailable] = useState<boolean | null>(null);
+  const [isCheckingName, setIsCheckingName] = useState(false);
+  const checkTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  useEffect(() => {
+    if (!name.trim()) {
+      setNameAvailable(null);
+      return;
+    }
+
+    setIsCheckingName(true);
+    setNameAvailable(null);
+
+    if (checkTimeoutRef.current) {
+      clearTimeout(checkTimeoutRef.current);
+    }
+
+    checkTimeoutRef.current = setTimeout(async () => {
+      try {
+        const sanitizedName = name
+          .trim()
+          .toLowerCase()
+          .replace(/[^a-z0-9-]/g, "-");
+        const result = await api.get<{ available: boolean }>(
+          `/api/organizations/${organizationId}/tenants/check-name?name=${encodeURIComponent(sanitizedName)}`,
+        );
+        setNameAvailable(result.available);
+      } catch {
+        setNameAvailable(null);
+      } finally {
+        setIsCheckingName(false);
+      }
+    }, 500);
+
+    return () => {
+      if (checkTimeoutRef.current) {
+        clearTimeout(checkTimeoutRef.current);
+      }
+    };
+  }, [name, organizationId]);
+
+  const resetForm = () => {
+    setName("");
+    setBackendUrl("");
+    setAuthHeader("");
+    setAuthValue("");
+    setDefaultPrice("0.01");
+    setDefaultScheme("exact");
+    setError("");
+    setNameAvailable(null);
+    setIsCheckingName(false);
+  };
+
+  const handleOpenChange = (newOpen: boolean) => {
+    if (!newOpen) {
+      resetForm();
+    }
+    onOpenChange(newOpen);
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError("");
+
+    if (!name.trim()) {
+      setError("Name is required");
+      return;
+    }
+    if (nameAvailable === false) {
+      setError("This name is already taken");
+      return;
+    }
+    if (!backendUrl.trim()) {
+      setError("Backend URL is required");
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      await api.post(`/api/organizations/${organizationId}/tenants`, {
+        name: name.trim(),
+        backend_url: backendUrl.trim(),
+        upstream_auth_header: authHeader.trim() || null,
+        upstream_auth_value: authValue.trim() || null,
+        default_price_usdc: Math.round(
+          (parseFloat(defaultPrice) || 0) * 1_000_000,
+        ),
+        default_scheme: defaultScheme,
+      });
+      handleOpenChange(false);
+      toast({
+        title: "Proxy created",
+        description: `${name.trim()} has been created successfully.`,
+        variant: "success",
+      });
+      onSuccess();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to create proxy");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  return (
+    <Dialog.Root open={open} onOpenChange={handleOpenChange}>
+      <Dialog.Portal>
+        <Dialog.Overlay className="fixed inset-0 bg-black/60 backdrop-blur-sm" />
+        <Dialog.Content className="fixed left-1/2 top-1/2 max-h-[85vh] w-full max-w-lg -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-lg border border-gray-6 bg-gray-1 p-6 shadow-xl">
+          <div className="mb-6 flex items-center justify-between">
+            <Dialog.Title className="text-lg font-semibold text-gray-12">
+              New Proxy
+            </Dialog.Title>
+            <Dialog.Close className="rounded p-1 text-gray-11 hover:bg-gray-4 hover:text-gray-12">
+              <Cross2Icon className="h-4 w-4" />
+            </Dialog.Close>
+          </div>
+
+          {/* URL Preview */}
+          <div className="mb-6 rounded-md border border-gray-6 bg-gray-2 px-4 py-3 text-center">
+            <p className="text-xs text-gray-11 mb-1">
+              Your proxy will be available at
+            </p>
+            <div className="flex items-center justify-center gap-2">
+              <code className="font-mono text-sm">
+                {name.trim() ? (
+                  <span className="text-gray-12">
+                    {name
+                      .trim()
+                      .toLowerCase()
+                      .replace(/[^a-z0-9-]/g, "-")}
+                    .api.corbits.dev
+                  </span>
+                ) : (
+                  <>
+                    <span className="text-gray-9">&lt;name&gt;</span>
+                    <span className="text-gray-12">.api.corbits.dev</span>
+                  </>
+                )}
+              </code>
+              {name.trim() && (
+                <>
+                  {isCheckingName ? (
+                    <div className="h-4 w-4 animate-spin rounded-full border-2 border-gray-6 border-t-gray-11" />
+                  ) : nameAvailable === true ? (
+                    <CheckCircledIcon className="h-4 w-4 text-green-500" />
+                  ) : nameAvailable === false ? (
+                    <CrossCircledIcon className="h-4 w-4 text-red-500" />
+                  ) : null}
+                </>
+              )}
+            </div>
+            {name.trim() && nameAvailable === false && !isCheckingName && (
+              <p className="mt-1 text-xs text-red-400">
+                This name is already taken
+              </p>
+            )}
+          </div>
+
+          <form onSubmit={handleSubmit} className="space-y-6">
+            {/* Basic Info */}
+            <section>
+              <h3 className="mb-3 text-xs font-medium uppercase tracking-wider text-gray-11">
+                Basic Info
+              </h3>
+              <div>
+                <label className="mb-1.5 block text-sm text-gray-11">
+                  Proxy Name <span className="text-red-400">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder="my-api-proxy"
+                  className="w-full rounded-md border border-gray-6 bg-gray-2 px-3 py-2 text-sm text-gray-12 placeholder-gray-9 focus:border-accent-8 focus:outline-none focus:ring-1 focus:ring-accent-8"
+                />
+              </div>
+            </section>
+
+            {/* Backend */}
+            <section>
+              <h3 className="mb-3 text-xs font-medium uppercase tracking-wider text-gray-11">
+                Backend
+              </h3>
+              <div className="space-y-3">
+                <div>
+                  <label className="mb-1.5 block text-sm text-gray-11">
+                    Backend URL <span className="text-red-400">*</span>
+                  </label>
+                  <input
+                    type="url"
+                    value={backendUrl}
+                    onChange={(e) => setBackendUrl(e.target.value)}
+                    placeholder="https://api.example.com"
+                    className="w-full rounded-md border border-gray-6 bg-gray-2 px-3 py-2 text-sm text-gray-12 placeholder-gray-9 focus:border-accent-8 focus:outline-none focus:ring-1 focus:ring-accent-8"
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="mb-1.5 block text-sm text-gray-11">
+                      Auth Header
+                    </label>
+                    <input
+                      type="text"
+                      value={authHeader}
+                      onChange={(e) => setAuthHeader(e.target.value)}
+                      placeholder="Authorization"
+                      className="w-full rounded-md border border-gray-6 bg-gray-2 px-3 py-2 text-sm text-gray-12 placeholder-gray-9 focus:border-accent-8 focus:outline-none focus:ring-1 focus:ring-accent-8"
+                    />
+                  </div>
+                  <div>
+                    <label className="mb-1.5 block text-sm text-gray-11">
+                      Auth Value
+                    </label>
+                    <input
+                      type="password"
+                      value={authValue}
+                      onChange={(e) => setAuthValue(e.target.value)}
+                      placeholder="Bearer token..."
+                      className="w-full rounded-md border border-gray-6 bg-gray-2 px-3 py-2 text-sm text-gray-12 placeholder-gray-9 focus:border-accent-8 focus:outline-none focus:ring-1 focus:ring-accent-8"
+                    />
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            {/* Pricing */}
+            <section>
+              <h3 className="mb-3 text-xs font-medium uppercase tracking-wider text-gray-11">
+                Pricing
+              </h3>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="mb-1.5 block text-sm text-gray-11">
+                    Default Price
+                  </label>
+                  <div className="flex items-center gap-0 rounded-md border border-gray-6 bg-gray-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const val = Math.max(
+                          0,
+                          parseFloat(defaultPrice) - 0.01,
+                        );
+                        setDefaultPrice(
+                          val.toFixed(6).replace(/\.?0+$/, "") || "0",
+                        );
+                      }}
+                      className="flex h-9 w-9 items-center justify-center text-gray-11 hover:bg-gray-3 hover:text-gray-12 transition-colors rounded-l-md"
+                    >
+                      <MinusIcon className="h-4 w-4" />
+                    </button>
+                    <div className="flex flex-1 items-center">
+                      <input
+                        type="text"
+                        inputMode="decimal"
+                        value={defaultPrice}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          if (val === "" || /^\d*\.?\d*$/.test(val)) {
+                            setDefaultPrice(val);
+                          }
+                        }}
+                        className="w-full bg-transparent py-2 text-center text-sm text-gray-12 focus:outline-none"
+                      />
+                      <span className="pr-2 text-xs text-gray-11">USDC</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const val = parseFloat(defaultPrice || "0") + 0.01;
+                        setDefaultPrice(val.toFixed(6).replace(/\.?0+$/, ""));
+                      }}
+                      className="flex h-9 w-9 items-center justify-center text-gray-11 hover:bg-gray-3 hover:text-gray-12 transition-colors rounded-r-md"
+                    >
+                      <PlusIcon className="h-4 w-4" />
+                    </button>
+                  </div>
+                </div>
+                <div>
+                  <label className="mb-1.5 block text-sm text-gray-11">
+                    Scheme
+                  </label>
+                  <select
+                    value={defaultScheme}
+                    onChange={(e) => setDefaultScheme(e.target.value)}
+                    className="w-full rounded-md border border-gray-6 bg-gray-2 px-3 py-2 text-sm text-gray-12 focus:border-accent-8 focus:outline-none focus:ring-1 focus:ring-accent-8"
+                  >
+                    <option value="exact">exact</option>
+                    <option value="upto">upto</option>
+                  </select>
+                </div>
+              </div>
+            </section>
+
+            {error && (
+              <div className="rounded-md border border-red-800 bg-red-900/20 px-3 py-2 text-sm text-red-400">
+                {error}
+              </div>
+            )}
+
+            <div className="flex justify-end gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => handleOpenChange(false)}
+                className="rounded-md border border-gray-6 px-4 py-2 text-sm text-gray-11 hover:bg-gray-3"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={isSubmitting}
+                className="rounded-md bg-white px-4 py-2 text-sm font-medium text-black shadow-button transition-colors hover:bg-white/90 disabled:opacity-50"
+              >
+                {isSubmitting ? "Creating..." : "Create Proxy"}
+              </button>
+            </div>
+          </form>
+        </Dialog.Content>
+      </Dialog.Portal>
+    </Dialog.Root>
+  );
+}
