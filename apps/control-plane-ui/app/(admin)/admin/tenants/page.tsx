@@ -12,9 +12,9 @@ import * as Tooltip from "@radix-ui/react-tooltip";
 import { api } from "@/lib/api/client";
 import { CreateTenantDialog } from "@/components/admin/create-tenant-dialog";
 import { InlineOrgSelect } from "@/components/admin/inline-org-select";
-import { InlineActiveToggle } from "@/components/admin/inline-active-toggle";
-import { InlineAuthEdit } from "@/components/admin/inline-auth-edit";
-import { InlineUrlEdit } from "@/components/admin/inline-url-edit";
+import { InlineActiveToggle } from "@/components/shared/inline-active-toggle";
+import { InlineAuthEdit } from "@/components/shared/inline-auth-edit";
+import { InlineUrlEdit } from "@/components/shared/inline-url-edit";
 import { InlineNodeSelect } from "@/components/admin/inline-node-select";
 import { useToast } from "@/components/ui/toast";
 

@@ -2,38 +2,46 @@
 
 import { useState } from "react";
 import * as Popover from "@radix-ui/react-popover";
-import * as Tooltip from "@radix-ui/react-tooltip";
 import { Pencil1Icon, CheckIcon, Cross2Icon } from "@radix-ui/react-icons";
 import { api } from "@/lib/api/client";
 import { useToast } from "@/components/ui/toast";
 
-interface InlineUrlEditProps {
+interface InlineAuthEditProps {
   tenantId: number;
   tenantName: string;
-  backendUrl: string;
+  authHeader: string | null;
+  authValue: string | null;
   onUpdate: () => void;
+  apiEndpoint?: string;
 }
 
-export function InlineUrlEdit({
+export function InlineAuthEdit({
   tenantId,
   tenantName,
-  backendUrl,
+  authHeader,
+  authValue,
   onUpdate,
-}: InlineUrlEditProps) {
+  apiEndpoint,
+}: InlineAuthEditProps) {
+  const endpoint = apiEndpoint ?? `/api/admin/tenants/${tenantId}`;
   const { toast } = useToast();
   const [isOpen, setIsOpen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
-  const [url, setUrl] = useState(backendUrl);
+  const [header, setHeader] = useState(authHeader ?? "");
+  const [value, setValue] = useState(authValue ?? "");
+
+  const hasAuth = authHeader && authValue;
 
   const handleSave = async () => {
     setIsSaving(true);
     try {
-      await api.put(`/api/admin/tenants/${tenantId}`, {
-        backend_url: url,
+      await api.put(endpoint, {
+        upstream_auth_header: header || null,
+        upstream_auth_value: value || null,
       });
       toast({
-        title: "Backend URL updated",
-        description: `${tenantName} backend URL has been updated.`,
+        title: "Auth updated",
+        description: `${tenantName} auth has been updated.`,
         variant: "success",
       });
       onUpdate();
@@ -51,56 +59,55 @@ export function InlineUrlEdit({
 
   const handleOpen = (open: boolean) => {
     if (open) {
-      setUrl(backendUrl);
+      setHeader(authHeader ?? "");
+      setValue(authValue ?? "");
     }
     setIsOpen(open);
   };
 
-  const truncatedUrl =
-    backendUrl.length > 50 ? `${backendUrl.slice(0, 50)}...` : backendUrl;
-
   return (
     <Popover.Root open={isOpen} onOpenChange={handleOpen}>
-      <Tooltip.Provider delayDuration={200}>
-        <Tooltip.Root>
-          <Popover.Trigger asChild>
-            <Tooltip.Trigger asChild>
-              <button className="group flex items-center gap-1 rounded bg-gray-4 px-2 py-1 text-xs text-gray-11 hover:bg-gray-5 cursor-pointer text-left">
-                <code>{truncatedUrl}</code>
-                <Pencil1Icon className="h-3 w-3 opacity-0 group-hover:opacity-50" />
-              </button>
-            </Tooltip.Trigger>
-          </Popover.Trigger>
-          {!isOpen && (
-            <Tooltip.Portal>
-              <Tooltip.Content
-                className="rounded bg-gray-12 px-2 py-1 text-xs text-gray-1"
-                sideOffset={5}
-              >
-                {backendUrl}
-                <Tooltip.Arrow className="fill-gray-12" />
-              </Tooltip.Content>
-            </Tooltip.Portal>
-          )}
-        </Tooltip.Root>
-      </Tooltip.Provider>
+      <Popover.Trigger asChild>
+        <button
+          className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs transition-colors ${
+            hasAuth
+              ? "border-purple-800 bg-purple-900/50 text-purple-400 hover:bg-purple-900/70"
+              : "border-gray-700 bg-gray-800/50 text-gray-400 hover:bg-gray-700/50"
+          }`}
+        >
+          <Pencil1Icon className="h-3 w-3" />
+          {hasAuth ? authHeader : "Add auth"}
+        </button>
+      </Popover.Trigger>
       <Popover.Portal>
         <Popover.Content
-          className="w-96 rounded-lg border border-gray-6 bg-gray-2 p-3 shadow-lg"
+          className="w-72 rounded-lg border border-gray-6 bg-gray-2 p-3 shadow-lg"
           sideOffset={5}
           align="start"
         >
           <div className="space-y-3">
             <div>
               <label className="block text-xs font-medium text-gray-11 mb-1">
-                Backend URL
+                Header Name
               </label>
               <input
                 type="text"
-                value={url}
-                onChange={(e) => setUrl(e.target.value)}
-                placeholder="https://api.example.com"
-                className="w-full rounded border border-gray-6 bg-gray-3 px-2 py-1.5 text-sm text-gray-12 placeholder:text-gray-8 focus:border-accent-8 focus:outline-none font-mono"
+                value={header}
+                onChange={(e) => setHeader(e.target.value)}
+                placeholder="Authorization"
+                className="w-full rounded border border-gray-6 bg-gray-3 px-2 py-1.5 text-sm text-gray-12 placeholder:text-gray-8 focus:border-accent-8 focus:outline-none"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-11 mb-1">
+                Header Value
+              </label>
+              <input
+                type="text"
+                value={value}
+                onChange={(e) => setValue(e.target.value)}
+                placeholder="Bearer xxx"
+                className="w-full rounded border border-gray-6 bg-gray-3 px-2 py-1.5 text-sm text-gray-12 placeholder:text-gray-8 focus:border-accent-8 focus:outline-none"
               />
             </div>
             <div className="flex justify-end gap-2">

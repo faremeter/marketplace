@@ -3,7 +3,7 @@
 import useSWR from "swr";
 import * as Tooltip from "@radix-ui/react-tooltip";
 import { api } from "@/lib/api/client";
-import { InlineActiveToggle } from "@/components/admin/inline-active-toggle";
+import { InlineActiveToggle } from "@/components/shared/inline-active-toggle";
 
 interface Node {
   id: number;

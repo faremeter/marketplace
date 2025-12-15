@@ -10,6 +10,7 @@ interface InlineActiveToggleProps {
   tenantName: string;
   isActive: boolean;
   onUpdate: () => void;
+  apiEndpoint?: string;
 }
 
 export function InlineActiveToggle({
@@ -17,14 +18,16 @@ export function InlineActiveToggle({
   tenantName,
   isActive,
   onUpdate,
+  apiEndpoint,
 }: InlineActiveToggleProps) {
+  const endpoint = apiEndpoint ?? `/api/admin/tenants/${tenantId}`;
   const { toast } = useToast();
   const [isSaving, setIsSaving] = useState(false);
 
   const handleToggle = async () => {
     setIsSaving(true);
     try {
-      await api.put(`/api/admin/tenants/${tenantId}`, {
+      await api.put(endpoint, {
         is_active: !isActive,
       });
       toast({
