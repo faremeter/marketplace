@@ -353,6 +353,8 @@ organizationsRoutes.get("/:id/tenants", async (c) => {
       "tenants.upstream_auth_header",
       "tenants.upstream_auth_value",
       "tenants.created_at",
+      "tenants.default_price_usdc",
+      "tenants.default_scheme",
     ])
     .where("organization_id", "=", id)
     .orderBy("created_at", "desc")
