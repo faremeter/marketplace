@@ -10,7 +10,7 @@ build:
 
 lint:
 	pnpm prettier -c .
-	pnpm eslint --cache .
+	pnpm eslint --cache --ignore-pattern '**/.next/**' --ignore-pattern '**/next-env.d.ts' --ignore-pattern '**/postcss.config.mjs' .
 
 test:
 
