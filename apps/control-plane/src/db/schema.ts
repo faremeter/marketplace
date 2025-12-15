@@ -48,6 +48,7 @@ export interface TenantsTable {
   organization_id: number | null;
   wallet_config: ColumnType<unknown, string, string>;
   wallet_status: string;
+  status: ColumnType<string, string | undefined, string>;
   default_price_usdc: number;
   default_scheme: string;
   upstream_auth_header: string | null;

@@ -1,6 +1,7 @@
 import { execSync } from "child_process";
 import { db } from "../server.js";
 import { logger } from "../logger.js";
+import { checkAndUpdateTenantStatus } from "./queue.js";
 
 const BASE_DOMAIN = "test.api.corbits.dev";
 
@@ -22,6 +23,9 @@ async function setCertStatus(
       .where("tenant_id", "=", tenant.id)
       .where("node_id", "=", nodeId)
       .execute();
+
+    // Check if tenant can transition to active
+    await checkAndUpdateTenantStatus(tenant.id);
   }
 }
 

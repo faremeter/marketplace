@@ -7,9 +7,12 @@ import {
   PlusIcon,
   ExclamationTriangleIcon,
   ReloadIcon,
+  TrashIcon,
+  Cross2Icon,
 } from "@radix-ui/react-icons";
 import * as Tooltip from "@radix-ui/react-tooltip";
-import { api } from "@/lib/api/client";
+import * as Dialog from "@radix-ui/react-dialog";
+import { api, ApiError } from "@/lib/api/client";
 import { CreateTenantDialog } from "@/components/admin/create-tenant-dialog";
 import { InlineOrgSelect } from "@/components/admin/inline-org-select";
 import { InlineActiveToggle } from "@/components/shared/inline-active-toggle";
@@ -30,6 +33,7 @@ interface Tenant {
   name: string;
   backend_url: string;
   is_active: boolean;
+  status: string;
   wallet_status: string;
   organization_id: number | null;
   organization_name?: string;
@@ -70,6 +74,10 @@ export default function AdminTenantsPage() {
     );
   const [dialogOpen, setDialogOpen] = useState(false);
   const [retryingId, setRetryingId] = useState<number | null>(null);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [tenantToDelete, setTenantToDelete] = useState<Tenant | null>(null);
+  const [deletingId, setDeletingId] = useState<number | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const { toast } = useToast();
 
   const handleRetryFunding = async (tenantId: number) => {
@@ -85,6 +93,46 @@ export default function AdminTenantsPage() {
       });
     } finally {
       setRetryingId(null);
+    }
+  };
+
+  const handleDeleteClick = (tenant: Tenant) => {
+    setTenantToDelete(tenant);
+    setDeleteError(null);
+    setDeleteDialogOpen(true);
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!tenantToDelete) return;
+
+    setDeletingId(tenantToDelete.id);
+    setDeleteError(null);
+
+    try {
+      await api.delete(`/api/admin/tenants/${tenantToDelete.id}`);
+      setDeleteDialogOpen(false);
+      setTenantToDelete(null);
+      mutate();
+      toast({
+        title: "Deletion started",
+        description: `${tenantToDelete.name} is being deleted`,
+        variant: "success",
+      });
+    } catch (err) {
+      if (err instanceof ApiError && err.data) {
+        const data = err.data as { error?: string; hasWalletFunds?: boolean };
+        if (data.hasWalletFunds) {
+          setDeleteError(
+            "This tenant has funds in its wallet. Withdraw all funds before deleting.",
+          );
+        } else {
+          setDeleteError(data.error || "Failed to delete tenant");
+        }
+      } else {
+        setDeleteError("Failed to delete tenant");
+      }
+    } finally {
+      setDeletingId(null);
     }
   };
 
@@ -179,6 +227,9 @@ export default function AdminTenantsPage() {
                 <th className="px-4 py-3 text-left text-sm font-medium text-gray-11">
                   Created
                 </th>
+                <th className="px-4 py-3 text-left text-sm font-medium text-gray-11">
+                  Actions
+                </th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-6 bg-gray-2">
@@ -234,18 +285,6 @@ export default function AdminTenantsPage() {
                   </td>
                   <td className="px-4 py-3">
                     {(() => {
-                      const hasCertPending = tenant.nodes.some(
-                        (n) => n.cert_status === "pending",
-                      );
-                      const hasCertFailed = tenant.nodes.some(
-                        (n) => n.cert_status === "failed",
-                      );
-                      const allCertsActive =
-                        tenant.nodes.length > 0 &&
-                        tenant.nodes.every(
-                          (n) => n.cert_status === "provisioned",
-                        );
-
                       const StatusBadge = ({
                         label,
                         tooltip,
@@ -290,73 +329,110 @@ export default function AdminTenantsPage() {
                         </Tooltip.Provider>
                       );
 
-                      if (hasCertPending) {
+                      // Use tenant.status as primary indicator
+                      if (tenant.status === "deleting") {
                         return (
                           <StatusBadge
-                            label="Provisioning"
-                            tooltip="TLS certificate is being provisioned"
-                            color="yellow"
-                          />
-                        );
-                      }
-                      if (hasCertFailed) {
-                        return (
-                          <StatusBadge
-                            label="Failed"
-                            tooltip="TLS certificate provisioning failed"
+                            label="Deleting"
+                            tooltip="Tenant is being removed"
                             color="red"
                           />
                         );
                       }
-                      if (tenant.wallet_status === "pending") {
-                        return (
-                          <StatusBadge
-                            label="Funding"
-                            tooltip="Wallet is being funded with SOL and USDC"
-                            color="yellow"
-                          />
+
+                      if (tenant.status === "failed") {
+                        const hasCertFailed = tenant.nodes.some(
+                          (n) => n.cert_status === "failed",
                         );
-                      }
-                      if (tenant.wallet_status === "failed") {
                         return (
                           <StatusBadge
                             label="Failed"
-                            tooltip="Wallet funding failed"
+                            tooltip={
+                              tenant.wallet_status === "failed"
+                                ? "Wallet funding failed"
+                                : hasCertFailed
+                                  ? "TLS certificate provisioning failed"
+                                  : "Setup failed"
+                            }
                             color="red"
                           >
-                            <button
-                              onClick={() => handleRetryFunding(tenant.id)}
-                              disabled={retryingId === tenant.id}
-                              className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-xs text-gray-11 hover:bg-gray-4 hover:text-gray-12 disabled:opacity-50"
-                              title="Retry wallet funding"
-                            >
-                              <ReloadIcon
-                                className={`h-3 w-3 ${retryingId === tenant.id ? "animate-spin" : ""}`}
-                              />
-                            </button>
+                            {tenant.wallet_status === "failed" && (
+                              <button
+                                onClick={() => handleRetryFunding(tenant.id)}
+                                disabled={retryingId === tenant.id}
+                                className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-xs text-gray-11 hover:bg-gray-4 hover:text-gray-12 disabled:opacity-50"
+                                title="Retry wallet funding"
+                              >
+                                <ReloadIcon
+                                  className={`h-3 w-3 ${retryingId === tenant.id ? "animate-spin" : ""}`}
+                                />
+                              </button>
+                            )}
                           </StatusBadge>
                         );
                       }
-                      if (allCertsActive && tenant.wallet_status === "funded") {
+
+                      if (tenant.status === "pending") {
+                        // Show details about what's pending
+                        const hasCertPending = tenant.nodes.some(
+                          (n) => n.cert_status === "pending",
+                        );
+
+                        if (tenant.wallet_status === "pending") {
+                          return (
+                            <StatusBadge
+                              label="Funding"
+                              tooltip="Wallet is being funded with SOL and USDC"
+                              color="yellow"
+                            />
+                          );
+                        }
+
+                        if (hasCertPending) {
+                          return (
+                            <StatusBadge
+                              label="Provisioning"
+                              tooltip="TLS certificate is being provisioned"
+                              color="yellow"
+                            />
+                          );
+                        }
+
                         return (
                           <StatusBadge
-                            label="Ready"
-                            tooltip="Wallet funded and TLS provisioned"
-                            color="green"
+                            label="Initializing"
+                            tooltip="Tenant is being set up"
+                            color="yellow"
                           />
                         );
                       }
+
+                      // status === "active"
                       return (
                         <StatusBadge
-                          label="Pending"
-                          tooltip="Waiting for node assignment"
-                          color="gray"
+                          label="Ready"
+                          tooltip="Tenant is fully operational"
+                          color="green"
                         />
                       );
                     })()}
                   </td>
                   <td className="px-4 py-3 text-sm text-gray-11">
                     {new Date(tenant.created_at).toLocaleDateString()}
+                  </td>
+                  <td className="px-4 py-3">
+                    <button
+                      onClick={() => handleDeleteClick(tenant)}
+                      disabled={
+                        deletingId === tenant.id ||
+                        (tenant.status !== "active" &&
+                          tenant.status !== "failed")
+                      }
+                      className="rounded p-1.5 text-gray-11 hover:bg-red-900/30 hover:text-red-400 disabled:opacity-50"
+                      title="Delete tenant"
+                    >
+                      <TrashIcon className="h-4 w-4" />
+                    </button>
                   </td>
                 </tr>
               ))}
@@ -368,6 +444,70 @@ export default function AdminTenantsPage() {
           <p className="text-sm text-gray-11">No tenants found.</p>
         </div>
       )}
+
+      <Dialog.Root open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <Dialog.Portal>
+          <Dialog.Overlay className="fixed inset-0 bg-black/50" />
+          <Dialog.Content className="fixed left-1/2 top-1/2 w-full max-w-md -translate-x-1/2 -translate-y-1/2 rounded-lg border border-gray-6 bg-gray-2 p-6 shadow-lg">
+            <div className="flex items-center justify-between">
+              <Dialog.Title className="text-lg font-semibold text-gray-12">
+                Delete Tenant
+              </Dialog.Title>
+              <Dialog.Close className="rounded p-1 text-gray-11 hover:bg-gray-4 hover:text-gray-12">
+                <Cross2Icon className="h-4 w-4" />
+              </Dialog.Close>
+            </div>
+
+            <Dialog.Description asChild>
+              <div className="mt-4 space-y-3 text-sm text-gray-11">
+                <p>
+                  Are you sure you want to delete{" "}
+                  <span className="font-medium text-gray-12">
+                    {tenantToDelete?.name}
+                  </span>
+                  ?
+                </p>
+                <p>
+                  This action cannot be undone. All DNS records, TLS
+                  certificates, and node configurations will be permanently
+                  removed.
+                </p>
+              </div>
+            </Dialog.Description>
+
+            <div className="mt-4 flex items-start gap-2 rounded-lg border border-amber-800 bg-amber-900/20 p-3">
+              <ExclamationTriangleIcon className="h-4 w-4 flex-shrink-0 text-amber-400" />
+              <p className="text-sm text-amber-300">
+                The tenant wallet will be verified empty before deletion. If
+                funds remain, you will be prompted to withdraw them first.
+              </p>
+            </div>
+
+            {deleteError && (
+              <div className="mt-4 flex items-start gap-2 rounded-lg border border-red-800 bg-red-900/20 p-3">
+                <ExclamationTriangleIcon className="h-4 w-4 flex-shrink-0 text-red-400" />
+                <p className="text-sm text-red-300">{deleteError}</p>
+              </div>
+            )}
+
+            <div className="mt-6 flex justify-end gap-3">
+              <button
+                onClick={() => setDeleteDialogOpen(false)}
+                className="rounded-md px-3 py-2 text-sm font-medium text-gray-11 hover:bg-gray-4 hover:text-gray-12"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleDeleteConfirm}
+                disabled={deletingId !== null}
+                className="rounded-md bg-red-600 px-3 py-2 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-50"
+              >
+                {deletingId !== null ? "Deleting..." : "Delete"}
+              </button>
+            </div>
+          </Dialog.Content>
+        </Dialog.Portal>
+      </Dialog.Root>
     </div>
   );
 }

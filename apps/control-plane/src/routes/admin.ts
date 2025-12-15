@@ -11,7 +11,12 @@ import {
   deleteHealthCheck,
   deleteNodeDnsRecord,
 } from "../lib/dns.js";
-import { enqueueCertProvisioning, enqueueWalletFunding } from "../lib/queue.js";
+import {
+  enqueueCertProvisioning,
+  enqueueWalletFunding,
+  enqueueTenantDeletion,
+  checkAndUpdateTenantStatus,
+} from "../lib/queue.js";
 
 export const adminRoutes = new Hono();
 
@@ -179,6 +184,7 @@ adminRoutes.get("/tenants", async (c) => {
       "tenants.default_price_usdc",
       "tenants.default_scheme",
       "tenants.is_active",
+      "tenants.status",
       "tenants.wallet_status",
       "tenants.upstream_auth_header",
       "tenants.upstream_auth_value",
@@ -325,6 +331,10 @@ adminRoutes.post("/tenants", async (c) => {
     syncToNode(nodeId).catch((err) => logger.error(String(err)));
   }
 
+  // Check if tenant can immediately transition to active
+  // (e.g., if no wallet and no nodes)
+  await checkAndUpdateTenantStatus(tenant.id);
+
   return c.json(tenant, 201);
 });
 
@@ -360,6 +370,81 @@ adminRoutes.put("/tenants/:id", async (c) => {
   }
 
   return c.json(result);
+});
+
+adminRoutes.delete("/tenants/:id", async (c) => {
+  const id = parseInt(c.req.param("id"));
+
+  const tenant = await db
+    .selectFrom("tenants")
+    .select(["id", "name", "status", "wallet_config"])
+    .where("id", "=", id)
+    .executeTakeFirst();
+
+  if (!tenant) {
+    return c.json({ error: "Tenant not found" }, 404);
+  }
+
+  // Check tenant status
+  if (tenant.status === "pending") {
+    return c.json(
+      { error: "Cannot delete tenant while initialization is in progress" },
+      400,
+    );
+  }
+
+  if (tenant.status === "deleting") {
+    return c.json({ error: "Tenant is already being deleted" }, 400);
+  }
+
+  // Check wallet funds
+  const walletConfig = tenant.wallet_config as WalletConfig | null;
+  if (walletConfig) {
+    const addresses = extractAddresses(walletConfig);
+
+    if (addresses.solana || addresses.evm) {
+      try {
+        const balances = await fetchWalletBalances(addresses);
+
+        const hasNonZeroBalance =
+          parseFloat(balances.solana?.native || "0") > 0 ||
+          parseFloat(balances.solana?.usdc || "0") > 0 ||
+          parseFloat(balances.base?.native || "0") > 0 ||
+          parseFloat(balances.base?.usdc || "0") > 0 ||
+          parseFloat(balances.polygon?.native || "0") > 0 ||
+          parseFloat(balances.polygon?.usdc || "0") > 0 ||
+          parseFloat(balances.monad?.native || "0") > 0 ||
+          parseFloat(balances.monad?.usdc || "0") > 0;
+
+        if (hasNonZeroBalance) {
+          return c.json(
+            {
+              error: "Cannot delete tenant with funds in wallet",
+              hasWalletFunds: true,
+            },
+            400,
+          );
+        }
+      } catch (err) {
+        logger.error(
+          `Failed to check wallet balances for tenant ${id}: ${err}`,
+        );
+        return c.json({ error: "Failed to verify wallet is empty" }, 500);
+      }
+    }
+  }
+
+  // Set status to deleting
+  await db
+    .updateTable("tenants")
+    .set({ status: "deleting" })
+    .where("id", "=", id)
+    .execute();
+
+  // Enqueue deletion job
+  await enqueueTenantDeletion(tenant.id, tenant.name);
+
+  return c.json({ success: true });
 });
 
 adminRoutes.post("/tenants/:id/retry-funding", async (c) => {
