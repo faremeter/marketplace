@@ -53,6 +53,7 @@ export interface TenantsTable {
   default_scheme: string;
   upstream_auth_header: string | null;
   upstream_auth_value: string | null;
+  openapi_spec: ColumnType<unknown, string | undefined, string> | null;
   is_active: ColumnType<boolean, boolean | undefined, boolean>;
   created_at: ColumnType<Date, never, never>;
 }
@@ -81,11 +82,17 @@ export interface TenantNodesTable {
 export interface EndpointsTable {
   id: ColumnType<number, never, never>;
   tenant_id: number;
+  path: string | null;
   path_pattern: string;
   price_usdc: number | null;
   scheme: string | null;
   description: string | null;
   priority: ColumnType<number, number | undefined, number>;
+  openapi_source_paths: ColumnType<
+    string[] | null,
+    string[] | undefined,
+    string[] | undefined
+  >;
   is_active: ColumnType<boolean, boolean | undefined, boolean>;
   created_at: ColumnType<Date, never, never>;
   deleted_at: Date | null;

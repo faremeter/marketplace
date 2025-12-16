@@ -4,6 +4,25 @@ import { sql } from "kysely";
 import { syncToNode } from "../lib/sync.js";
 import { logger } from "../logger.js";
 
+function processPathPattern(input: string): {
+  path: string;
+  path_pattern: string;
+} {
+  // Already regex (starts with ^)
+  if (input.startsWith("^")) {
+    return { path: input, path_pattern: input };
+  }
+
+  // OpenAPI-style with {param} - convert to regex
+  if (input.includes("{")) {
+    const regex = "^" + input.replace(/\{[^}]+\}/g, "[^/]+") + "$";
+    return { path: input, path_pattern: regex };
+  }
+
+  // Literal path (for prefix matching in Lua)
+  return { path: input, path_pattern: input };
+}
+
 async function syncTenantNode(tenantId: number) {
   const tenant = await db
     .selectFrom("tenants")
@@ -58,16 +77,20 @@ endpointsRoutes.post("/", async (c) => {
   const tenantId = parseInt(c.req.param("tenantId") ?? "");
   const body = await c.req.json();
 
+  const processed = processPathPattern(body.path ?? body.path_pattern);
+
   const result = await db
     .insertInto("endpoints")
     .values({
       tenant_id: tenantId,
-      path_pattern: body.path_pattern,
+      path: processed.path,
+      path_pattern: processed.path_pattern,
       price_usdc: body.price_usdc ?? null,
       scheme: body.scheme ?? null,
       description: body.description ?? null,
       priority: body.priority ?? 100,
       is_active: true,
+      openapi_source_paths: body.openapi_source_paths ?? null,
     })
     .returningAll()
     .executeTakeFirstOrThrow();
@@ -83,8 +106,13 @@ endpointsRoutes.put("/:id", async (c) => {
   const body = await c.req.json();
 
   const updateData: Record<string, unknown> = {};
-  if (body.path_pattern !== undefined)
-    updateData.path_pattern = body.path_pattern;
+  if (body.path !== undefined) {
+    const processed = processPathPattern(body.path);
+    updateData.path = processed.path;
+    updateData.path_pattern = processed.path_pattern;
+  }
+  if (body.openapi_source_paths !== undefined)
+    updateData.openapi_source_paths = body.openapi_source_paths;
   if (body.price_usdc !== undefined) updateData.price_usdc = body.price_usdc;
   if (body.scheme !== undefined) updateData.scheme = body.scheme;
   if (body.description !== undefined) updateData.description = body.description;

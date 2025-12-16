@@ -7,6 +7,7 @@ import { tenantsRoutes } from "./routes/tenants.js";
 import { nodesRoutes } from "./routes/nodes.js";
 import { endpointsRoutes } from "./routes/endpoints.js";
 import { transactionsRoutes } from "./routes/transactions.js";
+import { openapiRoutes } from "./routes/openapi.js";
 import { authRoutes } from "./routes/auth.js";
 import { organizationsRoutes } from "./routes/organizations.js";
 import { adminRoutes } from "./routes/admin.js";
@@ -49,6 +50,7 @@ app.route("/api/admin", adminRoutes);
 app.route("/api/tenants", tenantsRoutes);
 app.route("/api/tenants/:tenantId/endpoints", endpointsRoutes);
 app.route("/api/tenants/:tenantId/transactions", transactionsRoutes);
+app.route("/api/tenants/:tenantId/openapi", openapiRoutes);
 app.route("/api/nodes", nodesRoutes);
 
 const port = parseInt(process.env.HTTP_PORT || "1337");
