@@ -103,6 +103,11 @@ export default function TenantsPage() {
     { refreshInterval: 3000 },
   );
 
+  const { data: canCreateProxy, isLoading: canCreateLoading } = useSWR(
+    currentOrg ? `/api/organizations/${currentOrg.id}/can-create-proxy` : null,
+    api.get<{ available: boolean }>,
+  );
+
   const handleDeleteClick = (tenant: Tenant) => {
     setTenantToDelete(tenant);
     setDeleteError(null);
@@ -164,12 +169,27 @@ export default function TenantsPage() {
         </div>
         <button
           onClick={() => setIsDialogOpen(true)}
-          className="inline-flex items-center gap-2 rounded-md bg-white px-3 py-2 text-sm font-medium text-black shadow-button transition-colors hover:bg-white/90"
+          disabled={!canCreateProxy?.available}
+          className="inline-flex items-center gap-2 rounded-md bg-white px-3 py-2 text-sm font-medium text-black shadow-button transition-colors hover:bg-white/90 disabled:opacity-50 disabled:cursor-not-allowed"
         >
           <PlusIcon className="h-4 w-4" />
           New Proxy
         </button>
       </div>
+
+      {!canCreateLoading && canCreateProxy?.available === false && (
+        <div className="flex items-start gap-3 rounded-lg border border-amber-800 bg-amber-900/20 p-4">
+          <ExclamationTriangleIcon className="h-5 w-5 flex-shrink-0 text-amber-400" />
+          <div className="flex-1">
+            <p className="font-medium text-amber-300">
+              Proxy creation temporarily unavailable
+            </p>
+            <p className="mt-1 text-sm text-amber-400/80">
+              Please try again later or contact support.
+            </p>
+          </div>
+        </div>
+      )}
 
       {isLoading ? (
         <div className="flex items-center justify-center py-12">

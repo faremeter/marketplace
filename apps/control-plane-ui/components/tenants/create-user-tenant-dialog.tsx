@@ -9,7 +9,7 @@ import {
   CheckCircledIcon,
   CrossCircledIcon,
 } from "@radix-ui/react-icons";
-import { api } from "@/lib/api/client";
+import { api, ApiError } from "@/lib/api/client";
 import { useToast } from "@/components/ui/toast";
 
 interface CreateUserTenantDialogProps {
@@ -132,7 +132,12 @@ export function CreateUserTenantDialog({
       });
       onSuccess();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to create proxy");
+      if (err instanceof ApiError && err.data) {
+        const data = err.data as { error?: string };
+        setError(data.error || "Failed to create proxy");
+      } else {
+        setError(err instanceof Error ? err.message : "Failed to create proxy");
+      }
     } finally {
       setIsSubmitting(false);
     }

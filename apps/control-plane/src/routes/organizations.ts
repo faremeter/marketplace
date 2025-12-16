@@ -588,6 +588,45 @@ organizationsRoutes.get("/:id/tenants/check-name", async (c) => {
   return c.json({ available: !existing });
 });
 
+// Check if proxy creation is available (sufficient master wallet funds)
+organizationsRoutes.get("/:id/can-create-proxy", async (c) => {
+  const adminSettings = await db
+    .selectFrom("admin_settings")
+    .select([
+      "default_sol_native_amount",
+      "default_sol_usdc_amount",
+      "wallet_config",
+    ])
+    .where("id", "=", 1)
+    .executeTakeFirst();
+
+  const solAmount = adminSettings?.default_sol_native_amount ?? 0.01;
+  const usdcAmount = adminSettings?.default_sol_usdc_amount ?? 0.01;
+
+  const masterWalletConfig = adminSettings?.wallet_config as {
+    solana?: { "mainnet-beta"?: { address?: string } };
+  } | null;
+  const masterSolanaAddress =
+    masterWalletConfig?.solana?.["mainnet-beta"]?.address;
+
+  if (!masterSolanaAddress) {
+    return c.json({ available: false });
+  }
+
+  const masterBalances = await fetchWalletBalances({
+    solana: masterSolanaAddress,
+    evm: null,
+  });
+  const masterSolBalance = parseFloat(masterBalances.solana.native);
+  const masterUsdcBalance = parseFloat(masterBalances.solana.usdc);
+  const requiredSol = solAmount + 0.003;
+
+  return c.json({
+    available:
+      masterSolBalance >= requiredSol && masterUsdcBalance >= usdcAmount,
+  });
+});
+
 organizationsRoutes.post("/:id/tenants", async (c) => {
   const user = c.get("user");
   const orgId = parseInt(c.req.param("id"));
@@ -631,15 +670,49 @@ organizationsRoutes.post("/:id/tenants", async (c) => {
 
   const nodeIds = nodesWithCounts.map((n) => n.id);
 
-  // Get funding amounts from admin settings
+  // Get funding amounts and master wallet from admin settings
   const adminSettings = await db
     .selectFrom("admin_settings")
-    .select(["default_sol_native_amount", "default_sol_usdc_amount"])
+    .select([
+      "default_sol_native_amount",
+      "default_sol_usdc_amount",
+      "wallet_config",
+    ])
     .where("id", "=", 1)
     .executeTakeFirst();
 
   const solAmount = adminSettings?.default_sol_native_amount ?? 0.01;
   const usdcAmount = adminSettings?.default_sol_usdc_amount ?? 0.01;
+
+  // Check master wallet has enough SOL for funding + rent
+  const masterWalletConfig = adminSettings?.wallet_config as {
+    solana?: { "mainnet-beta"?: { address?: string } };
+  } | null;
+  const masterSolanaAddress =
+    masterWalletConfig?.solana?.["mainnet-beta"]?.address;
+
+  if (masterSolanaAddress) {
+    const masterBalances = await fetchWalletBalances({
+      solana: masterSolanaAddress,
+      evm: null,
+    });
+    const masterSolBalance = parseFloat(masterBalances.solana.native);
+    // Need: funding amount + ~0.003 SOL for rent-exempt token account creation
+    const requiredSol = solAmount + 0.003;
+
+    if (masterSolBalance < requiredSol) {
+      logger.error(
+        `Insufficient master wallet balance for tenant creation. Need ${requiredSol.toFixed(4)} SOL, have ${masterSolBalance.toFixed(4)} SOL`,
+      );
+      return c.json(
+        {
+          error:
+            "Unable to create proxy at this time. Please try again later or contact support.",
+        },
+        503,
+      );
+    }
+  }
 
   // Generate wallet config server-side
   const walletConfig = generateWalletConfig();

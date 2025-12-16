@@ -46,6 +46,8 @@ interface Tenant {
 interface AdminSettings {
   hasWallet: boolean;
   addresses: { solana: string | null; evm: string | null };
+  defaultSolNativeAmount: number;
+  defaultSolUsdcAmount: number;
 }
 
 interface WalletBalances {
@@ -136,11 +138,15 @@ export default function AdminTenantsPage() {
     }
   };
 
+  // Need: funding amount + ~0.003 SOL for rent-exempt token account creation
+  const requiredSol = (adminSettings?.defaultSolNativeAmount ?? 0.01) + 0.003;
+  const requiredUsdc = adminSettings?.defaultSolUsdcAmount ?? 0.01;
+
   const hasSufficientBalance =
     adminSettings?.hasWallet &&
     walletBalances &&
-    parseFloat(walletBalances.solana?.native || "0") > 0 &&
-    parseFloat(walletBalances.solana?.usdc || "0") > 0;
+    parseFloat(walletBalances.solana?.native || "0") >= requiredSol &&
+    parseFloat(walletBalances.solana?.usdc || "0") >= requiredUsdc;
 
   return (
     <div className="space-y-6">
