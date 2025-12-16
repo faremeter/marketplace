@@ -55,8 +55,23 @@ local price = tenant_config.default_price_usdc
 local scheme = tenant_config.default_scheme
 if tenant_config.endpoints then
     for _, endpoint in ipairs(tenant_config.endpoints) do
-        local ok, regex = pcall(ngx.re.match, ngx.var.uri, endpoint.path_pattern)
-        if ok and regex then
+        local pattern = endpoint.path_pattern
+        local matched = false
+
+        if string.sub(pattern, 1, 1) == "^" then
+            -- Regex match (pattern starts with ^)
+            local ok, regex = pcall(ngx.re.match, ngx.var.uri, pattern)
+            if ok and regex then
+                matched = true
+            end
+        else
+            -- Prefix match (literal path)
+            if string.sub(ngx.var.uri, 1, #pattern) == pattern then
+                matched = true
+            end
+        end
+
+        if matched then
             if endpoint.price_usdc then
                 price = endpoint.price_usdc
             end
