@@ -47,12 +47,12 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
             open={true}
             onOpenChange={(open) => !open && removeToast(t.id)}
             duration={4000}
-            className={`rounded-lg border p-4 shadow-lg backdrop-blur-sm ${
+            className={`rounded-lg border p-4 shadow-lg ${
               t.variant === "success"
-                ? "border-green-800/50 bg-green-900/40"
+                ? "border-green-800 bg-green-900/80"
                 : t.variant === "error"
-                  ? "border-red-800/50 bg-red-900/40"
-                  : "border-gray-6/50 bg-gray-2/40"
+                  ? "border-red-800 bg-red-900/80"
+                  : "border-gray-6 bg-gray-2"
             }`}
           >
             <div className="flex items-start gap-3">

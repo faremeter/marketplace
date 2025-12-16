@@ -452,6 +452,10 @@ organizationsRoutes.put("/:id/tenants/:tenantId", async (c) => {
     updateData.upstream_auth_header = body.upstream_auth_header;
   if (body.upstream_auth_value !== undefined)
     updateData.upstream_auth_value = body.upstream_auth_value;
+  if (body.default_price_usdc !== undefined)
+    updateData.default_price_usdc = body.default_price_usdc;
+  if (body.default_scheme !== undefined)
+    updateData.default_scheme = body.default_scheme;
 
   const result = await db
     .updateTable("tenants")
