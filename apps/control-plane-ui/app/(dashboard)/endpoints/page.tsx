@@ -5,6 +5,10 @@ import useSWR from "swr";
 import * as Tooltip from "@radix-ui/react-tooltip";
 import { api } from "@/lib/api/client";
 import { InlineActiveToggle } from "@/components/shared/inline-active-toggle";
+import { InlinePriceEdit } from "@/components/shared/inline-price-edit";
+import { InlineSchemeEdit } from "@/components/shared/inline-scheme-edit";
+import Link from "next/link";
+import { Pencil1Icon } from "@radix-ui/react-icons";
 
 interface Tenant {
   id: number;
@@ -18,6 +22,7 @@ interface Tenant {
 
 interface Endpoint {
   id: number;
+  path: string | null;
   path_pattern: string;
   price_usdc: number | null;
   scheme: string | null;
@@ -92,11 +97,13 @@ function TenantCard({
   orgId: number;
   onUpdate: () => void;
 }) {
-  const { data: endpoints, isLoading } = useSWR(
-    `/api/tenants/${tenant.id}/endpoints`,
-    api.get<Endpoint[]>,
-    { refreshInterval: 5000 },
-  );
+  const {
+    data: endpoints,
+    isLoading,
+    mutate: mutateEndpoints,
+  } = useSWR(`/api/tenants/${tenant.id}/endpoints`, api.get<Endpoint[]>, {
+    refreshInterval: 5000,
+  });
 
   const apiEndpoint = `/api/organizations/${orgId}/tenants/${tenant.id}`;
 
@@ -129,14 +136,24 @@ function TenantCard({
           </Tooltip.Provider>
         </div>
         <div className="flex items-center gap-3">
-          <InlineActiveToggle
-            tenantId={tenant.id}
-            tenantName={tenant.name}
-            isActive={tenant.is_active}
-            onUpdate={onUpdate}
-            apiEndpoint={apiEndpoint}
-          />
-          <TenantStatusBadge status={tenant.status} />
+          {tenant.status === "active" ? (
+            <InlineActiveToggle
+              tenantId={tenant.id}
+              tenantName={tenant.name}
+              isActive={tenant.is_active}
+              onUpdate={onUpdate}
+              apiEndpoint={apiEndpoint}
+            />
+          ) : (
+            <TenantStatusBadge status={tenant.status} />
+          )}
+          <Link
+            href={`/proxies/${tenant.id}?tab=endpoints`}
+            className="inline-flex items-center gap-1.5 rounded-md border border-gray-6 bg-gray-4 px-2.5 py-1 text-xs font-medium text-gray-11 hover:bg-gray-5 hover:text-gray-12"
+          >
+            <Pencil1Icon className="h-3.5 w-3.5" />
+            Edit
+          </Link>
         </div>
       </div>
 
@@ -168,28 +185,53 @@ function TenantCard({
                   </code>
                   <span className="ml-2 text-xs text-gray-11">(catch-all)</span>
                 </td>
-                <td className="py-2 align-middle text-sm text-gray-11">
-                  ${(Number(tenant.default_price_usdc) / 1_000_000).toFixed(3)}{" "}
-                  USDC
+                <td className="py-2 align-middle">
+                  <InlinePriceEdit
+                    priceUsdc={tenant.default_price_usdc}
+                    onUpdate={onUpdate}
+                    apiEndpoint={apiEndpoint}
+                    fieldName="default_price_usdc"
+                    label="Default Price"
+                  />
                 </td>
-                <td className="py-2 align-middle text-sm text-gray-11">
-                  {tenant.default_scheme}
+                <td className="py-2 align-middle">
+                  <InlineSchemeEdit
+                    scheme={tenant.default_scheme}
+                    onUpdate={onUpdate}
+                    apiEndpoint={apiEndpoint}
+                    fieldName="default_scheme"
+                    label="Default Scheme"
+                  />
                 </td>
               </tr>
               {endpoints?.map((endpoint) => (
-                <tr key={endpoint.id}>
+                <tr key={endpoint.id} className="bg-gray-3/50">
                   <td className="py-2 align-middle">
-                    <code className="rounded bg-gray-4 px-1.5 py-0.5 text-xs text-gray-11">
-                      {endpoint.path_pattern}
+                    <code className="rounded bg-accent-4 px-1.5 py-0.5 text-xs text-accent-11">
+                      {endpoint.path ?? endpoint.path_pattern}
                     </code>
                   </td>
-                  <td className="py-2 align-middle text-sm text-gray-11">
-                    {endpoint.price_usdc !== null
-                      ? `$${(Number(endpoint.price_usdc) / 1_000_000).toFixed(3)} USDC`
-                      : "-"}
+                  <td className="py-2 align-middle">
+                    <InlinePriceEdit
+                      priceUsdc={
+                        endpoint.price_usdc ?? tenant.default_price_usdc
+                      }
+                      defaultPriceUsdc={tenant.default_price_usdc}
+                      onUpdate={() => mutateEndpoints()}
+                      apiEndpoint={`/api/tenants/${tenant.id}/endpoints/${endpoint.id}`}
+                      fieldName="price_usdc"
+                      label="Price"
+                    />
                   </td>
-                  <td className="py-2 align-middle text-sm text-gray-11">
-                    {endpoint.scheme ?? "-"}
+                  <td className="py-2 align-middle">
+                    <InlineSchemeEdit
+                      scheme={endpoint.scheme ?? tenant.default_scheme}
+                      defaultScheme={tenant.default_scheme}
+                      onUpdate={() => mutateEndpoints()}
+                      apiEndpoint={`/api/tenants/${tenant.id}/endpoints/${endpoint.id}`}
+                      fieldName="scheme"
+                      label="Scheme"
+                    />
                   </td>
                 </tr>
               ))}
@@ -219,6 +261,11 @@ function TenantStatusBadge({ status }: { status: string }) {
     deleting: {
       className: "border-red-800 bg-red-900/50 text-red-400",
       label: "Deleting",
+      pulse: true,
+    },
+    failed: {
+      className: "border-yellow-800 bg-yellow-900/50 text-yellow-400",
+      label: "Pending",
       pulse: true,
     },
   };

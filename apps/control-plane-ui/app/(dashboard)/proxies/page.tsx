@@ -49,8 +49,8 @@ function getStatus(tenant: Tenant): {
 
   if (tenant.status === "failed") {
     return {
-      label: "Failed",
-      color: "bg-red-900/50 text-red-400 border-red-800",
+      label: "Pending",
+      color: "bg-yellow-900/50 text-yellow-400 border-yellow-800",
     };
   }
 
