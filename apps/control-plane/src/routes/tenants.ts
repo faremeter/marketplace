@@ -2,7 +2,6 @@ import { Hono } from "hono";
 import { db } from "../server.js";
 import { syncToNode } from "../lib/sync.js";
 import { logger } from "../logger.js";
-import { encryptWalletKeys } from "../lib/crypto.js";
 import {
   upsertNodeDnsRecord,
   deleteNodeDnsRecord,
@@ -10,7 +9,7 @@ import {
   createHealthCheck,
   deleteHealthCheck,
 } from "../lib/dns.js";
-import { enqueueCertProvisioning, enqueueWalletFunding } from "../lib/queue.js";
+import { enqueueCertProvisioning } from "../lib/queue.js";
 
 export const tenantsRoutes = new Hono();
 
@@ -37,32 +36,15 @@ tenantsRoutes.get("/:id", async (c) => {
   return c.json(tenant);
 });
 
-interface WalletConfig {
-  solana?: { "mainnet-beta"?: { address: string } };
-}
-
 tenantsRoutes.post("/", async (c) => {
   const body = await c.req.json();
-
-  const adminSettings = await db
-    .selectFrom("admin_settings")
-    .select(["default_sol_native_amount", "default_sol_usdc_amount"])
-    .where("id", "=", 1)
-    .executeTakeFirst();
-
-  const solAmount = adminSettings?.default_sol_native_amount ?? 0.01;
-  const usdcAmount = adminSettings?.default_sol_usdc_amount ?? 0.01;
-
-  const walletConfig = body.wallet_config as WalletConfig;
-  const solanaAddress = walletConfig?.solana?.["mainnet-beta"]?.address;
 
   const result = await db
     .insertInto("tenants")
     .values({
       name: body.name,
       backend_url: body.backend_url,
-      wallet_config: JSON.stringify(encryptWalletKeys(body.wallet_config)),
-      wallet_status: "pending",
+      wallet_id: body.wallet_id ?? null,
       default_price_usdc: body.default_price_usdc,
       default_scheme: body.default_scheme ?? "exact",
       upstream_auth_header: body.upstream_auth_header ?? null,
@@ -71,12 +53,6 @@ tenantsRoutes.post("/", async (c) => {
     })
     .returningAll()
     .executeTakeFirstOrThrow();
-
-  if (solanaAddress) {
-    enqueueWalletFunding(result.id, solanaAddress, solAmount, usdcAmount).catch(
-      (err) => logger.error(`Failed to enqueue wallet funding: ${err}`),
-    );
-  }
 
   return c.json(result, 201);
 });
@@ -90,10 +66,7 @@ tenantsRoutes.put("/:id", async (c) => {
   if (body.backend_url !== undefined) updateData.backend_url = body.backend_url;
   if (body.organization_id !== undefined)
     updateData.organization_id = body.organization_id;
-  if (body.wallet_config !== undefined)
-    updateData.wallet_config = JSON.stringify(
-      encryptWalletKeys(body.wallet_config),
-    );
+  if (body.wallet_id !== undefined) updateData.wallet_id = body.wallet_id;
   if (body.default_price_usdc !== undefined)
     updateData.default_price_usdc = body.default_price_usdc;
   if (body.default_scheme !== undefined)

@@ -2,15 +2,25 @@
 
 import { useState, useEffect, useRef } from "react";
 import * as Dialog from "@radix-ui/react-dialog";
+import * as Select from "@radix-ui/react-select";
 import {
   Cross2Icon,
   PlusIcon,
   MinusIcon,
   CheckCircledIcon,
   CrossCircledIcon,
+  ChevronDownIcon,
+  CheckIcon,
 } from "@radix-ui/react-icons";
 import { api, ApiError } from "@/lib/api/client";
 import { useToast } from "@/components/ui/toast";
+import useSWR from "swr";
+
+interface Wallet {
+  id: number;
+  name: string;
+  funding_status: string;
+}
 
 interface CreateUserTenantDialogProps {
   open: boolean;
@@ -27,7 +37,13 @@ export function CreateUserTenantDialog({
 }: CreateUserTenantDialogProps) {
   const { toast } = useToast();
 
+  const { data: wallets } = useSWR<Wallet[]>(
+    open ? `/api/wallets/organization/${organizationId}` : null,
+    api.get<Wallet[]>,
+  );
+
   const [name, setName] = useState("");
+  const [walletId, setWalletId] = useState<number | null>(null);
   const [backendUrl, setBackendUrl] = useState("");
   const [authHeader, setAuthHeader] = useState("");
   const [authValue, setAuthValue] = useState("");
@@ -78,6 +94,7 @@ export function CreateUserTenantDialog({
 
   const resetForm = () => {
     setName("");
+    setWalletId(null);
     setBackendUrl("");
     setAuthHeader("");
     setAuthValue("");
@@ -111,11 +128,16 @@ export function CreateUserTenantDialog({
       setError("Backend URL is required");
       return;
     }
+    if (!walletId) {
+      setError("Wallet is required");
+      return;
+    }
 
     setIsSubmitting(true);
     try {
       await api.post(`/api/organizations/${organizationId}/tenants`, {
         name: name.trim(),
+        wallet_id: walletId,
         backend_url: backendUrl.trim(),
         upstream_auth_header: authHeader.trim() || null,
         upstream_auth_value: authValue.trim() || null,
@@ -204,17 +226,77 @@ export function CreateUserTenantDialog({
               <h3 className="mb-3 text-xs font-medium uppercase tracking-wider text-gray-11">
                 Basic Info
               </h3>
-              <div>
-                <label className="mb-1.5 block text-sm text-gray-11">
-                  Proxy Name <span className="text-red-400">*</span>
-                </label>
-                <input
-                  type="text"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  placeholder="my-api-proxy"
-                  className="w-full rounded-md border border-gray-6 bg-gray-2 px-3 py-2 text-sm text-gray-12 placeholder-gray-9 focus:border-accent-8 focus:outline-none focus:ring-1 focus:ring-accent-8"
-                />
+              <div className="space-y-3">
+                <div>
+                  <label className="mb-1.5 block text-sm text-gray-11">
+                    Proxy Name <span className="text-red-400">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    placeholder="my-api-proxy"
+                    className="w-full rounded-md border border-gray-6 bg-gray-2 px-3 py-2 text-sm text-gray-12 placeholder-gray-9 focus:border-accent-8 focus:outline-none focus:ring-1 focus:ring-accent-8"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1.5 block text-sm text-gray-11">
+                    PayTo Wallet <span className="text-red-400">*</span>
+                  </label>
+                  <Select.Root
+                    value={walletId?.toString()}
+                    onValueChange={(value) => setWalletId(Number(value))}
+                  >
+                    <Select.Trigger className="flex w-full items-center justify-between rounded-md border border-gray-6 bg-gray-2 px-3 py-2 text-sm text-gray-12 focus:border-accent-8 focus:outline-none focus:ring-1 focus:ring-accent-8">
+                      <Select.Value placeholder="Select a wallet" />
+                      <Select.Icon>
+                        <ChevronDownIcon className="h-4 w-4 text-gray-11" />
+                      </Select.Icon>
+                    </Select.Trigger>
+                    <Select.Portal>
+                      <Select.Content
+                        className="overflow-hidden rounded-md border border-gray-6 bg-gray-2 shadow-lg"
+                        position="popper"
+                        sideOffset={4}
+                      >
+                        <Select.Viewport className="p-1">
+                          {!wallets?.length && (
+                            <div className="px-3 py-2 text-sm text-gray-11">
+                              No wallets available
+                            </div>
+                          )}
+                          {wallets?.map((wallet) => {
+                            const isUnfunded =
+                              wallet.funding_status !== "funded";
+                            return (
+                              <Select.Item
+                                key={wallet.id}
+                                value={wallet.id.toString()}
+                                disabled={isUnfunded}
+                                className="relative flex w-full cursor-pointer select-none items-center justify-between gap-4 rounded px-8 py-2 text-sm outline-none hover:bg-gray-4 data-[highlighted]:bg-gray-4 data-[disabled]:cursor-not-allowed data-[disabled]:opacity-50 data-[disabled]:hover:bg-transparent"
+                              >
+                                <Select.ItemIndicator className="absolute left-2 inline-flex items-center">
+                                  <CheckIcon className="h-4 w-4 text-accent-11" />
+                                </Select.ItemIndicator>
+                                <Select.ItemText>{wallet.name}</Select.ItemText>
+                                {isUnfunded && (
+                                  <span className="rounded-full border border-yellow-800 bg-yellow-900/30 px-2 py-0.5 text-xs text-yellow-400">
+                                    unfunded
+                                  </span>
+                                )}
+                              </Select.Item>
+                            );
+                          })}
+                        </Select.Viewport>
+                      </Select.Content>
+                    </Select.Portal>
+                  </Select.Root>
+                  {!wallets?.length && (
+                    <p className="mt-1 text-xs text-gray-9">
+                      No wallets available. Create a wallet first.
+                    </p>
+                  )}
+                </div>
               </div>
             </section>
 

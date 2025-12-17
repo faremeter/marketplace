@@ -13,7 +13,6 @@ import {
 } from "../lib/dns.js";
 import {
   enqueueCertProvisioning,
-  enqueueWalletFunding,
   enqueueTenantDeletion,
   checkAndUpdateTenantStatus,
 } from "../lib/queue.js";
@@ -176,6 +175,7 @@ adminRoutes.get("/tenants", async (c) => {
   const tenants = await db
     .selectFrom("tenants")
     .leftJoin("organizations", "organizations.id", "tenants.organization_id")
+    .leftJoin("wallets", "wallets.id", "tenants.wallet_id")
     .select([
       "tenants.id",
       "tenants.name",
@@ -185,11 +185,14 @@ adminRoutes.get("/tenants", async (c) => {
       "tenants.default_scheme",
       "tenants.is_active",
       "tenants.status",
-      "tenants.wallet_status",
+      "tenants.wallet_id",
       "tenants.upstream_auth_header",
       "tenants.upstream_auth_value",
       "tenants.created_at",
       "organizations.name as organization_name",
+      "wallets.name as wallet_name",
+      "wallets.funding_status as wallet_funding_status",
+      "wallets.organization_id as wallet_organization_id",
     ])
     .orderBy("tenants.created_at", "desc")
     .execute();
@@ -239,19 +242,21 @@ adminRoutes.post("/tenants", async (c) => {
   const nodeIds: number[] =
     body.node_ids ?? (body.node_id ? [body.node_id] : []);
 
-  // Get funding amounts from admin settings
-  const adminSettings = await db
-    .selectFrom("admin_settings")
-    .select(["default_sol_native_amount", "default_sol_usdc_amount"])
-    .where("id", "=", 1)
-    .executeTakeFirst();
+  // Get or default to master wallet
+  let walletId = body.wallet_id;
 
-  const solAmount = adminSettings?.default_sol_native_amount ?? 0.01;
-  const usdcAmount = adminSettings?.default_sol_usdc_amount ?? 0.01;
+  if (!walletId) {
+    // Try to find master wallet (organization_id = null)
+    const masterWallet = await db
+      .selectFrom("wallets")
+      .select("id")
+      .where("organization_id", "is", null)
+      .executeTakeFirst();
 
-  // Extract solana address from wallet_config
-  const walletConfig = body.wallet_config as WalletConfig;
-  const solanaAddress = walletConfig?.solana?.["mainnet-beta"]?.address;
+    if (masterWallet) {
+      walletId = masterWallet.id;
+    }
+  }
 
   const tenant = await db
     .insertInto("tenants")
@@ -260,8 +265,7 @@ adminRoutes.post("/tenants", async (c) => {
       backend_url: body.backend_url,
       node_id: nodeIds[0] ?? null,
       organization_id: body.organization_id ?? null,
-      wallet_config: JSON.stringify(encryptWalletKeys(body.wallet_config)),
-      wallet_status: solanaAddress ? "pending" : "funded",
+      wallet_id: walletId ?? null,
       default_price_usdc: body.default_price_usdc ?? 0,
       default_scheme: body.default_scheme ?? "exact",
       upstream_auth_header: body.upstream_auth_header ?? null,
@@ -269,13 +273,6 @@ adminRoutes.post("/tenants", async (c) => {
     })
     .returningAll()
     .executeTakeFirstOrThrow();
-
-  // Enqueue wallet funding if solana address exists
-  if (solanaAddress) {
-    enqueueWalletFunding(tenant.id, solanaAddress, solAmount, usdcAmount).catch(
-      (err) => logger.error(`Failed to enqueue wallet funding: ${err}`),
-    );
-  }
 
   for (const [i, nodeId] of nodeIds.entries()) {
     const isPrimary = i === 0;
@@ -353,6 +350,7 @@ adminRoutes.put("/tenants/:id", async (c) => {
     updateData.upstream_auth_header = body.upstream_auth_header;
   if (body.upstream_auth_value !== undefined)
     updateData.upstream_auth_value = body.upstream_auth_value;
+  if (body.wallet_id !== undefined) updateData.wallet_id = body.wallet_id;
 
   const result = await db
     .updateTable("tenants")
@@ -365,8 +363,15 @@ adminRoutes.put("/tenants/:id", async (c) => {
     return c.json({ error: "Tenant not found" }, 404);
   }
 
-  if (result.node_id) {
-    syncToNode(result.node_id).catch((err) => logger.error(String(err)));
+  // Sync to all nodes the tenant is on
+  const tenantNodes = await db
+    .selectFrom("tenant_nodes")
+    .select("node_id")
+    .where("tenant_id", "=", id)
+    .execute();
+
+  for (const tn of tenantNodes) {
+    syncToNode(tn.node_id).catch((err) => logger.error(String(err)));
   }
 
   return c.json(result);
@@ -377,8 +382,15 @@ adminRoutes.delete("/tenants/:id", async (c) => {
 
   const tenant = await db
     .selectFrom("tenants")
-    .select(["id", "name", "status", "wallet_config"])
-    .where("id", "=", id)
+    .leftJoin("wallets", "wallets.id", "tenants.wallet_id")
+    .select([
+      "tenants.id",
+      "tenants.name",
+      "tenants.status",
+      "tenants.wallet_id",
+      "wallets.wallet_config",
+    ])
+    .where("tenants.id", "=", id)
     .executeTakeFirst();
 
   if (!tenant) {
@@ -397,9 +409,9 @@ adminRoutes.delete("/tenants/:id", async (c) => {
     return c.json({ error: "Tenant is already being deleted" }, 400);
   }
 
-  // Check wallet funds
-  const walletConfig = tenant.wallet_config as WalletConfig | null;
-  if (walletConfig) {
+  // Check wallet funds if tenant has a wallet
+  if (tenant.wallet_id && tenant.wallet_config) {
+    const walletConfig = tenant.wallet_config as WalletConfig;
     const addresses = extractAddresses(walletConfig);
 
     if (addresses.solana || addresses.evm) {
@@ -445,57 +457,6 @@ adminRoutes.delete("/tenants/:id", async (c) => {
   await enqueueTenantDeletion(tenant.id, tenant.name);
 
   return c.json({ success: true });
-});
-
-adminRoutes.post("/tenants/:id/retry-funding", async (c) => {
-  const id = parseInt(c.req.param("id"));
-
-  const tenant = await db
-    .selectFrom("tenants")
-    .select(["id", "wallet_config", "wallet_status"])
-    .where("id", "=", id)
-    .executeTakeFirst();
-
-  if (!tenant) {
-    return c.json({ error: "Tenant not found" }, 404);
-  }
-
-  if (tenant.wallet_status === "funded") {
-    return c.json({ error: "Wallet is already funded" }, 400);
-  }
-
-  if (tenant.wallet_status === "pending") {
-    return c.json({ error: "Wallet funding is already in progress" }, 400);
-  }
-
-  const walletConfig = tenant.wallet_config as WalletConfig;
-  const solanaAddress = walletConfig?.solana?.["mainnet-beta"]?.address;
-
-  if (!solanaAddress) {
-    return c.json({ error: "Tenant has no Solana wallet configured" }, 400);
-  }
-
-  // Get funding amounts from admin settings
-  const adminSettings = await db
-    .selectFrom("admin_settings")
-    .select(["default_sol_native_amount", "default_sol_usdc_amount"])
-    .where("id", "=", 1)
-    .executeTakeFirst();
-
-  const solAmount = adminSettings?.default_sol_native_amount ?? 0.01;
-  const usdcAmount = adminSettings?.default_sol_usdc_amount ?? 0.01;
-
-  // Update status to pending
-  await db
-    .updateTable("tenants")
-    .set({ wallet_status: "pending" })
-    .where("id", "=", id)
-    .execute();
-
-  // Enqueue wallet funding
-  await enqueueWalletFunding(tenant.id, solanaAddress, solAmount, usdcAmount);
-
-  return c.json({ success: true, message: "Wallet funding re-queued" });
 });
 
 adminRoutes.post("/tenants/:id/nodes", async (c) => {
@@ -755,12 +716,14 @@ adminRoutes.get("/nodes/:id/tenants", async (c) => {
   const tenants = await db
     .selectFrom("tenant_nodes")
     .innerJoin("tenants", "tenants.id", "tenant_nodes.tenant_id")
+    .leftJoin("wallets", "wallets.id", "tenants.wallet_id")
     .select([
       "tenants.id",
       "tenants.name",
       "tenants.backend_url",
       "tenants.is_active",
-      "tenants.wallet_status",
+      "tenants.wallet_id",
+      "wallets.funding_status as wallet_funding_status",
       "tenant_nodes.is_primary",
       "tenant_nodes.cert_status",
     ])
@@ -902,9 +865,8 @@ adminRoutes.get("/settings", async (c) => {
   return c.json({
     hasWallet: walletConfig !== null,
     addresses,
-    feePercentage: settings.fee_percentage,
-    defaultSolNativeAmount: settings.default_sol_native_amount,
-    defaultSolUsdcAmount: settings.default_sol_usdc_amount,
+    minimumBalanceSol: settings.minimum_balance_sol,
+    minimumBalanceUsdc: settings.minimum_balance_usdc,
     updatedAt: settings.updated_at,
   });
 });
@@ -922,34 +884,26 @@ adminRoutes.put("/settings", async (c) => {
       : null;
   }
 
-  if (body.fee_percentage !== undefined) {
-    const fee = parseFloat(body.fee_percentage);
-    if (isNaN(fee) || fee < 0 || fee > 1) {
-      return c.json({ error: "Fee percentage must be between 0 and 1" }, 400);
-    }
-    updateData.fee_percentage = fee;
-  }
-
-  if (body.default_sol_native_amount !== undefined) {
-    const amount = parseFloat(body.default_sol_native_amount);
-    if (isNaN(amount) || amount < 0.001 || amount > 0.1) {
-      return c.json(
-        { error: "Default SOL amount must be between 0.001 and 0.1" },
-        400,
-      );
-    }
-    updateData.default_sol_native_amount = amount;
-  }
-
-  if (body.default_sol_usdc_amount !== undefined) {
-    const amount = parseFloat(body.default_sol_usdc_amount);
+  if (body.minimum_balance_sol !== undefined) {
+    const amount = parseFloat(body.minimum_balance_sol);
     if (isNaN(amount) || amount < 0.001 || amount > 1) {
       return c.json(
-        { error: "Default USDC amount must be between 0.001 and 1" },
+        { error: "Minimum SOL balance must be between 0.001 and 1" },
         400,
       );
     }
-    updateData.default_sol_usdc_amount = amount;
+    updateData.minimum_balance_sol = amount;
+  }
+
+  if (body.minimum_balance_usdc !== undefined) {
+    const amount = parseFloat(body.minimum_balance_usdc);
+    if (isNaN(amount) || amount < 0.001 || amount > 100) {
+      return c.json(
+        { error: "Minimum USDC balance must be between 0.001 and 100" },
+        400,
+      );
+    }
+    updateData.minimum_balance_usdc = amount;
   }
 
   const settings = await db
@@ -969,9 +923,8 @@ adminRoutes.put("/settings", async (c) => {
   return c.json({
     hasWallet: walletConfig !== null,
     addresses,
-    feePercentage: settings.fee_percentage,
-    defaultSolNativeAmount: settings.default_sol_native_amount,
-    defaultSolUsdcAmount: settings.default_sol_usdc_amount,
+    minimumBalanceSol: settings.minimum_balance_sol,
+    minimumBalanceUsdc: settings.minimum_balance_usdc,
     updatedAt: settings.updated_at,
   });
 });

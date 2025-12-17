@@ -15,13 +15,46 @@ export async function buildNodeConfig(nodeId: number) {
   const tenants = await db
     .selectFrom("tenants")
     .innerJoin("tenant_nodes", "tenant_nodes.tenant_id", "tenants.id")
-    .selectAll("tenants")
+    .leftJoin("wallets", "wallets.id", "tenants.wallet_id")
+    .select([
+      "tenants.id",
+      "tenants.name",
+      "tenants.backend_url",
+      "tenants.wallet_id",
+      "tenants.default_price_usdc",
+      "tenants.default_scheme",
+      "tenants.upstream_auth_header",
+      "tenants.upstream_auth_value",
+      "wallets.wallet_config",
+      "wallets.funding_status",
+    ])
     .where("tenant_nodes.node_id", "=", nodeId)
     .where("tenants.is_active", "=", true)
     .execute();
 
   const config: Record<string, unknown> = {};
+  let skippedCount = 0;
+
   for (const tenant of tenants) {
+    const walletConfig = tenant.wallet_config;
+    const fundingStatus = tenant.funding_status;
+
+    if (!walletConfig) {
+      logger.warn(
+        `buildNodeConfig: Skipping tenant ${tenant.name} (id=${tenant.id}) - no wallet assigned`,
+      );
+      skippedCount++;
+      continue;
+    }
+
+    if (fundingStatus !== "funded") {
+      logger.warn(
+        `buildNodeConfig: Skipping tenant ${tenant.name} (id=${tenant.id}) - wallet not funded (status: ${fundingStatus})`,
+      );
+      skippedCount++;
+      continue;
+    }
+
     const endpoints = await db
       .selectFrom("endpoints")
       .selectAll()
@@ -33,7 +66,7 @@ export async function buildNodeConfig(nodeId: number) {
     config[tenant.name] = {
       name: tenant.name,
       backend_url: tenant.backend_url,
-      wallet_config: tenant.wallet_config,
+      wallet_config: walletConfig,
       default_price_usdc: tenant.default_price_usdc,
       default_scheme: tenant.default_scheme,
       upstream_auth_header: tenant.upstream_auth_header,
@@ -46,6 +79,12 @@ export async function buildNodeConfig(nodeId: number) {
         priority: e.priority,
       })),
     };
+  }
+
+  if (skippedCount > 0) {
+    logger.info(
+      `buildNodeConfig: Skipped ${skippedCount} tenant(s) without funded wallets on node ${nodeId}`,
+    );
   }
 
   return {

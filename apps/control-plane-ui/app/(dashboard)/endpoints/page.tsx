@@ -111,7 +111,12 @@ function TenantCard({
     <div className="overflow-hidden rounded-lg border border-gray-6 bg-gray-2">
       <div className="flex items-center justify-between border-b border-gray-6 bg-gray-3 px-4 py-3">
         <div className="flex items-center gap-4">
-          <h2 className="text-lg font-medium text-gray-12">{tenant.name}</h2>
+          <Link
+            href={`/proxies/${tenant.id}`}
+            className="text-lg font-medium text-gray-12 hover:text-accent-11 hover:underline"
+          >
+            {tenant.name}
+          </Link>
           <Tooltip.Provider delayDuration={200}>
             <Tooltip.Root>
               <Tooltip.Trigger asChild>
@@ -166,13 +171,13 @@ function TenantCard({
           <table className="w-full">
             <thead>
               <tr className="border-b border-gray-6">
-                <th className="pb-2 text-left text-xs font-medium text-gray-11">
+                <th className="w-full pb-2 text-left text-xs font-medium text-gray-11">
                   Path
                 </th>
-                <th className="pb-2 text-left text-xs font-medium text-gray-11">
+                <th className="whitespace-nowrap pb-2 pr-4 text-right text-xs font-medium text-gray-11">
                   Price
                 </th>
-                <th className="pb-2 text-left text-xs font-medium text-gray-11">
+                <th className="whitespace-nowrap pb-2 text-right text-xs font-medium text-gray-11">
                   Scheme
                 </th>
               </tr>
@@ -185,7 +190,7 @@ function TenantCard({
                   </code>
                   <span className="ml-2 text-xs text-gray-11">(catch-all)</span>
                 </td>
-                <td className="py-2 align-middle">
+                <td className="whitespace-nowrap py-2 pl-4 pr-4 text-right align-middle">
                   <InlinePriceEdit
                     priceUsdc={tenant.default_price_usdc}
                     onUpdate={onUpdate}
@@ -194,7 +199,7 @@ function TenantCard({
                     label="Default Price"
                   />
                 </td>
-                <td className="py-2 align-middle">
+                <td className="whitespace-nowrap py-2 pl-4 text-right align-middle">
                   <InlineSchemeEdit
                     scheme={tenant.default_scheme}
                     onUpdate={onUpdate}
@@ -211,7 +216,7 @@ function TenantCard({
                       {endpoint.path ?? endpoint.path_pattern}
                     </code>
                   </td>
-                  <td className="py-2 align-middle">
+                  <td className="whitespace-nowrap py-2 pl-4 pr-4 text-right align-middle">
                     <InlinePriceEdit
                       priceUsdc={
                         endpoint.price_usdc ?? tenant.default_price_usdc
@@ -223,7 +228,7 @@ function TenantCard({
                       label="Price"
                     />
                   </td>
-                  <td className="py-2 align-middle">
+                  <td className="whitespace-nowrap py-2 pl-4 text-right align-middle">
                     <InlineSchemeEdit
                       scheme={endpoint.scheme ?? tenant.default_scheme}
                       defaultScheme={tenant.default_scheme}

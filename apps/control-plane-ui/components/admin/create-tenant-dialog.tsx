@@ -3,21 +3,17 @@
 import { useState, useEffect } from "react";
 import * as Dialog from "@radix-ui/react-dialog";
 import * as Checkbox from "@radix-ui/react-checkbox";
-import * as RadioGroup from "@radix-ui/react-radio-group";
+import * as Select from "@radix-ui/react-select";
 import {
   Cross2Icon,
   CheckIcon,
+  ChevronDownIcon,
   PlusIcon,
   MinusIcon,
 } from "@radix-ui/react-icons";
 import useSWR from "swr";
 import { api } from "@/lib/api/client";
 import { useToast } from "@/components/ui/toast";
-import {
-  generateWalletConfig,
-  getWalletAddresses,
-  WalletConfig,
-} from "@/lib/wallet";
 
 interface Node {
   id: number;
@@ -31,6 +27,13 @@ interface Organization {
   name: string;
   slug: string;
   is_admin: boolean;
+}
+
+interface Wallet {
+  id: number;
+  name: string;
+  organization_id: number | null;
+  funding_status: string;
 }
 
 interface CreateTenantDialogProps {
@@ -53,6 +56,10 @@ export function CreateTenantDialog({
     open ? "/api/admin/organizations" : null,
     api.get<Organization[]>,
   );
+  const { data: allWallets } = useSWR(
+    open ? "/api/admin/wallets" : null,
+    api.get<Wallet[]>,
+  );
 
   const [name, setName] = useState("");
   const [selectedNodeIds, setSelectedNodeIds] = useState<number[]>([]);
@@ -60,20 +67,11 @@ export function CreateTenantDialog({
   const [authHeader, setAuthHeader] = useState("");
   const [authValue, setAuthValue] = useState("");
   const [organizationId, setOrganizationId] = useState("");
-  const [walletMode, setWalletMode] = useState<"auto" | "custom">("auto");
-  const [walletConfig, setWalletConfig] = useState<WalletConfig | null>(null);
-  const [customWalletJson, setCustomWalletJson] = useState("");
+  const [walletId, setWalletId] = useState<number | null>(null);
   const [defaultPrice, setDefaultPrice] = useState("0.01");
   const [defaultScheme, setDefaultScheme] = useState("exact");
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [showWalletJson, setShowWalletJson] = useState(false);
-
-  useEffect(() => {
-    if (open && walletMode === "auto" && !walletConfig) {
-      setWalletConfig(generateWalletConfig());
-    }
-  }, [open, walletMode, walletConfig]);
 
   useEffect(() => {
     if (open && organizations && !organizationId) {
@@ -84,6 +82,19 @@ export function CreateTenantDialog({
     }
   }, [open, organizations, organizationId]);
 
+  // Filter wallets based on selected organization
+  const availableWallets = allWallets?.filter((w) => {
+    if (!organizationId) {
+      // No org selected - show master wallets only
+      return w.organization_id === null;
+    }
+    // Org selected - show org's wallets and master wallets
+    return (
+      w.organization_id === parseInt(organizationId) ||
+      w.organization_id === null
+    );
+  });
+
   const resetForm = () => {
     setName("");
     setSelectedNodeIds([]);
@@ -91,13 +102,10 @@ export function CreateTenantDialog({
     setAuthHeader("");
     setAuthValue("");
     setOrganizationId("");
-    setWalletMode("auto");
-    setWalletConfig(null);
-    setCustomWalletJson("");
+    setWalletId(null);
     setDefaultPrice("0.01");
     setDefaultScheme("exact");
     setError("");
-    setShowWalletJson(false);
   };
 
   const handleOpenChange = (newOpen: boolean) => {
@@ -105,10 +113,6 @@ export function CreateTenantDialog({
       resetForm();
     }
     onOpenChange(newOpen);
-  };
-
-  const regenerateWallet = () => {
-    setWalletConfig(generateWalletConfig());
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -128,18 +132,6 @@ export function CreateTenantDialog({
       return;
     }
 
-    let finalWalletConfig: unknown;
-    if (walletMode === "auto") {
-      finalWalletConfig = walletConfig;
-    } else {
-      try {
-        finalWalletConfig = JSON.parse(customWalletJson);
-      } catch {
-        setError("Invalid wallet JSON");
-        return;
-      }
-    }
-
     setIsSubmitting(true);
     try {
       await api.post("/api/admin/tenants", {
@@ -149,7 +141,7 @@ export function CreateTenantDialog({
         upstream_auth_header: authHeader.trim() || null,
         upstream_auth_value: authValue.trim() || null,
         organization_id: organizationId ? parseInt(organizationId) : null,
-        wallet_config: finalWalletConfig,
+        wallet_id: walletId,
         default_price_usdc: Math.round(
           (parseFloat(defaultPrice) || 0) * 1_000_000,
         ),
@@ -168,10 +160,6 @@ export function CreateTenantDialog({
       setIsSubmitting(false);
     }
   };
-
-  const walletAddresses = walletConfig
-    ? getWalletAddresses(walletConfig)
-    : null;
 
   return (
     <Dialog.Root open={open} onOpenChange={handleOpenChange}>
@@ -355,96 +343,80 @@ export function CreateTenantDialog({
             {/* Wallet */}
             <section>
               <h3 className="mb-3 text-xs font-medium uppercase tracking-wider text-gray-11">
-                Wallet Configuration
+                Wallet
               </h3>
-              <div className="space-y-3">
-                <RadioGroup.Root
-                  value={walletMode}
-                  onValueChange={(val) =>
-                    setWalletMode(val as "auto" | "custom")
+              <div>
+                <label className="mb-1.5 block text-sm text-gray-11">
+                  Select Wallet
+                </label>
+                <Select.Root
+                  value={walletId?.toString() ?? ""}
+                  onValueChange={(value) =>
+                    setWalletId(value ? Number(value) : null)
                   }
-                  className="flex gap-4"
                 >
-                  <label className="flex cursor-pointer items-center gap-2">
-                    <RadioGroup.Item
-                      value="auto"
-                      className="flex h-5 w-5 items-center justify-center rounded-full border border-gray-6 bg-gray-3 hover:border-gray-8 data-[state=checked]:border-gray-12 data-[state=checked]:bg-gray-12"
+                  <Select.Trigger className="flex w-full items-center justify-between rounded-md border border-gray-6 bg-gray-2 px-3 py-2 text-sm text-gray-12 focus:border-accent-8 focus:outline-none focus:ring-1 focus:ring-accent-8">
+                    <Select.Value placeholder="Select a wallet" />
+                    <Select.Icon>
+                      <ChevronDownIcon className="h-4 w-4 text-gray-11" />
+                    </Select.Icon>
+                  </Select.Trigger>
+                  <Select.Portal>
+                    <Select.Content
+                      className="overflow-hidden rounded-md border border-gray-6 bg-gray-2 shadow-lg"
+                      position="popper"
+                      sideOffset={4}
                     >
-                      <RadioGroup.Indicator className="h-2 w-2 rounded-full bg-gray-1" />
-                    </RadioGroup.Item>
-                    <span className="text-sm text-gray-12">Auto-generate</span>
-                  </label>
-                  <label className="flex cursor-pointer items-center gap-2">
-                    <RadioGroup.Item
-                      value="custom"
-                      className="flex h-5 w-5 items-center justify-center rounded-full border border-gray-6 bg-gray-3 hover:border-gray-8 data-[state=checked]:border-gray-12 data-[state=checked]:bg-gray-12"
-                    >
-                      <RadioGroup.Indicator className="h-2 w-2 rounded-full bg-gray-1" />
-                    </RadioGroup.Item>
-                    <span className="text-sm text-gray-12">Custom JSON</span>
-                  </label>
-                </RadioGroup.Root>
-
-                {walletMode === "auto" && walletAddresses && (
-                  <div className="space-y-2">
-                    <div className="rounded-md border border-gray-6 bg-gray-2 p-3">
-                      <div className="space-y-2 text-xs">
-                        {walletAddresses.solana && (
-                          <div className="flex items-center justify-between">
-                            <span className="text-gray-11">Solana</span>
-                            <code className="font-mono text-gray-12">
-                              {walletAddresses.solana.slice(0, 8)}...
-                              {walletAddresses.solana.slice(-6)}
-                            </code>
+                      <Select.Viewport className="p-1">
+                        {!availableWallets?.length && (
+                          <div className="px-3 py-2 text-sm text-gray-11">
+                            No wallets available
                           </div>
                         )}
-                        {walletAddresses.base && (
-                          <div className="flex items-center justify-between">
-                            <span className="text-gray-11">
-                              Base / Polygon / Monad
-                            </span>
-                            <code className="font-mono text-gray-12">
-                              {walletAddresses.base.slice(0, 8)}...
-                              {walletAddresses.base.slice(-6)}
-                            </code>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                    <div className="flex gap-2">
-                      <button
-                        type="button"
-                        onClick={regenerateWallet}
-                        className="text-xs text-accent-10 hover:text-accent-11"
-                      >
-                        Regenerate
-                      </button>
-                      <span className="text-gray-8">|</span>
-                      <button
-                        type="button"
-                        onClick={() => setShowWalletJson(!showWalletJson)}
-                        className="text-xs text-accent-10 hover:text-accent-11"
-                      >
-                        {showWalletJson ? "Hide" : "View"} JSON
-                      </button>
-                    </div>
-                    {showWalletJson && (
-                      <pre className="max-h-40 overflow-auto rounded-md border border-gray-6 bg-gray-2 p-3 text-xs text-gray-11">
-                        {JSON.stringify(walletConfig, null, 2)}
-                      </pre>
-                    )}
-                  </div>
-                )}
-
-                {walletMode === "custom" && (
-                  <textarea
-                    value={customWalletJson}
-                    onChange={(e) => setCustomWalletJson(e.target.value)}
-                    placeholder='{"solana": {...}, "evm": {...}}'
-                    rows={6}
-                    className="w-full rounded-md border border-gray-6 bg-gray-2 px-3 py-2 font-mono text-xs text-gray-12 placeholder-gray-9 focus:border-accent-8 focus:outline-none focus:ring-1 focus:ring-accent-8"
-                  />
-                )}
+                        {availableWallets?.map((wallet) => {
+                          const isMaster = wallet.organization_id === null;
+                          const isUnfunded = wallet.funding_status !== "funded";
+                          return (
+                            <Select.Item
+                              key={wallet.id}
+                              value={wallet.id.toString()}
+                              disabled={isUnfunded}
+                              className="relative flex w-full cursor-pointer select-none items-center justify-between gap-4 rounded px-8 py-2 text-sm outline-none hover:bg-gray-4 data-[highlighted]:bg-gray-4 data-[disabled]:cursor-not-allowed data-[disabled]:opacity-50 data-[disabled]:hover:bg-transparent"
+                            >
+                              <Select.ItemIndicator className="absolute left-2 inline-flex items-center">
+                                <CheckIcon className="h-4 w-4 text-accent-11" />
+                              </Select.ItemIndicator>
+                              <Select.ItemText>
+                                <span
+                                  className={isMaster ? "text-purple-400" : ""}
+                                >
+                                  {wallet.name}
+                                </span>
+                              </Select.ItemText>
+                              <div className="flex items-center gap-2">
+                                {isMaster && (
+                                  <span className="rounded-full border border-purple-800 bg-purple-900/30 px-2 py-0.5 text-xs text-purple-400">
+                                    master
+                                  </span>
+                                )}
+                                {isUnfunded && (
+                                  <span className="rounded-full border border-yellow-800 bg-yellow-900/30 px-2 py-0.5 text-xs text-yellow-400">
+                                    unfunded
+                                  </span>
+                                )}
+                              </div>
+                            </Select.Item>
+                          );
+                        })}
+                      </Select.Viewport>
+                    </Select.Content>
+                  </Select.Portal>
+                </Select.Root>
+                <p className="mt-1 text-xs text-gray-9">
+                  {organizationId
+                    ? "Showing organization wallets and master wallets"
+                    : "Select an organization to see its wallets"}
+                </p>
               </div>
             </section>
 

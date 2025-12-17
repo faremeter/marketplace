@@ -43,7 +43,7 @@ async function getSolanaBalances(addr: string): Promise<ChainBalances> {
     const nativeLamports = await connection.getBalance(pubkey);
     const native = (nativeLamports / 10 ** SOLANA_DECIMALS).toFixed(4);
 
-    let usdc = "0";
+    let usdc = "0.00";
     if (SOLANA_USDC) {
       try {
         const tokenAccounts = await connection.getParsedTokenAccountsByOwner(
@@ -56,7 +56,9 @@ async function getSolanaBalances(addr: string): Promise<ChainBalances> {
           const parsed = tokenAccount?.account?.data as {
             parsed?: { info?: { tokenAmount?: { uiAmountString?: string } } };
           };
-          usdc = parsed?.parsed?.info?.tokenAmount?.uiAmountString ?? "0";
+          const rawUsdc =
+            parsed?.parsed?.info?.tokenAmount?.uiAmountString ?? "0";
+          usdc = parseFloat(rawUsdc).toFixed(2);
         }
       } catch {
         // Token account may not exist
@@ -66,7 +68,7 @@ async function getSolanaBalances(addr: string): Promise<ChainBalances> {
     return { native, usdc };
   } catch (error) {
     logger.error(`Solana balance fetch error: ${error}`);
-    return { native: "0", usdc: "0" };
+    return { native: "0.0000", usdc: "0.00" };
   }
 }
 
@@ -107,7 +109,7 @@ async function getEvmBalances(
     };
   } catch (error) {
     logger.error(`${chain.name} balance fetch error: ${error}`);
-    return { native: "0", usdc: "0" };
+    return { native: "0.000000", usdc: "0.00" };
   }
 }
 
@@ -119,16 +121,16 @@ export async function fetchWalletBalances(addresses: {
     await Promise.all([
       addresses.solana
         ? getSolanaBalances(addresses.solana)
-        : { native: "0", usdc: "0" },
+        : { native: "0.0000", usdc: "0.00" },
       addresses.evm
         ? getEvmBalances(addresses.evm, base, BASE_USDC?.address)
-        : { native: "0", usdc: "0" },
+        : { native: "0.000000", usdc: "0.00" },
       addresses.evm
         ? getEvmBalances(addresses.evm, polygon, POLYGON_USDC?.address)
-        : { native: "0", usdc: "0" },
+        : { native: "0.000000", usdc: "0.00" },
       addresses.evm
         ? getEvmBalances(addresses.evm, monadTestnet, MONAD_USDC?.address)
-        : { native: "0", usdc: "0" },
+        : { native: "0.000000", usdc: "0.00" },
     ]);
 
   return {

@@ -27,7 +27,8 @@ interface Tenant {
   backend_url: string;
   is_active: boolean;
   status: string;
-  wallet_status: string;
+  wallet_id: number | null;
+  wallet_funding_status: string | null;
   default_price_usdc: number;
   default_scheme: string;
   upstream_auth_header: string | null;
@@ -64,7 +65,7 @@ function getStatus(tenant: Tenant): {
       (n) => n.cert_status === "pending",
     );
 
-    if (tenant.wallet_status === "pending") {
+    if (tenant.wallet_funding_status === "pending") {
       return {
         label: "Funding",
         color: "bg-yellow-900/50 text-yellow-400 border-yellow-800",

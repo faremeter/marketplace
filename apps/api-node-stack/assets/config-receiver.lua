@@ -40,6 +40,8 @@ if not config.config then
     return ngx.exit(400)
 end
 
+ngx.shared.tenants:flush_all()
+
 local count = 0
 for api_key, tenant_config in pairs(config.config) do
     local tenant_name = tenant_config.name

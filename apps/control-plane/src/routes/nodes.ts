@@ -93,7 +93,17 @@ nodesRoutes.get("/:id/sync", async (c) => {
   const tenants = await db
     .selectFrom("tenants")
     .innerJoin("tenant_nodes", "tenant_nodes.tenant_id", "tenants.id")
-    .selectAll("tenants")
+    .leftJoin("wallets", "wallets.id", "tenants.wallet_id")
+    .select([
+      "tenants.id",
+      "tenants.name",
+      "tenants.backend_url",
+      "tenants.default_price_usdc",
+      "tenants.default_scheme",
+      "tenants.upstream_auth_header",
+      "tenants.upstream_auth_value",
+      "wallets.wallet_config",
+    ])
     .where("tenant_nodes.node_id", "=", id)
     .where("tenants.is_active", "=", true)
     .execute();

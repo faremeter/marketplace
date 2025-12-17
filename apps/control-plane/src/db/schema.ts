@@ -10,6 +10,7 @@ export interface Database {
   user_organizations: UserOrganizationsTable;
   tenant_nodes: TenantNodesTable;
   admin_settings: AdminSettingsTable;
+  wallets: WalletsTable;
 }
 
 export interface OrganizationsTable {
@@ -17,7 +18,6 @@ export interface OrganizationsTable {
   name: string;
   slug: string;
   is_admin: ColumnType<boolean, boolean | undefined, boolean>;
-  wallet_config: ColumnType<unknown, string | undefined, string> | null;
   created_at: ColumnType<Date, never, never>;
 }
 
@@ -46,8 +46,7 @@ export interface TenantsTable {
   backend_url: string;
   node_id: number | null;
   organization_id: number | null;
-  wallet_config: ColumnType<unknown, string, string>;
-  wallet_status: string;
+  wallet_id: number | null;
   status: ColumnType<string, string | undefined, string>;
   default_price_usdc: number;
   default_scheme: string;
@@ -112,9 +111,17 @@ export interface TransactionsTable {
 export interface AdminSettingsTable {
   id: ColumnType<number, never, never>;
   wallet_config: ColumnType<unknown, string | undefined, string> | null;
-  fee_percentage: ColumnType<number, number | undefined, number>;
-  default_sol_native_amount: ColumnType<number, number | undefined, number>;
-  default_sol_usdc_amount: ColumnType<number, number | undefined, number>;
+  minimum_balance_sol: ColumnType<number, number | undefined, number>;
+  minimum_balance_usdc: ColumnType<number, number | undefined, number>;
   created_at: ColumnType<Date, never, never>;
   updated_at: ColumnType<Date, Date | undefined, Date>;
+}
+
+export interface WalletsTable {
+  id: ColumnType<number, never, never>;
+  organization_id: number | null;
+  name: string;
+  wallet_config: ColumnType<unknown, string, string>;
+  funding_status: ColumnType<string, string | undefined, string>;
+  created_at: ColumnType<Date, never, never>;
 }

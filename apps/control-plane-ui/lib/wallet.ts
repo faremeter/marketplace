@@ -133,14 +133,6 @@ export function buildWalletConfig(config: EcosystemConfig): WalletConfig {
   return result;
 }
 
-// Legacy function for backwards compatibility
-export function generateWalletConfig(): WalletConfig {
-  return buildWalletConfig({
-    solana: { mode: "generate" },
-    evm: { mode: "generate" },
-  });
-}
-
 export function getWalletAddresses(config: WalletConfig) {
   return {
     solana: config.solana?.["mainnet-beta"]?.address ?? null,

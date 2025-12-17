@@ -21,7 +21,7 @@ interface TenantNode {
   is_active: boolean;
   is_primary: boolean;
   cert_status: "pending" | "provisioned" | "failed" | "deleting";
-  wallet_status: "pending" | "funded" | "failed";
+  wallet_funding_status: "pending" | "funded" | "failed";
 }
 
 export default function AdminNodesPage() {
@@ -160,7 +160,7 @@ function NodeCard({ node }: { node: Node }) {
                     <CertStatusBadge status={tenant.cert_status} />
                   </td>
                   <td className="py-2 align-middle">
-                    <FundingStatusBadge status={tenant.wallet_status} />
+                    <FundingStatusBadge status={tenant.wallet_funding_status} />
                   </td>
                 </tr>
               ))}

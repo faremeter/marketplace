@@ -1,36 +1,24 @@
 import PgBoss from "pg-boss";
 import { triggerCertProvisioning } from "./cert.js";
-import { transferSol, transferUsdcSol } from "./solana-transfers.js";
-import { decryptWalletKeys } from "./crypto.js";
 import {
   deleteHealthCheck,
   deleteNodeDnsRecord,
   deleteAllTenantDnsRecords,
 } from "./dns.js";
 import { syncToNode } from "./sync.js";
+import { fetchWalletBalances } from "./balances.js";
 import { logger } from "../logger.js";
 import { db } from "../server.js";
-
-interface DecryptedWalletConfig {
-  solana?: { "mainnet-beta"?: { address: string; key: string } };
-}
 
 let boss: PgBoss | null = null;
 
 const CERT_PROVISIONING_QUEUE = "cert-provisioning";
-const WALLET_FUNDING_QUEUE = "wallet-funding";
 const TENANT_DELETION_QUEUE = "tenant-deletion";
+const BALANCE_CHECK_QUEUE = "balance-check";
 
 interface CertProvisioningJob {
   nodeId: number;
   tenantName: string;
-}
-
-interface WalletFundingJob {
-  tenantId: number;
-  solanaAddress: string;
-  solAmount: number;
-  usdcAmount: number;
 }
 
 interface TenantDeletionJob {
@@ -38,12 +26,17 @@ interface TenantDeletionJob {
   tenantName: string;
 }
 
+interface BalanceCheckJob {
+  walletId: number;
+  solanaAddress: string;
+}
+
 export async function checkAndUpdateTenantStatus(
   tenantId: number,
 ): Promise<void> {
   const tenant = await db
     .selectFrom("tenants")
-    .select(["id", "wallet_status", "status"])
+    .select(["id", "wallet_id", "status"])
     .where("id", "=", tenantId)
     .executeTakeFirst();
 
@@ -57,8 +50,25 @@ export async function checkAndUpdateTenantStatus(
     .where("tenant_id", "=", tenantId)
     .execute();
 
-  const walletFunded = tenant.wallet_status === "funded";
-  const walletFailed = tenant.wallet_status === "failed";
+  let walletFunded = false;
+  let walletFailed = false;
+
+  if (tenant.wallet_id) {
+    const wallet = await db
+      .selectFrom("wallets")
+      .select(["funding_status"])
+      .where("id", "=", tenant.wallet_id)
+      .executeTakeFirst();
+
+    walletFunded = wallet?.funding_status === "funded";
+    walletFailed = wallet?.funding_status === "failed";
+  } else {
+    logger.warn(
+      `checkAndUpdateTenantStatus: Tenant ${tenantId} has no wallet assigned`,
+    );
+    return;
+  }
+
   const allCertsProvisioned =
     tenantNodes.length === 0 ||
     tenantNodes.every((tn) => tn.cert_status === "provisioned");
@@ -106,11 +116,11 @@ export async function startQueue(config: {
   await boss.createQueue(CERT_PROVISIONING_QUEUE);
   logger.info(`Created queue: ${CERT_PROVISIONING_QUEUE}`);
 
-  await boss.createQueue(WALLET_FUNDING_QUEUE);
-  logger.info(`Created queue: ${WALLET_FUNDING_QUEUE}`);
-
   await boss.createQueue(TENANT_DELETION_QUEUE);
   logger.info(`Created queue: ${TENANT_DELETION_QUEUE}`);
+
+  await boss.createQueue(BALANCE_CHECK_QUEUE);
+  logger.info(`Created queue: ${BALANCE_CHECK_QUEUE}`);
 
   await boss.work<CertProvisioningJob>(
     CERT_PROVISIONING_QUEUE,
@@ -134,79 +144,6 @@ export async function startQueue(config: {
   );
 
   logger.info("Cert provisioning worker started");
-
-  await boss.work<WalletFundingJob>(
-    WALLET_FUNDING_QUEUE,
-    { batchSize: 1 },
-    async (jobs) => {
-      for (const job of jobs) {
-        const { tenantId, solanaAddress, solAmount, usdcAmount } = job.data;
-        logger.info(
-          `Processing wallet funding job ${job.id} for tenant ${tenantId}`,
-        );
-
-        try {
-          // Get master wallet from admin_settings
-          const adminSettings = await db
-            .selectFrom("admin_settings")
-            .select(["wallet_config"])
-            .where("id", "=", 1)
-            .executeTakeFirst();
-
-          if (!adminSettings?.wallet_config) {
-            throw new Error("Master wallet not configured");
-          }
-
-          const walletConfig = decryptWalletKeys(
-            adminSettings.wallet_config as Record<string, unknown>,
-          ) as DecryptedWalletConfig;
-          const masterKey = walletConfig.solana?.["mainnet-beta"]?.key;
-
-          if (!masterKey) {
-            throw new Error("Master Solana wallet key not found");
-          }
-
-          // Transfer SOL
-          logger.info(`Transferring ${solAmount} SOL to ${solanaAddress}`);
-          await transferSol(masterKey, solanaAddress, solAmount);
-
-          // Transfer USDC
-          logger.info(`Transferring ${usdcAmount} USDC to ${solanaAddress}`);
-          await transferUsdcSol(masterKey, solanaAddress, usdcAmount);
-
-          // Update tenant wallet_status to 'funded'
-          await db
-            .updateTable("tenants")
-            .set({ wallet_status: "funded" })
-            .where("id", "=", tenantId)
-            .execute();
-
-          // Check if tenant can transition to active
-          await checkAndUpdateTenantStatus(tenantId);
-
-          logger.info(`Wallet funding completed for tenant ${tenantId}`);
-        } catch (error) {
-          logger.error(
-            `Wallet funding failed for tenant ${tenantId}: ${error}`,
-          );
-
-          // Update tenant wallet_status to 'failed'
-          await db
-            .updateTable("tenants")
-            .set({ wallet_status: "failed" })
-            .where("id", "=", tenantId)
-            .execute();
-
-          // Check if tenant should transition to failed
-          await checkAndUpdateTenantStatus(tenantId);
-
-          throw error;
-        }
-      }
-    },
-  );
-
-  logger.info("Wallet funding worker started");
 
   await boss.work<TenantDeletionJob>(
     TENANT_DELETION_QUEUE,
@@ -274,6 +211,86 @@ export async function startQueue(config: {
   );
 
   logger.info("Tenant deletion worker started");
+
+  await boss.work<BalanceCheckJob>(
+    BALANCE_CHECK_QUEUE,
+    { batchSize: 1 },
+    async (jobs) => {
+      for (const job of jobs) {
+        const { walletId, solanaAddress } = job.data;
+        logger.info(
+          `Processing balance check job ${job.id} for wallet ${walletId}`,
+        );
+
+        try {
+          // Get minimum balance thresholds from admin settings
+          const adminSettings = await db
+            .selectFrom("admin_settings")
+            .select(["minimum_balance_sol", "minimum_balance_usdc"])
+            .where("id", "=", 1)
+            .executeTakeFirst();
+
+          const minSol = adminSettings?.minimum_balance_sol ?? 0.001;
+          const minUsdc = adminSettings?.minimum_balance_usdc ?? 0.01;
+
+          // Fetch wallet balance
+          const balances = await fetchWalletBalances({
+            solana: solanaAddress,
+            evm: null,
+          });
+
+          const solBalance = parseFloat(balances.solana.native);
+          const usdcBalance = parseFloat(balances.solana.usdc);
+          logger.info(
+            `Wallet ${walletId} balance: ${solBalance} SOL, ${usdcBalance} USDC (min: ${minSol} SOL, ${minUsdc} USDC)`,
+          );
+
+          if (solBalance >= minSol && usdcBalance >= minUsdc) {
+            // Update wallet funding_status to 'funded'
+            await db
+              .updateTable("wallets")
+              .set({ funding_status: "funded" })
+              .where("id", "=", walletId)
+              .execute();
+
+            // Update all tenants using this wallet
+            const tenants = await db
+              .selectFrom("tenants")
+              .select(["id"])
+              .where("wallet_id", "=", walletId)
+              .execute();
+
+            for (const tenant of tenants) {
+              await checkAndUpdateTenantStatus(tenant.id);
+            }
+
+            logger.info(`Wallet ${walletId} marked as funded`);
+          } else {
+            // Re-enqueue balance check with delay
+            logger.info(
+              `Wallet ${walletId} not yet funded, re-enqueueing check`,
+            );
+            if (!boss) {
+              throw new Error("Queue not initialized");
+            }
+            await boss.send(
+              BALANCE_CHECK_QUEUE,
+              { walletId, solanaAddress },
+              {
+                retryLimit: 0,
+                startAfter: 30, // Check again in 30 seconds
+              },
+            );
+          }
+        } catch (error) {
+          logger.error(`Balance check failed for wallet ${walletId}: ${error}`);
+          throw error;
+        }
+      }
+    },
+  );
+
+  logger.info("Balance check worker started");
 }
 
 export async function stopQueue(): Promise<void> {
@@ -328,36 +345,6 @@ export async function enqueueCertProvisioning(
   );
 }
 
-export async function enqueueWalletFunding(
-  tenantId: number,
-  solanaAddress: string,
-  solAmount: number,
-  usdcAmount: number,
-): Promise<void> {
-  if (!boss) {
-    throw new Error("Queue not initialized");
-  }
-
-  const jobId = await boss.send(
-    WALLET_FUNDING_QUEUE,
-    { tenantId, solanaAddress, solAmount, usdcAmount },
-    {
-      retryLimit: 3,
-      retryDelay: 60,
-      retryBackoff: true,
-      expireInSeconds: 600,
-    },
-  );
-
-  if (!jobId) {
-    throw new Error(`Failed to enqueue wallet funding for tenant ${tenantId}`);
-  }
-
-  logger.info(
-    `Enqueued wallet funding job ${jobId} for tenant ${tenantId} (${solanaAddress})`,
-  );
-}
-
 export async function enqueueTenantDeletion(
   tenantId: number,
   tenantName: string,
@@ -382,4 +369,32 @@ export async function enqueueTenantDeletion(
   }
 
   logger.info(`Enqueued tenant deletion job ${jobId} for ${tenantName}`);
+}
+
+export async function enqueueBalanceCheck(
+  walletId: number,
+  solanaAddress: string,
+): Promise<void> {
+  if (!boss) {
+    throw new Error("Queue not initialized");
+  }
+
+  const jobId = await boss.send(
+    BALANCE_CHECK_QUEUE,
+    { walletId, solanaAddress },
+    {
+      retryLimit: 3,
+      retryDelay: 30,
+      retryBackoff: true,
+      expireInSeconds: 600,
+    },
+  );
+
+  if (!jobId) {
+    throw new Error(`Failed to enqueue balance check for wallet ${walletId}`);
+  }
+
+  logger.info(
+    `Enqueued balance check job ${jobId} for wallet ${walletId} (${solanaAddress})`,
+  );
 }

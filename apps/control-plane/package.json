@@ -8,7 +8,8 @@
     "start": "tsx src/server.ts",
     "migrate": "tsx src/db/migrate.ts",
     "migrate:up": "tsx src/db/migrate.ts up",
-    "migrate:down": "tsx src/db/migrate.ts down"
+    "migrate:down": "tsx src/db/migrate.ts down",
+    "migrate:wallets": "tsx src/scripts/migrate-wallets.ts"
   },
   "dependencies": {
     "@aws-sdk/client-route-53": "^3.948.0",

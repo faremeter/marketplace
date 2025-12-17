@@ -5,7 +5,7 @@ export const TenantSchema = type({
   name: "string",
   backend_url: "string",
   "node_id?": "number | null",
-  wallet_config: "unknown",
+  "wallet_id?": "number | null",
   default_price_usdc: "number",
   default_scheme: "string",
   "upstream_auth_header?": "string | null",

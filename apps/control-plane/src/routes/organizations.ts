@@ -1,18 +1,14 @@
 import { Hono } from "hono";
 import { db } from "../server.js";
 import { requireAuth } from "../middleware/auth.js";
-import { encryptWalletKeys } from "../lib/crypto.js";
 import { fetchWalletBalances } from "../lib/balances.js";
 import { logger } from "../logger.js";
 import { syncToNode } from "../lib/sync.js";
 import { createHealthCheck, upsertNodeDnsRecord } from "../lib/dns.js";
 import {
   enqueueCertProvisioning,
-  enqueueWalletFunding,
   enqueueTenantDeletion,
 } from "../lib/queue.js";
-import { Keypair } from "@solana/web3.js";
-import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
 
 export const organizationsRoutes = new Hono();
 
@@ -343,21 +339,24 @@ organizationsRoutes.get("/:id/tenants", async (c) => {
 
   const tenants = await db
     .selectFrom("tenants")
+    .leftJoin("wallets", "wallets.id", "tenants.wallet_id")
     .select([
       "tenants.id",
       "tenants.name",
       "tenants.backend_url",
       "tenants.is_active",
       "tenants.status",
-      "tenants.wallet_status",
+      "tenants.wallet_id",
       "tenants.upstream_auth_header",
       "tenants.upstream_auth_value",
       "tenants.created_at",
       "tenants.default_price_usdc",
       "tenants.default_scheme",
+      "wallets.name as wallet_name",
+      "wallets.funding_status as wallet_funding_status",
     ])
-    .where("organization_id", "=", id)
-    .orderBy("created_at", "desc")
+    .where("tenants.organization_id", "=", id)
+    .orderBy("tenants.created_at", "desc")
     .execute();
 
   const tenantIds = tenants.map((t) => t.id);
@@ -398,26 +397,6 @@ organizationsRoutes.get("/:id/tenants", async (c) => {
   return c.json(result);
 });
 
-function generateWalletConfig(): WalletConfig {
-  const solKeypair = Keypair.generate();
-  const evmKey = generatePrivateKey();
-  const evmAddress = privateKeyToAccount(evmKey).address;
-
-  return {
-    solana: {
-      "mainnet-beta": {
-        address: solKeypair.publicKey.toBase58(),
-        key: "[" + solKeypair.secretKey.toString() + "]",
-      },
-    },
-    evm: {
-      base: { key: evmKey, address: evmAddress },
-      polygon: { key: evmKey, address: evmAddress },
-      monad: { key: evmKey, address: evmAddress },
-    },
-  };
-}
-
 organizationsRoutes.put("/:id/tenants/:tenantId", async (c) => {
   const user = c.get("user");
   const orgId = parseInt(c.req.param("id"));
@@ -456,6 +435,21 @@ organizationsRoutes.put("/:id/tenants/:tenantId", async (c) => {
     updateData.default_price_usdc = body.default_price_usdc;
   if (body.default_scheme !== undefined)
     updateData.default_scheme = body.default_scheme;
+  if (body.wallet_id !== undefined) {
+    // Validate wallet belongs to this org
+    if (body.wallet_id !== null) {
+      const wallet = await db
+        .selectFrom("wallets")
+        .select(["id", "organization_id"])
+        .where("id", "=", body.wallet_id)
+        .executeTakeFirst();
+
+      if (!wallet || wallet.organization_id !== orgId) {
+        return c.json({ error: "Wallet not found" }, 404);
+      }
+    }
+    updateData.wallet_id = body.wallet_id;
+  }
 
   const result = await db
     .updateTable("tenants")
@@ -468,8 +462,15 @@ organizationsRoutes.put("/:id/tenants/:tenantId", async (c) => {
     return c.json({ error: "Tenant not found" }, 404);
   }
 
-  if (result.node_id) {
-    syncToNode(result.node_id).catch((err) => logger.error(String(err)));
+  // Sync to all nodes the tenant is on
+  const tenantNodes = await db
+    .selectFrom("tenant_nodes")
+    .select("node_id")
+    .where("tenant_id", "=", tenantId)
+    .execute();
+
+  for (const tn of tenantNodes) {
+    syncToNode(tn.node_id).catch((err) => logger.error(String(err)));
   }
 
   return c.json(result);
@@ -493,8 +494,16 @@ organizationsRoutes.delete("/:id/tenants/:tenantId", async (c) => {
 
   const tenant = await db
     .selectFrom("tenants")
-    .select(["id", "name", "status", "wallet_config", "organization_id"])
-    .where("id", "=", tenantId)
+    .leftJoin("wallets", "wallets.id", "tenants.wallet_id")
+    .select([
+      "tenants.id",
+      "tenants.name",
+      "tenants.status",
+      "tenants.wallet_id",
+      "tenants.organization_id",
+      "wallets.wallet_config",
+    ])
+    .where("tenants.id", "=", tenantId)
     .executeTakeFirst();
 
   if (!tenant || tenant.organization_id !== orgId) {
@@ -512,8 +521,9 @@ organizationsRoutes.delete("/:id/tenants/:tenantId", async (c) => {
     return c.json({ error: "Proxy is already being deleted" }, 400);
   }
 
-  const walletConfig = tenant.wallet_config as WalletConfig | null;
-  if (walletConfig) {
+  // Check wallet funds if tenant has a wallet
+  if (tenant.wallet_id && tenant.wallet_config) {
+    const walletConfig = tenant.wallet_config as WalletConfig;
     const addresses = extractAddresses(walletConfig);
 
     if (addresses.solana || addresses.evm) {
@@ -588,42 +598,69 @@ organizationsRoutes.get("/:id/tenants/check-name", async (c) => {
   return c.json({ available: !existing });
 });
 
-// Check if proxy creation is available (sufficient master wallet funds)
 organizationsRoutes.get("/:id/can-create-proxy", async (c) => {
+  const orgId = parseInt(c.req.param("id"));
+
   const adminSettings = await db
     .selectFrom("admin_settings")
-    .select([
-      "default_sol_native_amount",
-      "default_sol_usdc_amount",
-      "wallet_config",
-    ])
+    .select(["minimum_balance_sol", "minimum_balance_usdc"])
     .where("id", "=", 1)
     .executeTakeFirst();
 
-  const solAmount = adminSettings?.default_sol_native_amount ?? 0.01;
-  const usdcAmount = adminSettings?.default_sol_usdc_amount ?? 0.01;
+  const minSol = adminSettings?.minimum_balance_sol ?? 0.001;
+  const minUsdc = adminSettings?.minimum_balance_usdc ?? 0.01;
 
-  const masterWalletConfig = adminSettings?.wallet_config as {
-    solana?: { "mainnet-beta"?: { address?: string } };
-  } | null;
-  const masterSolanaAddress =
-    masterWalletConfig?.solana?.["mainnet-beta"]?.address;
+  const wallets = await db
+    .selectFrom("wallets")
+    .select(["wallet_config", "funding_status"])
+    .where("organization_id", "=", orgId)
+    .execute();
 
-  if (!masterSolanaAddress) {
-    return c.json({ available: false });
+  if (wallets.length === 0) {
+    return c.json({
+      available: false,
+      reason: "no_wallet",
+      minimumSol: minSol,
+      minimumUsdc: minUsdc,
+    });
   }
 
-  const masterBalances = await fetchWalletBalances({
-    solana: masterSolanaAddress,
-    evm: null,
-  });
-  const masterSolBalance = parseFloat(masterBalances.solana.native);
-  const masterUsdcBalance = parseFloat(masterBalances.solana.usdc);
-  const requiredSol = solAmount + 0.003;
+  // First check if any wallet has funding_status = "funded" (cached status)
+  const hasFundedWallet = wallets.some((w) => w.funding_status === "funded");
+  if (hasFundedWallet) {
+    return c.json({ available: true });
+  }
+
+  // Fallback: fetch live balances for wallets with Solana addresses
+  for (const wallet of wallets) {
+    const walletConfig = wallet.wallet_config as {
+      solana?: { "mainnet-beta"?: { address?: string } };
+    } | null;
+    const solanaAddress = walletConfig?.solana?.["mainnet-beta"]?.address;
+
+    if (!solanaAddress) continue;
+
+    try {
+      const balances = await fetchWalletBalances({
+        solana: solanaAddress,
+        evm: null,
+      });
+      const solBalance = parseFloat(balances.solana.native);
+      const usdcBalance = parseFloat(balances.solana.usdc);
+
+      if (solBalance >= minSol && usdcBalance >= minUsdc) {
+        return c.json({ available: true });
+      }
+    } catch {
+      // RPC failure, continue checking other wallets
+    }
+  }
 
   return c.json({
-    available:
-      masterSolBalance >= requiredSol && masterUsdcBalance >= usdcAmount,
+    available: false,
+    reason: "insufficient_funds",
+    minimumSol: minSol,
+    minimumUsdc: minUsdc,
   });
 });
 
@@ -651,6 +688,25 @@ organizationsRoutes.post("/:id/tenants", async (c) => {
     return c.json({ error: "Backend URL is required" }, 400);
   }
 
+  if (!body.wallet_id) {
+    return c.json({ error: "Wallet ID is required" }, 400);
+  }
+
+  // Validate wallet belongs to this org
+  const wallet = await db
+    .selectFrom("wallets")
+    .selectAll()
+    .where("id", "=", body.wallet_id)
+    .where("organization_id", "=", orgId)
+    .executeTakeFirst();
+
+  if (!wallet) {
+    return c.json(
+      { error: "Wallet not found or does not belong to this organization" },
+      400,
+    );
+  }
+
   // Find 2 active nodes with least tenant count
   const nodesWithCounts = await db
     .selectFrom("nodes")
@@ -670,54 +726,6 @@ organizationsRoutes.post("/:id/tenants", async (c) => {
 
   const nodeIds = nodesWithCounts.map((n) => n.id);
 
-  // Get funding amounts and master wallet from admin settings
-  const adminSettings = await db
-    .selectFrom("admin_settings")
-    .select([
-      "default_sol_native_amount",
-      "default_sol_usdc_amount",
-      "wallet_config",
-    ])
-    .where("id", "=", 1)
-    .executeTakeFirst();
-
-  const solAmount = adminSettings?.default_sol_native_amount ?? 0.01;
-  const usdcAmount = adminSettings?.default_sol_usdc_amount ?? 0.01;
-
-  // Check master wallet has enough SOL for funding + rent
-  const masterWalletConfig = adminSettings?.wallet_config as {
-    solana?: { "mainnet-beta"?: { address?: string } };
-  } | null;
-  const masterSolanaAddress =
-    masterWalletConfig?.solana?.["mainnet-beta"]?.address;
-
-  if (masterSolanaAddress) {
-    const masterBalances = await fetchWalletBalances({
-      solana: masterSolanaAddress,
-      evm: null,
-    });
-    const masterSolBalance = parseFloat(masterBalances.solana.native);
-    // Need: funding amount + ~0.003 SOL for rent-exempt token account creation
-    const requiredSol = solAmount + 0.003;
-
-    if (masterSolBalance < requiredSol) {
-      logger.error(
-        `Insufficient master wallet balance for tenant creation. Need ${requiredSol.toFixed(4)} SOL, have ${masterSolBalance.toFixed(4)} SOL`,
-      );
-      return c.json(
-        {
-          error:
-            "Unable to create proxy at this time. Please try again later or contact support.",
-        },
-        503,
-      );
-    }
-  }
-
-  // Generate wallet config server-side
-  const walletConfig = generateWalletConfig();
-  const solanaAddress = walletConfig.solana?.["mainnet-beta"]?.address;
-
   const tenant = await db
     .insertInto("tenants")
     .values({
@@ -725,10 +733,7 @@ organizationsRoutes.post("/:id/tenants", async (c) => {
       backend_url: body.backend_url.trim(),
       node_id: nodeIds[0],
       organization_id: orgId,
-      wallet_config: JSON.stringify(
-        encryptWalletKeys(walletConfig as Record<string, unknown>),
-      ),
-      wallet_status: solanaAddress ? "pending" : "funded",
+      wallet_id: body.wallet_id,
       default_price_usdc: body.default_price_usdc ?? 0,
       default_scheme: body.default_scheme ?? "exact",
       upstream_auth_header: body.upstream_auth_header?.trim() || null,
@@ -736,13 +741,6 @@ organizationsRoutes.post("/:id/tenants", async (c) => {
     })
     .returningAll()
     .executeTakeFirstOrThrow();
-
-  // Enqueue wallet funding if solana address exists
-  if (solanaAddress) {
-    enqueueWalletFunding(tenant.id, solanaAddress, solAmount, usdcAmount).catch(
-      (err) => logger.error(`Failed to enqueue wallet funding: ${err}`),
-    );
-  }
 
   for (const [i, nodeId] of nodeIds.entries()) {
     const isPrimary = i === 0;
@@ -819,118 +817,3 @@ function extractAddresses(walletConfig: WalletConfig | null): {
     evm: walletConfig.evm?.base?.address ?? null,
   };
 }
-
-organizationsRoutes.get("/:id/wallet", async (c) => {
-  const user = c.get("user");
-  const id = parseInt(c.req.param("id"));
-
-  const membership = await db
-    .selectFrom("user_organizations")
-    .select("role")
-    .where("user_id", "=", user.id)
-    .where("organization_id", "=", id)
-    .executeTakeFirst();
-
-  if (!membership && !user.is_admin) {
-    return c.json({ error: "Organization not found" }, 404);
-  }
-
-  const org = await db
-    .selectFrom("organizations")
-    .select("wallet_config")
-    .where("id", "=", id)
-    .executeTakeFirst();
-
-  if (!org) {
-    return c.json({ error: "Organization not found" }, 404);
-  }
-
-  const walletConfig = org.wallet_config as WalletConfig | null;
-  const addresses = extractAddresses(walletConfig);
-
-  return c.json({
-    hasWallet: walletConfig !== null,
-    addresses,
-  });
-});
-
-organizationsRoutes.put("/:id/wallet", async (c) => {
-  const user = c.get("user");
-  const id = parseInt(c.req.param("id"));
-  const body = await c.req.json();
-
-  const membership = await db
-    .selectFrom("user_organizations")
-    .select("role")
-    .where("user_id", "=", user.id)
-    .where("organization_id", "=", id)
-    .executeTakeFirst();
-
-  if (!membership && !user.is_admin) {
-    return c.json({ error: "Organization not found" }, 404);
-  }
-
-  if (membership && membership.role !== "owner" && !user.is_admin) {
-    return c.json({ error: "Only owners can manage wallets" }, 403);
-  }
-
-  if (!body.wallet_config) {
-    return c.json({ error: "wallet_config is required" }, 400);
-  }
-
-  const encryptedConfig = encryptWalletKeys(body.wallet_config);
-
-  await db
-    .updateTable("organizations")
-    .set({ wallet_config: JSON.stringify(encryptedConfig) })
-    .where("id", "=", id)
-    .execute();
-
-  const addresses = extractAddresses(body.wallet_config as WalletConfig);
-
-  return c.json({
-    hasWallet: true,
-    addresses,
-  });
-});
-
-organizationsRoutes.get("/:id/wallet/balances", async (c) => {
-  const user = c.get("user");
-  const id = parseInt(c.req.param("id"));
-
-  const membership = await db
-    .selectFrom("user_organizations")
-    .select("role")
-    .where("user_id", "=", user.id)
-    .where("organization_id", "=", id)
-    .executeTakeFirst();
-
-  if (!membership && !user.is_admin) {
-    return c.json({ error: "Organization not found" }, 404);
-  }
-
-  const org = await db
-    .selectFrom("organizations")
-    .select("wallet_config")
-    .where("id", "=", id)
-    .executeTakeFirst();
-
-  if (!org || !org.wallet_config) {
-    return c.json({ error: "No wallet configured" }, 404);
-  }
-
-  const walletConfig = org.wallet_config as WalletConfig;
-  const addresses = extractAddresses(walletConfig);
-
-  if (!addresses.solana && !addresses.evm) {
-    return c.json({ error: "No wallet addresses found" }, 404);
-  }
-
-  try {
-    const balances = await fetchWalletBalances(addresses);
-    return c.json(balances);
-  } catch (error) {
-    logger.error(`Failed to fetch balances: ${error}`);
-    return c.json({ error: "Failed to fetch balances" }, 500);
-  }
-});

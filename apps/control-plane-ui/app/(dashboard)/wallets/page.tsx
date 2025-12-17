@@ -1,16 +1,18 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useAuth } from "@/lib/auth/context";
 import useSWR from "swr";
 import * as Dialog from "@radix-ui/react-dialog";
-import * as Tooltip from "@radix-ui/react-tooltip";
 import {
   CopyIcon,
   CheckIcon,
   ReloadIcon,
   CheckCircledIcon,
   CrossCircledIcon,
+  PlusIcon,
+  TrashIcon,
+  Cross2Icon,
 } from "@radix-ui/react-icons";
 import { api } from "@/lib/api/client";
 import {
@@ -20,12 +22,26 @@ import {
 } from "@/lib/wallet";
 import { useToast } from "@/components/ui/toast";
 
-interface WalletData {
-  hasWallet: boolean;
-  addresses: {
-    solana: string | null;
-    evm: string | null;
+interface WalletConfig {
+  solana?: {
+    "mainnet-beta"?: {
+      address: string;
+    };
   };
+  evm?: {
+    base?: { address: string };
+    polygon?: { address: string };
+    monad?: { address: string };
+  };
+}
+
+interface Wallet {
+  id: number;
+  name: string;
+  organization_id: number;
+  wallet_config: WalletConfig;
+  funding_status: string;
+  created_at: string;
 }
 
 interface ChainBalances {
@@ -47,38 +63,82 @@ const CHAINS = [
   { id: "monad", name: "Monad", native: "MON", color: "green" },
 ] as const;
 
-function WalletAddressModal({
+function CreateWalletModal({
   open,
   onOpenChange,
   onSave,
   isSaving,
-  initialSolana = "",
-  initialEvm = "",
+  organizationId,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onSave: (addresses: { solana?: string; evm?: string }) => void;
+  onSave: (data: { name: string; solana?: string; evm?: string }) => void;
   isSaving: boolean;
-  initialSolana?: string;
-  initialEvm?: string;
+  organizationId: number;
 }) {
-  const [solanaAddress, setSolanaAddress] = useState(initialSolana);
-  const [evmAddress, setEvmAddress] = useState(initialEvm);
+  const [name, setName] = useState("");
+  const [solanaAddress, setSolanaAddress] = useState("");
+  const [evmAddress, setEvmAddress] = useState("");
+  const [nameAvailable, setNameAvailable] = useState<boolean | null>(null);
+  const [isCheckingName, setIsCheckingName] = useState(false);
+  const checkTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     if (open) {
-      setSolanaAddress(initialSolana);
-      setEvmAddress(initialEvm);
+      setName("");
+      setSolanaAddress("");
+      setEvmAddress("");
+      setNameAvailable(null);
+      setIsCheckingName(false);
     }
-  }, [open, initialSolana, initialEvm]);
+  }, [open]);
+
+  useEffect(() => {
+    if (!name.trim()) {
+      setNameAvailable(null);
+      return;
+    }
+
+    setIsCheckingName(true);
+    setNameAvailable(null);
+
+    if (checkTimeoutRef.current) {
+      clearTimeout(checkTimeoutRef.current);
+    }
+
+    checkTimeoutRef.current = setTimeout(async () => {
+      try {
+        const result = await api.get<{ available: boolean }>(
+          `/api/wallets/organization/${organizationId}/check-name?name=${encodeURIComponent(name.trim())}`,
+        );
+        setNameAvailable(result.available);
+      } catch {
+        setNameAvailable(null);
+      } finally {
+        setIsCheckingName(false);
+      }
+    }, 500);
+
+    return () => {
+      if (checkTimeoutRef.current) {
+        clearTimeout(checkTimeoutRef.current);
+      }
+    };
+  }, [name, organizationId]);
 
   const solanaValid = !solanaAddress || isValidSolanaAddress(solanaAddress);
   const evmValid = !evmAddress || isValidEvmAddress(evmAddress);
   const hasAtLeastOne = solanaAddress.trim() || evmAddress.trim();
-  const canSave = solanaValid && evmValid && hasAtLeastOne;
+  const canSave =
+    name.trim() &&
+    nameAvailable === true &&
+    solanaValid &&
+    evmValid &&
+    hasAtLeastOne;
 
   const handleSave = () => {
     onSave({
+      name: name.trim(),
       solana: solanaAddress.trim() || undefined,
       evm: evmAddress.trim() || undefined,
     });
@@ -90,15 +150,45 @@ function WalletAddressModal({
         <Dialog.Overlay className="fixed inset-0 bg-black/60 backdrop-blur-sm" />
         <Dialog.Content className="fixed left-1/2 top-1/2 w-full max-w-lg -translate-x-1/2 -translate-y-1/2 rounded-lg border border-gray-6 bg-gray-1 p-6 shadow-xl max-h-[85vh] overflow-y-auto">
           <Dialog.Title className="text-lg font-semibold text-gray-12">
-            Configure Wallet Addresses
+            Create Wallet
           </Dialog.Title>
           <Dialog.Description className="mt-1 text-sm text-gray-11">
-            Enter the public wallet addresses where you want to receive
-            payments.
+            Enter a name and your public wallet addresses where you want to
+            receive payments.
           </Dialog.Description>
 
           <div className="mt-6 space-y-5">
-            {/* Solana */}
+            <div>
+              <label className="mb-1.5 block text-sm text-gray-11">
+                Wallet Name <span className="text-red-400">*</span>
+              </label>
+              <div className="flex items-center gap-2">
+                <input
+                  type="text"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder="e.g., Main Wallet"
+                  className="flex-1 rounded-md border border-gray-6 bg-gray-2 px-3 py-2 text-sm text-gray-12 placeholder-gray-9 focus:border-accent-8 focus:outline-none focus:ring-1 focus:ring-accent-8"
+                />
+                {name.trim() && (
+                  <>
+                    {isCheckingName ? (
+                      <div className="h-4 w-4 animate-spin rounded-full border-2 border-gray-6 border-t-gray-11" />
+                    ) : nameAvailable === true ? (
+                      <CheckCircledIcon className="h-4 w-4 text-green-500" />
+                    ) : nameAvailable === false ? (
+                      <CrossCircledIcon className="h-4 w-4 text-red-500" />
+                    ) : null}
+                  </>
+                )}
+              </div>
+              {name.trim() && nameAvailable === false && !isCheckingName && (
+                <p className="mt-1 text-xs text-red-400">
+                  This name is already taken
+                </p>
+              )}
+            </div>
+
             <div className="rounded-lg border border-gray-6 bg-gray-2 p-4">
               <label className="block text-sm font-medium text-gray-12 mb-2">
                 Solana Address
@@ -128,7 +218,6 @@ function WalletAddressModal({
               )}
             </div>
 
-            {/* EVM */}
             <div className="rounded-lg border border-gray-6 bg-gray-2 p-4">
               <div className="mb-2">
                 <label className="block text-sm font-medium text-gray-12">
@@ -175,7 +264,7 @@ function WalletAddressModal({
               disabled={!canSave || isSaving}
               className="rounded-md bg-white px-4 py-2 text-sm font-medium text-black shadow-button transition-colors hover:bg-white/90 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {isSaving ? "Saving..." : "Save Addresses"}
+              {isSaving ? "Creating..." : "Create Wallet"}
             </button>
           </div>
         </Dialog.Content>
@@ -184,66 +273,271 @@ function WalletAddressModal({
   );
 }
 
-function WalletSetup({
+function EditWalletModal({
+  open,
+  onOpenChange,
   onSave,
   isSaving,
+  initialName,
+  initialSolana = "",
+  initialEvm = "",
+  walletId,
+  organizationId,
 }: {
-  onSave: (addresses: { solana?: string; evm?: string }) => void;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onSave: (data: { name: string; solana?: string; evm?: string }) => void;
   isSaving: boolean;
+  initialName: string;
+  initialSolana?: string;
+  initialEvm?: string;
+  walletId: number;
+  organizationId: number;
 }) {
-  const [showModal, setShowModal] = useState(false);
+  const [name, setName] = useState(initialName);
+  const [solanaAddress, setSolanaAddress] = useState(initialSolana);
+  const [evmAddress, setEvmAddress] = useState(initialEvm);
+  const [nameAvailable, setNameAvailable] = useState<boolean | null>(null);
+  const [isCheckingName, setIsCheckingName] = useState(false);
+  const checkTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  useEffect(() => {
+    if (open) {
+      setName(initialName);
+      setSolanaAddress(initialSolana);
+      setEvmAddress(initialEvm);
+      setNameAvailable(true);
+      setIsCheckingName(false);
+    }
+  }, [open, initialName, initialSolana, initialEvm]);
+
+  useEffect(() => {
+    if (!name.trim()) {
+      setNameAvailable(null);
+      return;
+    }
+
+    // If name unchanged, it's valid
+    if (name.trim() === initialName) {
+      setNameAvailable(true);
+      setIsCheckingName(false);
+      return;
+    }
+
+    setIsCheckingName(true);
+    setNameAvailable(null);
+
+    if (checkTimeoutRef.current) {
+      clearTimeout(checkTimeoutRef.current);
+    }
+
+    checkTimeoutRef.current = setTimeout(async () => {
+      try {
+        const result = await api.get<{ available: boolean }>(
+          `/api/wallets/organization/${organizationId}/check-name?name=${encodeURIComponent(name.trim())}&excludeId=${walletId}`,
+        );
+        setNameAvailable(result.available);
+      } catch {
+        setNameAvailable(null);
+      } finally {
+        setIsCheckingName(false);
+      }
+    }, 500);
+
+    return () => {
+      if (checkTimeoutRef.current) {
+        clearTimeout(checkTimeoutRef.current);
+      }
+    };
+  }, [name, initialName, organizationId, walletId]);
+
+  const solanaValid = !solanaAddress || isValidSolanaAddress(solanaAddress);
+  const evmValid = !evmAddress || isValidEvmAddress(evmAddress);
+  const hasAtLeastOne = solanaAddress.trim() || evmAddress.trim();
+  const canSave =
+    name.trim() &&
+    nameAvailable === true &&
+    solanaValid &&
+    evmValid &&
+    hasAtLeastOne;
+
+  const handleSave = () => {
+    onSave({
+      name: name.trim(),
+      solana: solanaAddress.trim() || undefined,
+      evm: evmAddress.trim() || undefined,
+    });
+  };
 
   return (
-    <>
-      <div className="rounded-lg border border-gray-6 bg-gray-2 p-8 text-center">
-        <h2 className="mb-2 text-lg font-medium text-gray-12">
-          No wallet configured
-        </h2>
-        <p className="mb-6 text-sm text-gray-11 max-w-md mx-auto">
-          Add your wallet addresses to receive payments on Solana and EVM
-          chains.
-        </p>
-        <button
-          onClick={() => setShowModal(true)}
-          className="rounded-md bg-white px-6 py-2.5 text-sm font-medium text-black shadow-button transition-colors hover:bg-white/90"
-        >
-          Add Wallet Addresses
-        </button>
-      </div>
+    <Dialog.Root open={open} onOpenChange={onOpenChange}>
+      <Dialog.Portal>
+        <Dialog.Overlay className="fixed inset-0 bg-black/60 backdrop-blur-sm" />
+        <Dialog.Content className="fixed left-1/2 top-1/2 w-full max-w-lg -translate-x-1/2 -translate-y-1/2 rounded-lg border border-gray-6 bg-gray-1 p-6 shadow-xl max-h-[85vh] overflow-y-auto">
+          <Dialog.Title className="text-lg font-semibold text-gray-12">
+            Edit Wallet
+          </Dialog.Title>
+          <Dialog.Description className="mt-1 text-sm text-gray-11">
+            Update the wallet name and addresses.
+          </Dialog.Description>
 
-      <WalletAddressModal
-        open={showModal}
-        onOpenChange={setShowModal}
-        onSave={(addresses) => {
-          onSave(addresses);
-          setShowModal(false);
-        }}
-        isSaving={isSaving}
-      />
-    </>
+          <div className="mt-6 space-y-5">
+            <div>
+              <label className="mb-1.5 block text-sm text-gray-11">
+                Wallet Name <span className="text-red-400">*</span>
+              </label>
+              <div className="flex items-center gap-2">
+                <input
+                  type="text"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder="e.g., Main Wallet"
+                  className="flex-1 rounded-md border border-gray-6 bg-gray-2 px-3 py-2 text-sm text-gray-12 placeholder-gray-9 focus:border-accent-8 focus:outline-none focus:ring-1 focus:ring-accent-8"
+                />
+                {name.trim() && (
+                  <>
+                    {isCheckingName ? (
+                      <div className="h-4 w-4 animate-spin rounded-full border-2 border-gray-6 border-t-gray-11" />
+                    ) : nameAvailable === true ? (
+                      <CheckCircledIcon className="h-4 w-4 text-green-500" />
+                    ) : nameAvailable === false ? (
+                      <CrossCircledIcon className="h-4 w-4 text-red-500" />
+                    ) : null}
+                  </>
+                )}
+              </div>
+              {name.trim() && nameAvailable === false && !isCheckingName && (
+                <p className="mt-1 text-xs text-red-400">
+                  This name is already taken
+                </p>
+              )}
+            </div>
+
+            <div className="rounded-lg border border-gray-6 bg-gray-2 p-4">
+              <label className="block text-sm font-medium text-gray-12 mb-2">
+                Solana Address
+              </label>
+              <input
+                type="text"
+                value={solanaAddress}
+                onChange={(e) => setSolanaAddress(e.target.value)}
+                placeholder="e.g., 5ZZguz4NsSRFxGkHfYnS..."
+                className={`w-full rounded-md border bg-gray-3 px-3 py-2 font-mono text-xs text-gray-12 placeholder:text-gray-8 focus:outline-none ${
+                  solanaAddress && !solanaValid
+                    ? "border-red-500 focus:border-red-500"
+                    : "border-gray-6 focus:border-accent-8"
+                }`}
+              />
+              {solanaAddress && !solanaValid && (
+                <div className="flex items-center gap-2 text-xs mt-2">
+                  <CrossCircledIcon className="h-3.5 w-3.5 text-red-400" />
+                  <span className="text-red-400">Invalid Solana address</span>
+                </div>
+              )}
+              {solanaAddress && solanaValid && (
+                <div className="flex items-center gap-2 text-xs mt-2">
+                  <CheckCircledIcon className="h-3.5 w-3.5 text-green-400" />
+                  <span className="text-green-400">Valid address</span>
+                </div>
+              )}
+            </div>
+
+            <div className="rounded-lg border border-gray-6 bg-gray-2 p-4">
+              <div className="mb-2">
+                <label className="block text-sm font-medium text-gray-12">
+                  EVM Address
+                </label>
+                <span className="text-xs text-gray-11">
+                  Used for Base, Polygon, and Monad
+                </span>
+              </div>
+              <input
+                type="text"
+                value={evmAddress}
+                onChange={(e) => setEvmAddress(e.target.value)}
+                placeholder="e.g., 0x1234..."
+                className={`w-full rounded-md border bg-gray-3 px-3 py-2 font-mono text-xs text-gray-12 placeholder:text-gray-8 focus:outline-none ${
+                  evmAddress && !evmValid
+                    ? "border-red-500 focus:border-red-500"
+                    : "border-gray-6 focus:border-accent-8"
+                }`}
+              />
+              {evmAddress && !evmValid && (
+                <div className="flex items-center gap-2 text-xs mt-2">
+                  <CrossCircledIcon className="h-3.5 w-3.5 text-red-400" />
+                  <span className="text-red-400">Invalid EVM address</span>
+                </div>
+              )}
+              {evmAddress && evmValid && (
+                <div className="flex items-center gap-2 text-xs mt-2">
+                  <CheckCircledIcon className="h-3.5 w-3.5 text-green-400" />
+                  <span className="text-green-400">Valid address</span>
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="mt-6 flex justify-end gap-3">
+            <Dialog.Close asChild>
+              <button className="rounded-md border border-gray-6 px-4 py-2 text-sm text-gray-11 hover:bg-gray-3">
+                Cancel
+              </button>
+            </Dialog.Close>
+            <button
+              onClick={handleSave}
+              disabled={!canSave || isSaving}
+              className="rounded-md bg-white px-4 py-2 text-sm font-medium text-black shadow-button transition-colors hover:bg-white/90 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {isSaving ? "Saving..." : "Save Changes"}
+            </button>
+          </div>
+        </Dialog.Content>
+      </Dialog.Portal>
+    </Dialog.Root>
   );
 }
 
-function WalletBalanceDisplay({
-  walletData,
-  balances,
-  balancesLoading,
-  mutateBalances,
-  onEdit,
-  isSaving,
+function extractAddresses(config: WalletConfig | null): {
+  solana: string | null;
+  evm: string | null;
+} {
+  if (!config) return { solana: null, evm: null };
+  return {
+    solana: config.solana?.["mainnet-beta"]?.address ?? null,
+    evm: config.evm?.base?.address ?? null,
+  };
+}
+
+function WalletCard({
+  wallet,
   isOwner,
+  onEdit,
+  onDelete,
+  organizationId,
 }: {
-  walletData: WalletData;
-  balances: WalletBalances | undefined;
-  balancesLoading: boolean;
-  mutateBalances: () => Promise<WalletBalances | undefined>;
-  onEdit: (addresses: { solana?: string; evm?: string }) => void;
-  isSaving: boolean;
+  wallet: Wallet;
   isOwner: boolean;
+  onEdit: (
+    wallet: Wallet,
+    data: { name: string; solana?: string; evm?: string },
+  ) => Promise<void>;
+  onDelete: (wallet: Wallet) => void;
+  organizationId: number;
 }) {
   const [copiedAddress, setCopiedAddress] = useState<string | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+
+  const {
+    data: balances,
+    isLoading: balancesLoading,
+    mutate: mutateBalances,
+  } = useSWR<WalletBalances>(`/api/wallets/${wallet.id}/balances`, api.get, {
+    refreshInterval: 60000,
+  });
+
+  const addresses = extractAddresses(wallet.wallet_config);
 
   const copyToClipboard = async (address: string) => {
     await navigator.clipboard.writeText(address);
@@ -260,187 +554,165 @@ function WalletBalanceDisplay({
     }
   };
 
-  const getAddressForChain = (chainId: string) => {
-    if (!walletData?.addresses) return null;
-    if (chainId === "solana") return walletData.addresses.solana;
-    return walletData.addresses.evm;
-  };
-
   const getBalancesForChain = (chainId: string): ChainBalances | null => {
     if (!balances) return null;
     return balances[chainId as keyof WalletBalances];
   };
 
-  // Filter to only show chains that have addresses
   const availableChains = CHAINS.filter((chain) => {
-    const addr = getAddressForChain(chain.id);
-    return addr !== null;
+    if (chain.id === "solana") return addresses.solana !== null;
+    return addresses.evm !== null;
   });
 
-  // Group by address type for display
-  const solanaAddress = walletData.addresses.solana;
-  const evmAddress = walletData.addresses.evm;
+  const handleSave = async (data: {
+    name: string;
+    solana?: string;
+    evm?: string;
+  }) => {
+    setIsSaving(true);
+    await onEdit(wallet, data);
+    await mutateBalances();
+    setIsSaving(false);
+    setShowEditModal(false);
+  };
 
   return (
-    <div className="space-y-6">
+    <div className="rounded-lg border border-gray-6 bg-gray-2 p-6 space-y-4">
       <div className="flex items-center justify-between">
-        <div />
+        <div>
+          <h3 className="font-medium text-gray-12">{wallet.name}</h3>
+          <p className="text-xs text-gray-11">
+            Created {new Date(wallet.created_at).toLocaleDateString()}
+          </p>
+        </div>
         <div className="flex items-center gap-2">
           {isOwner && (
             <button
               onClick={() => setShowEditModal(true)}
-              className="flex items-center gap-2 rounded-md border border-gray-6 px-3 py-2 text-sm text-gray-11 hover:bg-gray-3"
+              className="rounded-md border border-gray-6 px-3 py-1.5 text-xs text-gray-11 hover:bg-gray-3"
             >
-              Edit Addresses
+              Edit
             </button>
           )}
           <button
             onClick={handleRefresh}
             disabled={isRefreshing}
-            className="flex items-center gap-2 rounded-md border border-gray-6 px-3 py-2 text-sm text-gray-11 hover:bg-gray-3 disabled:opacity-50"
+            className="flex items-center gap-1.5 rounded-md border border-gray-6 px-3 py-1.5 text-xs text-gray-11 hover:bg-gray-3 disabled:opacity-50"
           >
             <ReloadIcon
-              className={`h-4 w-4 ${isRefreshing ? "animate-spin" : ""}`}
+              className={`h-3 w-3 ${isRefreshing ? "animate-spin" : ""}`}
             />
-            {isRefreshing ? "Refreshing..." : "Refresh Balances"}
+            Refresh
           </button>
+          {isOwner && (
+            <button
+              onClick={() => onDelete(wallet)}
+              className="rounded p-1.5 text-gray-11 hover:bg-red-900/30 hover:text-red-400"
+              title="Delete wallet"
+            >
+              <TrashIcon className="h-4 w-4" />
+            </button>
+          )}
         </div>
       </div>
 
-      {/* Addresses */}
-      <div className="space-y-3">
-        {solanaAddress && (
-          <div className="rounded-lg border border-gray-6 bg-gray-2 p-4">
-            <label className="block text-xs text-gray-11 mb-2">
-              Solana Address
-            </label>
+      <div className="space-y-2">
+        {(() => {
+          const solana = addresses.solana;
+          if (!solana) return null;
+          return (
             <div className="flex items-center gap-2">
-              <code className="flex-1 rounded-md border border-gray-6 bg-gray-3 px-3 py-2 font-mono text-sm text-gray-12 overflow-hidden text-ellipsis">
-                {solanaAddress}
+              <span className="text-xs text-gray-11 w-16">Solana:</span>
+              <code className="flex-1 rounded border border-gray-6 bg-gray-3 px-2 py-1 font-mono text-xs text-gray-12 truncate">
+                {solana}
               </code>
-              <Tooltip.Provider delayDuration={200}>
-                <Tooltip.Root>
-                  <Tooltip.Trigger asChild>
-                    <button
-                      onClick={() => copyToClipboard(solanaAddress)}
-                      className="rounded-md border border-gray-6 p-2 text-gray-11 hover:bg-gray-3 hover:text-gray-12"
-                    >
-                      {copiedAddress === solanaAddress ? (
-                        <CheckIcon className="h-4 w-4 text-green-400" />
-                      ) : (
-                        <CopyIcon className="h-4 w-4" />
-                      )}
-                    </button>
-                  </Tooltip.Trigger>
-                  <Tooltip.Portal>
-                    <Tooltip.Content
-                      className="rounded bg-gray-12 px-2 py-1 text-xs text-gray-1"
-                      sideOffset={5}
-                    >
-                      {copiedAddress === solanaAddress ? "Copied!" : "Copy"}
-                      <Tooltip.Arrow className="fill-gray-12" />
-                    </Tooltip.Content>
-                  </Tooltip.Portal>
-                </Tooltip.Root>
-              </Tooltip.Provider>
+              <button
+                onClick={() => copyToClipboard(solana)}
+                className="rounded p-1 text-gray-11 hover:bg-gray-3 hover:text-gray-12"
+              >
+                {copiedAddress === solana ? (
+                  <CheckIcon className="h-3.5 w-3.5 text-green-400" />
+                ) : (
+                  <CopyIcon className="h-3.5 w-3.5" />
+                )}
+              </button>
             </div>
-          </div>
-        )}
-
-        {evmAddress && (
-          <div className="rounded-lg border border-gray-6 bg-gray-2 p-4">
-            <label className="block text-xs text-gray-11 mb-2">
-              EVM Address{" "}
-              <span className="text-gray-8">(Base, Polygon, Monad)</span>
-            </label>
+          );
+        })()}
+        {(() => {
+          const evm = addresses.evm;
+          if (!evm) return null;
+          return (
             <div className="flex items-center gap-2">
-              <code className="flex-1 rounded-md border border-gray-6 bg-gray-3 px-3 py-2 font-mono text-sm text-gray-12 overflow-hidden text-ellipsis">
-                {evmAddress}
+              <span className="text-xs text-gray-11 w-16">EVM:</span>
+              <code className="flex-1 rounded border border-gray-6 bg-gray-3 px-2 py-1 font-mono text-xs text-gray-12 truncate">
+                {evm}
               </code>
-              <Tooltip.Provider delayDuration={200}>
-                <Tooltip.Root>
-                  <Tooltip.Trigger asChild>
-                    <button
-                      onClick={() => copyToClipboard(evmAddress)}
-                      className="rounded-md border border-gray-6 p-2 text-gray-11 hover:bg-gray-3 hover:text-gray-12"
-                    >
-                      {copiedAddress === evmAddress ? (
-                        <CheckIcon className="h-4 w-4 text-green-400" />
-                      ) : (
-                        <CopyIcon className="h-4 w-4" />
-                      )}
-                    </button>
-                  </Tooltip.Trigger>
-                  <Tooltip.Portal>
-                    <Tooltip.Content
-                      className="rounded bg-gray-12 px-2 py-1 text-xs text-gray-1"
-                      sideOffset={5}
-                    >
-                      {copiedAddress === evmAddress ? "Copied!" : "Copy"}
-                      <Tooltip.Arrow className="fill-gray-12" />
-                    </Tooltip.Content>
-                  </Tooltip.Portal>
-                </Tooltip.Root>
-              </Tooltip.Provider>
+              <button
+                onClick={() => copyToClipboard(evm)}
+                className="rounded p-1 text-gray-11 hover:bg-gray-3 hover:text-gray-12"
+              >
+                {copiedAddress === evm ? (
+                  <CheckIcon className="h-3.5 w-3.5 text-green-400" />
+                ) : (
+                  <CopyIcon className="h-3.5 w-3.5" />
+                )}
+              </button>
             </div>
-          </div>
-        )}
+          );
+        })()}
       </div>
 
-      {/* Balances Grid */}
-      <div>
-        <label className="block text-sm text-gray-11 mb-3">Balances</label>
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          {availableChains.map((chain) => {
-            const chainBalances = getBalancesForChain(chain.id);
-            return (
-              <div
-                key={chain.id}
-                className="rounded-lg border border-gray-6 bg-gray-2 p-4"
-              >
-                <p className="text-sm font-medium text-gray-12 mb-3">
-                  {chain.name}
-                </p>
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs text-gray-11">{chain.native}</span>
-                    <span className="font-mono text-sm text-gray-12">
-                      {balancesLoading ? (
-                        <span className="inline-block h-4 w-12 animate-pulse rounded bg-gray-5" />
-                      ) : (
-                        (chainBalances?.native ?? "-")
-                      )}
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs text-gray-11">USDC</span>
-                    <span className="font-mono text-sm text-gray-12">
-                      {balancesLoading ? (
-                        <span className="inline-block h-4 w-12 animate-pulse rounded bg-gray-5" />
-                      ) : chainBalances?.usdc ? (
-                        `$${chainBalances.usdc}`
-                      ) : (
-                        "-"
-                      )}
-                    </span>
-                  </div>
+      <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+        {availableChains.map((chain) => {
+          const chainBalances = getBalancesForChain(chain.id);
+          return (
+            <div
+              key={chain.id}
+              className="rounded border border-gray-6 bg-gray-3 p-3"
+            >
+              <p className="text-xs font-medium text-gray-12 mb-2">
+                {chain.name}
+              </p>
+              <div className="space-y-1">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-gray-11">{chain.native}</span>
+                  <span className="font-mono text-xs text-gray-12">
+                    {balancesLoading ? (
+                      <span className="inline-block h-3 w-10 animate-pulse rounded bg-gray-5" />
+                    ) : (
+                      (chainBalances?.native ?? "-")
+                    )}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-gray-11">USDC</span>
+                  <span className="font-mono text-xs text-gray-12">
+                    {balancesLoading ? (
+                      <span className="inline-block h-3 w-10 animate-pulse rounded bg-gray-5" />
+                    ) : chainBalances?.usdc ? (
+                      `$${chainBalances.usdc}`
+                    ) : (
+                      "-"
+                    )}
+                  </span>
                 </div>
               </div>
-            );
-          })}
-        </div>
+            </div>
+          );
+        })}
       </div>
 
-      <WalletAddressModal
+      <EditWalletModal
         open={showEditModal}
         onOpenChange={setShowEditModal}
-        onSave={(addresses) => {
-          onEdit(addresses);
-          setShowEditModal(false);
-        }}
+        onSave={handleSave}
         isSaving={isSaving}
-        initialSolana={solanaAddress || ""}
-        initialEvm={evmAddress || ""}
+        initialName={wallet.name}
+        initialSolana={addresses.solana || ""}
+        initialEvm={addresses.evm || ""}
+        walletId={wallet.id}
+        organizationId={organizationId}
       />
     </div>
   );
@@ -449,7 +721,11 @@ function WalletBalanceDisplay({
 export default function WalletsPage() {
   const { currentOrg, user } = useAuth();
   const { toast } = useToast();
+  const [showCreateModal, setShowCreateModal] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [walletToDelete, setWalletToDelete] = useState<Wallet | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const currentRole = user?.organizations.find(
     (o) => o.id === currentOrg?.id,
@@ -457,53 +733,105 @@ export default function WalletsPage() {
   const isOwner = currentRole === "owner" || user?.is_admin;
 
   const {
-    data: walletData,
-    isLoading: walletLoading,
-    mutate: mutateWallet,
-  } = useSWR<WalletData>(
-    currentOrg ? `/api/organizations/${currentOrg.id}/wallet` : null,
+    data: wallets,
+    isLoading: walletsLoading,
+    mutate: mutateWallets,
+  } = useSWR<Wallet[]>(
+    currentOrg ? `/api/wallets/organization/${currentOrg.id}` : null,
     api.get,
   );
 
-  const {
-    data: balances,
-    isLoading: balancesLoading,
-    mutate: mutateBalances,
-  } = useSWR<WalletBalances>(
-    currentOrg && walletData?.hasWallet
-      ? `/api/organizations/${currentOrg.id}/wallet/balances`
-      : null,
-    api.get,
-    { refreshInterval: 60000 },
-  );
-
-  const handleSaveWallet = async (addresses: {
+  const handleCreateWallet = async (data: {
+    name: string;
     solana?: string;
     evm?: string;
   }) => {
     if (!currentOrg) return;
     setIsSaving(true);
     try {
-      const walletConfig = buildAddressOnlyConfig(addresses);
-      await api.put(`/api/organizations/${currentOrg.id}/wallet`, {
+      const walletConfig = buildAddressOnlyConfig({
+        solana: data.solana,
+        evm: data.evm,
+      });
+      await api.post(`/api/wallets/organization/${currentOrg.id}`, {
+        name: data.name,
         wallet_config: walletConfig,
       });
-      await mutateWallet();
-      await mutateBalances();
+      await mutateWallets();
+      setShowCreateModal(false);
       toast({
-        title: "Wallet configured",
-        description: "Your wallet addresses have been saved successfully.",
+        title: "Wallet created",
+        description: "Your wallet has been created successfully.",
         variant: "success",
       });
     } catch (error) {
       toast({
         title: "Error",
         description:
-          error instanceof Error ? error.message : "Failed to save wallet",
+          error instanceof Error ? error.message : "Failed to create wallet",
         variant: "error",
       });
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  const handleEditWallet = async (
+    wallet: Wallet,
+    data: { name: string; solana?: string; evm?: string },
+  ) => {
+    try {
+      const walletConfig = buildAddressOnlyConfig({
+        solana: data.solana,
+        evm: data.evm,
+      });
+      await api.put(`/api/wallets/${wallet.id}`, {
+        name: data.name,
+        wallet_config: walletConfig,
+      });
+      await mutateWallets();
+      toast({
+        title: "Wallet updated",
+        description: "Your wallet has been updated.",
+        variant: "success",
+      });
+    } catch (error) {
+      toast({
+        title: "Error",
+        description:
+          error instanceof Error ? error.message : "Failed to update wallet",
+        variant: "error",
+      });
+    }
+  };
+
+  const handleDeleteClick = (wallet: Wallet) => {
+    setWalletToDelete(wallet);
+    setDeleteDialogOpen(true);
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!walletToDelete) return;
+    setIsDeleting(true);
+    try {
+      await api.delete(`/api/wallets/${walletToDelete.id}`);
+      await mutateWallets();
+      setDeleteDialogOpen(false);
+      setWalletToDelete(null);
+      toast({
+        title: "Wallet deleted",
+        description: "The wallet has been deleted.",
+        variant: "success",
+      });
+    } catch (error) {
+      toast({
+        title: "Error",
+        description:
+          error instanceof Error ? error.message : "Failed to delete wallet",
+        variant: "error",
+      });
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -515,47 +843,121 @@ export default function WalletsPage() {
     );
   }
 
-  const showSetup = !walletData?.hasWallet;
-
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold text-gray-12">
-          Organization Wallet
-        </h1>
-        <p className="text-sm text-gray-11">
-          Manage crypto wallets for {currentOrg.name}
-        </p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-semibold text-gray-12">Wallets</h1>
+          <p className="text-sm text-gray-11">
+            Manage crypto wallets for {currentOrg.name}
+          </p>
+        </div>
+        {isOwner && (
+          <button
+            onClick={() => setShowCreateModal(true)}
+            className="inline-flex items-center gap-2 rounded-md bg-white px-3 py-2 text-sm font-medium text-black shadow-button transition-colors hover:bg-white/90"
+          >
+            <PlusIcon className="h-4 w-4" />
+            New Wallet
+          </button>
+        )}
       </div>
 
-      {walletLoading ? (
+      {walletsLoading ? (
         <div className="flex items-center justify-center py-12">
           <div className="h-8 w-8 animate-spin rounded-full border-2 border-gray-6 border-t-accent-9" />
         </div>
-      ) : showSetup ? (
-        isOwner ? (
-          <WalletSetup onSave={handleSaveWallet} isSaving={isSaving} />
-        ) : (
-          <div className="rounded-lg border border-gray-6 bg-gray-2 p-8 text-center">
-            <h2 className="mb-2 text-lg font-medium text-gray-12">
-              No wallet configured
-            </h2>
-            <p className="text-sm text-amber-400">
-              Only organization owners can configure wallets.
-            </p>
-          </div>
-        )
+      ) : wallets?.length ? (
+        <div className="space-y-4">
+          {wallets.map((wallet) => (
+            <WalletCard
+              key={wallet.id}
+              wallet={wallet}
+              isOwner={isOwner ?? false}
+              onEdit={handleEditWallet}
+              onDelete={handleDeleteClick}
+              organizationId={currentOrg.id}
+            />
+          ))}
+        </div>
+      ) : isOwner ? (
+        <div className="rounded-lg border border-gray-6 bg-gray-2 p-8 text-center">
+          <h2 className="mb-2 text-lg font-medium text-gray-12">
+            No wallets configured
+          </h2>
+          <p className="mb-6 text-sm text-gray-11 max-w-md mx-auto">
+            Add your wallet addresses to receive payments on Solana and EVM
+            chains.
+          </p>
+          <button
+            onClick={() => setShowCreateModal(true)}
+            className="inline-flex items-center gap-2 rounded-md bg-white px-6 py-2.5 text-sm font-medium text-black shadow-button transition-colors hover:bg-white/90"
+          >
+            <PlusIcon className="h-4 w-4" />
+            Create your first wallet
+          </button>
+        </div>
       ) : (
-        <WalletBalanceDisplay
-          walletData={walletData as WalletData}
-          balances={balances}
-          balancesLoading={balancesLoading}
-          mutateBalances={mutateBalances}
-          onEdit={handleSaveWallet}
-          isSaving={isSaving}
-          isOwner={isOwner ?? false}
-        />
+        <div className="rounded-lg border border-gray-6 bg-gray-2 p-8 text-center">
+          <h2 className="mb-2 text-lg font-medium text-gray-12">
+            No wallets configured
+          </h2>
+          <p className="text-sm text-amber-400">
+            Only organization owners can configure wallets.
+          </p>
+        </div>
       )}
+
+      <CreateWalletModal
+        open={showCreateModal}
+        onOpenChange={setShowCreateModal}
+        onSave={handleCreateWallet}
+        isSaving={isSaving}
+        organizationId={currentOrg.id}
+      />
+
+      <Dialog.Root open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <Dialog.Portal>
+          <Dialog.Overlay className="fixed inset-0 bg-black/50" />
+          <Dialog.Content className="fixed left-1/2 top-1/2 w-full max-w-md -translate-x-1/2 -translate-y-1/2 rounded-lg border border-gray-6 bg-gray-2 p-6 shadow-lg">
+            <div className="flex items-center justify-between">
+              <Dialog.Title className="text-lg font-semibold text-gray-12">
+                Delete Wallet
+              </Dialog.Title>
+              <Dialog.Close className="rounded p-1 text-gray-11 hover:bg-gray-4 hover:text-gray-12">
+                <Cross2Icon className="h-4 w-4" />
+              </Dialog.Close>
+            </div>
+            <Dialog.Description asChild>
+              <div className="mt-4 space-y-3 text-sm text-gray-11">
+                <p>
+                  Are you sure you want to delete{" "}
+                  <span className="font-medium text-gray-12">
+                    {walletToDelete?.name}
+                  </span>
+                  ?
+                </p>
+                <p>This action cannot be undone.</p>
+              </div>
+            </Dialog.Description>
+            <div className="mt-6 flex justify-end gap-3">
+              <button
+                onClick={() => setDeleteDialogOpen(false)}
+                className="rounded-md px-3 py-2 text-sm font-medium text-gray-11 hover:bg-gray-4 hover:text-gray-12"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleDeleteConfirm}
+                disabled={isDeleting}
+                className="rounded-md bg-red-600 px-3 py-2 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-50"
+              >
+                {isDeleting ? "Deleting..." : "Delete"}
+              </button>
+            </div>
+          </Dialog.Content>
+        </Dialog.Portal>
+      </Dialog.Root>
     </div>
   );
 }

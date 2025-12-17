@@ -33,9 +33,8 @@ interface AdminSettings {
     solana: string | null;
     evm: string | null;
   };
-  feePercentage: number;
-  defaultSolNativeAmount: number;
-  defaultSolUsdcAmount: number;
+  minimumBalanceSol: number;
+  minimumBalanceUsdc: number;
   updatedAt: string;
 }
 
@@ -315,116 +314,6 @@ function WalletSetupModal({
         </Dialog.Content>
       </Dialog.Portal>
     </Dialog.Root>
-  );
-}
-
-function FeePercentageEditor({
-  currentFee,
-  onSave,
-  isSaving,
-}: {
-  currentFee: number;
-  onSave: (fee: number) => Promise<void>;
-  isSaving: boolean;
-}) {
-  const [isEditing, setIsEditing] = useState(false);
-  const [value, setValue] = useState((currentFee * 100).toFixed(2));
-
-  const handleSave = async () => {
-    const fee = parseFloat(value) / 100;
-    if (isNaN(fee) || fee < 0 || fee > 1) {
-      return;
-    }
-    await onSave(fee);
-    setIsEditing(false);
-  };
-
-  const handleCancel = () => {
-    setValue((currentFee * 100).toFixed(2));
-    setIsEditing(false);
-  };
-
-  const increment = () => {
-    const current = parseFloat(value) || 0;
-    const newVal = Math.min(100, current + 0.5);
-    setValue(newVal.toFixed(2).replace(/\.?0+$/, "") || "0");
-  };
-
-  const decrement = () => {
-    const current = parseFloat(value) || 0;
-    const newVal = Math.max(0, current - 0.5);
-    setValue(newVal.toFixed(2).replace(/\.?0+$/, "") || "0");
-  };
-
-  return (
-    <div className="rounded-lg border border-gray-6 bg-gray-2 p-4">
-      <label className="mb-2 block text-sm text-gray-11">
-        Platform Fee Percentage
-      </label>
-      {isEditing ? (
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-0 rounded-md border border-gray-6 bg-gray-3">
-            <button
-              type="button"
-              onClick={decrement}
-              className="flex h-9 w-9 items-center justify-center text-gray-11 hover:bg-gray-4 hover:text-gray-12 transition-colors rounded-l-md"
-            >
-              <MinusIcon className="h-4 w-4" />
-            </button>
-            <div className="flex items-center">
-              <input
-                type="text"
-                inputMode="decimal"
-                value={value}
-                onChange={(e) => {
-                  const val = e.target.value;
-                  if (val === "" || /^\d*\.?\d*$/.test(val)) {
-                    setValue(val);
-                  }
-                }}
-                className="w-16 bg-transparent py-2 text-center text-sm text-gray-12 focus:outline-none"
-              />
-              <span className="pr-2 text-xs text-gray-11">%</span>
-            </div>
-            <button
-              type="button"
-              onClick={increment}
-              className="flex h-9 w-9 items-center justify-center text-gray-11 hover:bg-gray-4 hover:text-gray-12 transition-colors rounded-r-md"
-            >
-              <PlusIcon className="h-4 w-4" />
-            </button>
-          </div>
-          <button
-            onClick={handleSave}
-            disabled={isSaving}
-            className="inline-flex items-center gap-1 rounded-md bg-white px-3 py-1.5 text-sm font-medium text-black disabled:opacity-50"
-          >
-            <CheckIcon className="h-3 w-3" />
-            {isSaving ? "Saving..." : "Save"}
-          </button>
-          <button
-            onClick={handleCancel}
-            className="inline-flex items-center gap-1 rounded-md border border-gray-6 px-3 py-1.5 text-sm text-gray-11 hover:bg-gray-3"
-          >
-            <Cross2Icon className="h-3 w-3" />
-            Cancel
-          </button>
-        </div>
-      ) : (
-        <button
-          onClick={() => setIsEditing(true)}
-          className="group flex items-center gap-2"
-        >
-          <span className="text-2xl font-semibold text-gray-12">
-            {(currentFee * 100).toFixed(2)}%
-          </span>
-          <Pencil1Icon className="h-4 w-4 text-gray-8 opacity-0 group-hover:opacity-100 transition-opacity" />
-        </button>
-      )}
-      <p className="mt-2 text-xs text-gray-11">
-        This percentage is deducted from each payout before it reaches the user.
-      </p>
-    </div>
   );
 }
 
@@ -811,38 +700,16 @@ export default function AdminSettingsPage() {
     }
   };
 
-  const handleSaveFee = async (feePercentage: number) => {
-    setIsSaving(true);
-    try {
-      await api.put("/api/admin/settings", { fee_percentage: feePercentage });
-      await mutateSettings();
-      toast({
-        title: "Fee updated",
-        description: `Platform fee set to ${(feePercentage * 100).toFixed(2)}%`,
-        variant: "success",
-      });
-    } catch (error) {
-      toast({
-        title: "Error",
-        description:
-          error instanceof Error ? error.message : "Failed to update fee",
-        variant: "error",
-      });
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
-  const handleSaveSolNative = async (amount: number) => {
+  const handleSaveMinSol = async (amount: number) => {
     setIsSaving(true);
     try {
       await api.put("/api/admin/settings", {
-        default_sol_native_amount: amount,
+        minimum_balance_sol: amount,
       });
       await mutateSettings();
       toast({
-        title: "SOL amount updated",
-        description: `Default SOL funding set to ${amount} SOL`,
+        title: "Minimum SOL updated",
+        description: `Minimum SOL balance set to ${amount} SOL`,
         variant: "success",
       });
     } catch (error) {
@@ -851,7 +718,7 @@ export default function AdminSettingsPage() {
         description:
           error instanceof Error
             ? error.message
-            : "Failed to update SOL amount",
+            : "Failed to update minimum SOL",
         variant: "error",
       });
     } finally {
@@ -859,14 +726,14 @@ export default function AdminSettingsPage() {
     }
   };
 
-  const handleSaveSolUsdc = async (amount: number) => {
+  const handleSaveMinUsdc = async (amount: number) => {
     setIsSaving(true);
     try {
-      await api.put("/api/admin/settings", { default_sol_usdc_amount: amount });
+      await api.put("/api/admin/settings", { minimum_balance_usdc: amount });
       await mutateSettings();
       toast({
-        title: "USDC amount updated",
-        description: `Default USDC funding set to ${amount} USDC`,
+        title: "Minimum USDC updated",
+        description: `Minimum USDC balance set to ${amount} USDC`,
         variant: "success",
       });
     } catch (error) {
@@ -875,7 +742,7 @@ export default function AdminSettingsPage() {
         description:
           error instanceof Error
             ? error.message
-            : "Failed to update USDC amount",
+            : "Failed to update minimum USDC",
         variant: "error",
       });
     } finally {
@@ -919,34 +786,29 @@ export default function AdminSettingsPage() {
             </div>
           </section>
 
-          {/* Fee & Funding Defaults */}
+          {/* Minimum Balance Settings */}
           <section>
-            <div className="grid gap-4 sm:grid-cols-3">
-              <FeePercentageEditor
-                currentFee={settings.feePercentage}
-                onSave={handleSaveFee}
-                isSaving={isSaving}
-              />
+            <div className="grid gap-4 sm:grid-cols-2">
               <FundingAmountEditor
-                label="Default SOL Amount"
-                description="SOL sent to new tenant wallets for transaction fees."
-                currentAmount={settings.defaultSolNativeAmount}
+                label="Minimum SOL Balance"
+                description="Minimum SOL required in wallet to create proxies."
+                currentAmount={settings.minimumBalanceSol}
                 unit="SOL"
                 min={0.001}
-                max={0.1}
-                step={0.01}
-                onSave={handleSaveSolNative}
+                max={1}
+                step={0.001}
+                onSave={handleSaveMinSol}
                 isSaving={isSaving}
               />
               <FundingAmountEditor
-                label="Default USDC Amount"
-                description="USDC sent to new tenant wallets for initialization."
-                currentAmount={settings.defaultSolUsdcAmount}
+                label="Minimum USDC Balance"
+                description="Minimum USDC required in wallet to create proxies."
+                currentAmount={settings.minimumBalanceUsdc}
                 unit="USDC"
                 min={0.001}
-                max={1}
+                max={100}
                 step={0.01}
-                onSave={handleSaveSolUsdc}
+                onSave={handleSaveMinUsdc}
                 isSaving={isSaving}
               />
             </div>

@@ -61,6 +61,7 @@ step::20::sync-files() {
         --exclude='.DS_Store' \
         --exclude='.tap' \
         --exclude='*.swp' \
+        --exclude='backups' \
         -e "ssh -o StrictHostKeyChecking=off -o UserKnownHostsFile=/dev/null -i $PRIVKEY" \
         ./ "$SSH_USER@$SSH_HOST:$REMOTE_DIR/"
 }
