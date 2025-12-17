@@ -136,8 +136,8 @@ export function EndpointsTab({
           <div className="h-8 w-8 animate-spin rounded-full border-2 border-gray-6 border-t-accent-9" />
         </div>
       ) : endpoints?.length ? (
-        <div className="overflow-hidden rounded-lg border border-gray-6">
-          <table className="w-full">
+        <div className="overflow-x-auto rounded-lg border border-gray-6">
+          <table className="w-full min-w-[700px]">
             <thead className="bg-gray-3">
               <tr>
                 <th className="px-4 py-3 text-left text-sm font-medium text-gray-11">

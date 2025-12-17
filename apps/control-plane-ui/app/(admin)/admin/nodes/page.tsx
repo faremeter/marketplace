@@ -90,82 +90,86 @@ function NodeCard({ node }: { node: Node }) {
             <div className="h-6 w-6 animate-spin rounded-full border-2 border-gray-6 border-t-accent-9" />
           </div>
         ) : tenants?.length ? (
-          <table className="w-full">
-            <thead>
-              <tr className="border-b border-gray-6">
-                <th className="pb-2 text-left text-xs font-medium text-gray-11">
-                  Tenant
-                </th>
-                <th className="pb-2 text-left text-xs font-medium text-gray-11"></th>
-                <th className="pb-2 text-left text-xs font-medium text-gray-11">
-                  Backend URL
-                </th>
-                <th className="pb-2 text-left text-xs font-medium text-gray-11">
-                  Active
-                </th>
-                <th className="pb-2 text-left text-xs font-medium text-gray-11">
-                  TLS Cert
-                </th>
-                <th className="pb-2 text-left text-xs font-medium text-gray-11">
-                  Funding
-                </th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-6">
-              {tenants.map((tenant) => (
-                <tr key={tenant.id}>
-                  <td className="py-2 align-middle">
-                    <span className="text-sm font-medium text-gray-12">
-                      {tenant.name}
-                    </span>
-                  </td>
-                  <td className="py-2 align-middle">
-                    {tenant.is_primary && (
-                      <span className="inline-flex rounded-full border border-blue-800 bg-blue-900/50 px-2 py-0.5 text-xs text-blue-400">
-                        Primary
-                      </span>
-                    )}
-                  </td>
-                  <td className="py-2 align-middle">
-                    <Tooltip.Provider delayDuration={200}>
-                      <Tooltip.Root>
-                        <Tooltip.Trigger asChild>
-                          <code className="rounded bg-gray-4 px-1.5 py-0.5 text-xs text-gray-11 cursor-default">
-                            {tenant.backend_url.length > 50
-                              ? `${tenant.backend_url.slice(0, 50)}...`
-                              : tenant.backend_url}
-                          </code>
-                        </Tooltip.Trigger>
-                        <Tooltip.Portal>
-                          <Tooltip.Content
-                            className="rounded bg-gray-12 px-2 py-1 text-xs text-gray-1"
-                            sideOffset={5}
-                          >
-                            {tenant.backend_url}
-                            <Tooltip.Arrow className="fill-gray-12" />
-                          </Tooltip.Content>
-                        </Tooltip.Portal>
-                      </Tooltip.Root>
-                    </Tooltip.Provider>
-                  </td>
-                  <td className="py-2 align-middle">
-                    <InlineActiveToggle
-                      tenantId={tenant.id}
-                      tenantName={tenant.name}
-                      isActive={tenant.is_active}
-                      onUpdate={() => mutate()}
-                    />
-                  </td>
-                  <td className="py-2 align-middle">
-                    <CertStatusBadge status={tenant.cert_status} />
-                  </td>
-                  <td className="py-2 align-middle">
-                    <FundingStatusBadge status={tenant.wallet_funding_status} />
-                  </td>
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[700px]">
+              <thead>
+                <tr className="border-b border-gray-6">
+                  <th className="pb-2 text-left text-xs font-medium text-gray-11">
+                    Tenant
+                  </th>
+                  <th className="pb-2 text-left text-xs font-medium text-gray-11"></th>
+                  <th className="pb-2 text-left text-xs font-medium text-gray-11">
+                    Backend URL
+                  </th>
+                  <th className="pb-2 text-left text-xs font-medium text-gray-11">
+                    Active
+                  </th>
+                  <th className="pb-2 text-left text-xs font-medium text-gray-11">
+                    TLS Cert
+                  </th>
+                  <th className="pb-2 text-left text-xs font-medium text-gray-11">
+                    Funding
+                  </th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody className="divide-y divide-gray-6">
+                {tenants.map((tenant) => (
+                  <tr key={tenant.id}>
+                    <td className="py-2 align-middle">
+                      <span className="text-sm font-medium text-gray-12">
+                        {tenant.name}
+                      </span>
+                    </td>
+                    <td className="py-2 align-middle">
+                      {tenant.is_primary && (
+                        <span className="inline-flex rounded-full border border-blue-800 bg-blue-900/50 px-2 py-0.5 text-xs text-blue-400">
+                          Primary
+                        </span>
+                      )}
+                    </td>
+                    <td className="py-2 align-middle">
+                      <Tooltip.Provider delayDuration={200}>
+                        <Tooltip.Root>
+                          <Tooltip.Trigger asChild>
+                            <code className="rounded bg-gray-4 px-1.5 py-0.5 text-xs text-gray-11 cursor-default">
+                              {tenant.backend_url.length > 50
+                                ? `${tenant.backend_url.slice(0, 50)}...`
+                                : tenant.backend_url}
+                            </code>
+                          </Tooltip.Trigger>
+                          <Tooltip.Portal>
+                            <Tooltip.Content
+                              className="rounded bg-gray-12 px-2 py-1 text-xs text-gray-1"
+                              sideOffset={5}
+                            >
+                              {tenant.backend_url}
+                              <Tooltip.Arrow className="fill-gray-12" />
+                            </Tooltip.Content>
+                          </Tooltip.Portal>
+                        </Tooltip.Root>
+                      </Tooltip.Provider>
+                    </td>
+                    <td className="py-2 align-middle">
+                      <InlineActiveToggle
+                        tenantId={tenant.id}
+                        tenantName={tenant.name}
+                        isActive={tenant.is_active}
+                        onUpdate={() => mutate()}
+                      />
+                    </td>
+                    <td className="py-2 align-middle">
+                      <CertStatusBadge status={tenant.cert_status} />
+                    </td>
+                    <td className="py-2 align-middle">
+                      <FundingStatusBadge
+                        status={tenant.wallet_funding_status}
+                      />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         ) : (
           <p className="py-4 text-center text-sm text-gray-11">
             No tenants assigned
