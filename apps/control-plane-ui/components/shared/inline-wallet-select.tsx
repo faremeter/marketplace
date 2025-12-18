@@ -101,6 +101,16 @@ export function InlineWalletSelect({
           sideOffset={4}
         >
           <Select.Viewport className="p-1">
+            <Select.Item
+              value="none"
+              className="relative flex w-full cursor-pointer select-none items-center justify-between gap-4 rounded px-8 py-2 text-sm text-gray-11 outline-none hover:bg-gray-4 data-[highlighted]:bg-gray-4"
+            >
+              <Select.ItemIndicator className="absolute left-2 inline-flex items-center">
+                <CheckIcon className="h-4 w-4 text-accent-11" />
+              </Select.ItemIndicator>
+              <Select.ItemText>No wallet</Select.ItemText>
+            </Select.Item>
+
             {wallets?.length === 0 && (
               <div className="px-8 py-2 text-sm text-gray-11">
                 No wallets available

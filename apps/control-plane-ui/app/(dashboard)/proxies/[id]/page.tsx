@@ -13,6 +13,7 @@ import { InlineActiveToggle } from "@/components/shared/inline-active-toggle";
 import { InlineAuthEdit } from "@/components/shared/inline-auth-edit";
 import { InlinePriceEdit } from "@/components/shared/inline-price-edit";
 import { InlineSchemeEdit } from "@/components/shared/inline-scheme-edit";
+import { InlineWalletSelect } from "@/components/shared/inline-wallet-select";
 import { EndpointsTab } from "@/components/proxy-endpoints/endpoints-tab";
 
 interface TenantNode {
@@ -28,6 +29,7 @@ interface Tenant {
   is_active: boolean;
   status: string;
   wallet_id: number | null;
+  wallet_name: string | null;
   wallet_funding_status: string | null;
   default_price_usdc: number;
   default_scheme: string;
@@ -81,6 +83,20 @@ function getStatus(tenant: Tenant): {
 
     return {
       label: "Initializing",
+      color: "bg-yellow-900/50 text-yellow-400 border-yellow-800",
+    };
+  }
+
+  if (!tenant.wallet_id) {
+    return {
+      label: "No Wallet",
+      color: "bg-red-900/50 text-red-400 border-red-800",
+    };
+  }
+
+  if (tenant.wallet_funding_status !== "funded") {
+    return {
+      label: "Unfunded",
       color: "bg-yellow-900/50 text-yellow-400 border-yellow-800",
     };
   }
@@ -287,6 +303,19 @@ export default function ProxyDetailPage() {
                       isActive={tenant.is_active}
                       onUpdate={() => mutateTenants()}
                       apiEndpoint={apiEndpoint}
+                    />
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-gray-11">Wallet</dt>
+                  <dd className="mt-1">
+                    <InlineWalletSelect
+                      tenantName={tenant.name}
+                      organizationId={currentOrg.id}
+                      currentWalletId={tenant.wallet_id}
+                      currentWalletName={tenant.wallet_name}
+                      apiEndpoint={apiEndpoint}
+                      onUpdate={() => mutateTenants()}
                     />
                   </dd>
                 </div>
