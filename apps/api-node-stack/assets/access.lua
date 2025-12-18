@@ -83,7 +83,7 @@ if tenant_config.endpoints then
     end
 end
 
-if scheme == "free" then
+if scheme == "free" or price == 0 then
     ngx.log(ngx.INFO, "Free endpoint: ", tenant_name, " ", ngx.var.uri)
     return
 end

@@ -12,6 +12,8 @@ interface AddEndpointDialogProps {
   tenantId: number;
   hasOpenApiSpec: boolean;
   onSuccess: () => void;
+  defaultPriceUsdc: number;
+  defaultScheme: string;
 }
 
 interface ValidatePatternResponse {
@@ -28,6 +30,8 @@ export function AddEndpointDialog({
   tenantId,
   hasOpenApiSpec,
   onSuccess,
+  defaultPriceUsdc,
+  defaultScheme,
 }: AddEndpointDialogProps) {
   const [pathPattern, setPathPattern] = useState("");
   const [priceUsdc, setPriceUsdc] = useState("");
@@ -239,9 +243,7 @@ export function AddEndpointDialog({
                         0,
                         parseFloat(priceUsdc || "0") - 0.01,
                       );
-                      setPriceUsdc(
-                        val === 0 ? "" : val.toFixed(6).replace(/\.?0+$/, ""),
-                      );
+                      setPriceUsdc(val.toFixed(3));
                     }}
                     className="flex h-9 w-9 items-center justify-center text-gray-11 hover:bg-gray-4 hover:text-gray-12 transition-colors rounded-l-md"
                   >
@@ -258,7 +260,7 @@ export function AddEndpointDialog({
                           setPriceUsdc(val);
                         }
                       }}
-                      placeholder="0.01"
+                      placeholder={(defaultPriceUsdc / 1_000_000).toFixed(3)}
                       className="w-full bg-transparent py-2 text-center text-sm text-gray-12 placeholder-gray-9 focus:outline-none"
                     />
                     <span className="pr-2 text-xs text-gray-11">USDC</span>
@@ -267,7 +269,7 @@ export function AddEndpointDialog({
                     type="button"
                     onClick={() => {
                       const val = parseFloat(priceUsdc || "0") + 0.01;
-                      setPriceUsdc(val.toFixed(6).replace(/\.?0+$/, ""));
+                      setPriceUsdc(val.toFixed(3));
                     }}
                     className="flex h-9 w-9 items-center justify-center text-gray-11 hover:bg-gray-4 hover:text-gray-12 transition-colors rounded-r-md"
                   >
@@ -280,11 +282,11 @@ export function AddEndpointDialog({
                   Scheme
                 </label>
                 <select
-                  value={scheme}
+                  value={scheme || defaultScheme}
                   onChange={(e) => setScheme(e.target.value)}
                   className="w-full h-9 rounded-md border border-gray-6 bg-gray-3 px-3 text-sm text-gray-12 focus:border-accent-8 focus:outline-none focus:ring-1 focus:ring-accent-8"
                 >
-                  <option value="">exact</option>
+                  <option value="exact">exact</option>
                   <option value="upto">upto</option>
                 </select>
               </div>

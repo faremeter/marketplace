@@ -191,13 +191,20 @@ function TenantCard({
                   <span className="ml-2 text-xs text-gray-11">(catch-all)</span>
                 </td>
                 <td className="whitespace-nowrap py-2 pl-4 pr-4 text-right align-middle">
-                  <InlinePriceEdit
-                    priceUsdc={tenant.default_price_usdc}
-                    onUpdate={onUpdate}
-                    apiEndpoint={apiEndpoint}
-                    fieldName="default_price_usdc"
-                    label="Default Price"
-                  />
+                  <div className="flex items-center justify-end gap-2">
+                    <InlinePriceEdit
+                      priceUsdc={tenant.default_price_usdc}
+                      onUpdate={onUpdate}
+                      apiEndpoint={apiEndpoint}
+                      fieldName="default_price_usdc"
+                      label="Default Price"
+                    />
+                    {tenant.default_price_usdc === 0 && (
+                      <span className="rounded bg-green-900/50 px-1.5 py-0.5 text-[10px] font-medium text-green-400 border border-green-800">
+                        Free
+                      </span>
+                    )}
+                  </div>
                 </td>
                 <td className="whitespace-nowrap py-2 pl-4 text-right align-middle">
                   <InlineSchemeEdit
@@ -217,16 +224,24 @@ function TenantCard({
                     </code>
                   </td>
                   <td className="whitespace-nowrap py-2 pl-4 pr-4 text-right align-middle">
-                    <InlinePriceEdit
-                      priceUsdc={
-                        endpoint.price_usdc ?? tenant.default_price_usdc
-                      }
-                      defaultPriceUsdc={tenant.default_price_usdc}
-                      onUpdate={() => mutateEndpoints()}
-                      apiEndpoint={`/api/tenants/${tenant.id}/endpoints/${endpoint.id}`}
-                      fieldName="price_usdc"
-                      label="Price"
-                    />
+                    <div className="flex items-center justify-end gap-2">
+                      <InlinePriceEdit
+                        priceUsdc={
+                          endpoint.price_usdc ?? tenant.default_price_usdc
+                        }
+                        defaultPriceUsdc={tenant.default_price_usdc}
+                        onUpdate={() => mutateEndpoints()}
+                        apiEndpoint={`/api/tenants/${tenant.id}/endpoints/${endpoint.id}`}
+                        fieldName="price_usdc"
+                        label="Price"
+                      />
+                      {(endpoint.price_usdc ?? tenant.default_price_usdc) ===
+                        0 && (
+                        <span className="rounded bg-green-900/50 px-1.5 py-0.5 text-[10px] font-medium text-green-400 border border-green-800">
+                          Free
+                        </span>
+                      )}
+                    </div>
                   </td>
                   <td className="whitespace-nowrap py-2 pl-4 text-right align-middle">
                     <InlineSchemeEdit
