@@ -22,6 +22,43 @@ const isDev = process.env.NODE_ENV === "development";
 
 function PlaceholderPage() {
   const { user } = useAuth();
+  const [email, setEmail] = useState("");
+  const [status, setStatus] = useState<
+    "idle" | "loading" | "success" | "error"
+  >("idle");
+  const [errorMessage, setErrorMessage] = useState("");
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!email.trim()) return;
+
+    setStatus("loading");
+    setErrorMessage("");
+
+    try {
+      const res = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:1337"}/api/waitlist`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email: email.trim() }),
+        },
+      );
+
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || "Failed to join waitlist");
+      }
+
+      setStatus("success");
+      setEmail("");
+    } catch (err) {
+      setStatus("error");
+      setErrorMessage(
+        err instanceof Error ? err.message : "Something went wrong",
+      );
+    }
+  };
 
   return (
     <div className="flex min-h-screen flex-col bg-black">
@@ -45,10 +82,43 @@ function PlaceholderPage() {
         </div>
       </header>
 
-      <main className="flex flex-1 items-center justify-center">
+      <main className="flex flex-1 flex-col items-center justify-center px-4">
         <h1 className="text-4xl font-medium tracking-tight text-white sm:text-5xl lg:text-6xl">
           Corbits API
         </h1>
+
+        {status === "success" ? (
+          <div className="mt-10 rounded-lg border border-green-800 bg-green-900/20 px-6 py-4 text-center">
+            <p className="text-sm text-green-400">
+              You&apos;re on the list! We&apos;ll be in touch soon.
+            </p>
+          </div>
+        ) : (
+          <form onSubmit={handleSubmit} className="mt-10 w-full max-w-md">
+            <div className="flex flex-col gap-3 sm:flex-row">
+              <input
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="Enter your email"
+                required
+                className="flex-1 rounded-md border border-white/10 bg-white/5 px-4 py-3 text-sm text-white placeholder-gray-9 transition-colors focus:border-white/20 focus:outline-none focus:ring-1 focus:ring-white/20"
+              />
+              <button
+                type="submit"
+                disabled={status === "loading"}
+                className="rounded-md bg-white px-6 py-3 text-sm font-medium text-black shadow-button transition-colors hover:bg-white/90 disabled:opacity-50"
+              >
+                {status === "loading" ? "Joining..." : "Join Waitlist"}
+              </button>
+            </div>
+            {status === "error" && (
+              <p className="mt-3 text-center text-sm text-red-400">
+                {errorMessage}
+              </p>
+            )}
+          </form>
+        )}
       </main>
     </div>
   );

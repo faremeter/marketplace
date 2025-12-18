@@ -11,6 +11,7 @@ export interface Database {
   tenant_nodes: TenantNodesTable;
   admin_settings: AdminSettingsTable;
   wallets: WalletsTable;
+  waitlist: WaitlistTable;
 }
 
 export interface OrganizationsTable {
@@ -123,5 +124,11 @@ export interface WalletsTable {
   name: string;
   wallet_config: ColumnType<unknown, string, string>;
   funding_status: ColumnType<string, string | undefined, string>;
+  created_at: ColumnType<Date, never, never>;
+}
+
+export interface WaitlistTable {
+  id: ColumnType<number, never, never>;
+  email: string;
   created_at: ColumnType<Date, never, never>;
 }

@@ -12,6 +12,7 @@ import { authRoutes } from "./routes/auth.js";
 import { organizationsRoutes } from "./routes/organizations.js";
 import { adminRoutes } from "./routes/admin.js";
 import { walletsRoutes } from "./routes/wallets.js";
+import { publicRoutes } from "./routes/public.js";
 import { logger } from "./logger.js";
 import { startQueue, stopQueue } from "./lib/queue.js";
 
@@ -54,6 +55,7 @@ app.route("/api/tenants/:tenantId/transactions", transactionsRoutes);
 app.route("/api/tenants/:tenantId/openapi", openapiRoutes);
 app.route("/api/nodes", nodesRoutes);
 app.route("/api/wallets", walletsRoutes);
+app.route("/api", publicRoutes);
 
 const port = parseInt(process.env.HTTP_PORT || "1337");
 
