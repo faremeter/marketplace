@@ -10,6 +10,7 @@ import {
   FileTextIcon,
   GearIcon,
   ExitIcon,
+  Link2Icon,
 } from "@radix-ui/react-icons";
 import { UserMenu } from "./user-menu";
 import { SidebarItem } from "./sidebar-item";
@@ -37,6 +38,11 @@ export function AdminSidebar() {
           href="/admin/tenants"
           icon={<LayersIcon />}
           label="Tenants"
+        />
+        <SidebarItem
+          href="/admin/endpoints"
+          icon={<Link2Icon />}
+          label="Endpoints"
         />
         <SidebarItem
           href="/admin/transactions"

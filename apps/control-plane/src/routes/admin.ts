@@ -653,6 +653,83 @@ adminRoutes.delete("/tenants/:id/nodes/:nodeId", async (c) => {
   return c.json({ success: true });
 });
 
+adminRoutes.get("/tenants/:tenantId/endpoints", async (c) => {
+  const tenantId = parseInt(c.req.param("tenantId"));
+
+  const tenant = await db
+    .selectFrom("tenants")
+    .select("id")
+    .where("id", "=", tenantId)
+    .executeTakeFirst();
+
+  if (!tenant) {
+    return c.json({ error: "Tenant not found" }, 404);
+  }
+
+  const endpoints = await db
+    .selectFrom("endpoints")
+    .selectAll()
+    .where("tenant_id", "=", tenantId)
+    .where("is_active", "=", true)
+    .orderBy("priority", "asc")
+    .orderBy("created_at", "desc")
+    .execute();
+
+  return c.json(endpoints);
+});
+
+adminRoutes.put("/tenants/:tenantId/endpoints/:endpointId", async (c) => {
+  const tenantId = parseInt(c.req.param("tenantId"));
+  const endpointId = parseInt(c.req.param("endpointId"));
+  const body = await c.req.json();
+
+  const updateData: Record<string, unknown> = {};
+  if (body.path !== undefined) {
+    const inputPath = body.path;
+    // Process path pattern similar to endpoints.ts
+    if (inputPath.startsWith("^")) {
+      updateData.path = inputPath;
+      updateData.path_pattern = inputPath;
+    } else if (inputPath.includes("{")) {
+      const regex = "^" + inputPath.replace(/\{[^}]+\}/g, "[^/]+") + "$";
+      updateData.path = inputPath;
+      updateData.path_pattern = regex;
+    } else {
+      updateData.path = inputPath;
+      updateData.path_pattern = inputPath;
+    }
+  }
+  if (body.price_usdc !== undefined) updateData.price_usdc = body.price_usdc;
+  if (body.scheme !== undefined) updateData.scheme = body.scheme;
+  if (body.description !== undefined) updateData.description = body.description;
+  if (body.priority !== undefined) updateData.priority = body.priority;
+
+  const result = await db
+    .updateTable("endpoints")
+    .set(updateData)
+    .where("id", "=", endpointId)
+    .where("tenant_id", "=", tenantId)
+    .returningAll()
+    .executeTakeFirst();
+
+  if (!result) {
+    return c.json({ error: "Endpoint not found" }, 404);
+  }
+
+  // Sync to all nodes the tenant is on
+  const tenantNodes = await db
+    .selectFrom("tenant_nodes")
+    .select("node_id")
+    .where("tenant_id", "=", tenantId)
+    .execute();
+
+  for (const tn of tenantNodes) {
+    syncToNode(tn.node_id).catch((err) => logger.error(String(err)));
+  }
+
+  return c.json(result);
+});
+
 adminRoutes.get("/transactions", async (c) => {
   const limit = parseInt(c.req.query("limit") || "100");
   const offset = parseInt(c.req.query("offset") || "0");
