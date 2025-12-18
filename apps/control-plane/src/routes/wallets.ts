@@ -139,6 +139,9 @@ walletsRoutes.get("/:id", async (c) => {
   return c.json(wallet);
 });
 
+// Cache TTL in milliseconds (60 seconds)
+const BALANCE_CACHE_TTL_MS = 60 * 1000;
+
 // Get wallet balances
 walletsRoutes.get("/:id/balances", async (c) => {
   const user = c.get("user");
@@ -172,10 +175,32 @@ walletsRoutes.get("/:id/balances", async (c) => {
     return c.json({ error: "Wallet not found" }, 404);
   }
 
+  // Check if cache is fresh
+  const cachedAt = wallet.balances_cached_at;
+  const isCacheFresh =
+    cachedAt &&
+    wallet.cached_balances &&
+    Date.now() - new Date(cachedAt).getTime() < BALANCE_CACHE_TTL_MS;
+
+  if (isCacheFresh) {
+    return c.json(wallet.cached_balances);
+  }
+
+  // Fetch fresh balances
   const config = wallet.wallet_config as WalletConfig;
   const addresses = extractAddresses(config);
-
   const balances = await fetchWalletBalances(addresses);
+
+  // Update cache
+  await db
+    .updateTable("wallets")
+    .set({
+      cached_balances: JSON.stringify(balances),
+      balances_cached_at: new Date(),
+    })
+    .where("id", "=", id)
+    .execute();
+
   return c.json(balances);
 });
 
@@ -286,6 +311,8 @@ walletsRoutes.put("/:id", async (c) => {
   if (body.wallet_config !== undefined) {
     updateData.wallet_config = JSON.stringify(body.wallet_config);
     updateData.funding_status = "pending"; // Reset funding status on config change
+    updateData.cached_balances = null; // Clear balance cache
+    updateData.balances_cached_at = null;
   }
 
   if (Object.keys(updateData).length === 0) {

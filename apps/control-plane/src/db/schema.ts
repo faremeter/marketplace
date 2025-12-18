@@ -124,6 +124,8 @@ export interface WalletsTable {
   name: string;
   wallet_config: ColumnType<unknown, string, string>;
   funding_status: ColumnType<string, string | undefined, string>;
+  cached_balances: ColumnType<unknown, string | undefined, string> | null;
+  balances_cached_at: Date | null;
   created_at: ColumnType<Date, never, never>;
 }
 
