@@ -5,6 +5,7 @@ import * as Popover from "@radix-ui/react-popover";
 import { Pencil1Icon, CheckIcon, Cross2Icon } from "@radix-ui/react-icons";
 import { api } from "@/lib/api/client";
 import { useToast } from "@/components/ui/toast";
+import { SCHEME_OPTIONS } from "@/lib/types/api";
 
 interface InlineSchemeEditProps {
   scheme: string;
@@ -14,11 +15,6 @@ interface InlineSchemeEditProps {
   fieldName?: string;
   label?: string;
 }
-
-const SCHEME_OPTIONS = [
-  { value: "exact", label: "exact" },
-  { value: "upto", label: "upto" },
-];
 
 export function InlineSchemeEdit({
   scheme,

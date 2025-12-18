@@ -5,6 +5,7 @@ import * as Dialog from "@radix-ui/react-dialog";
 import { Cross2Icon, PlusIcon, MinusIcon } from "@radix-ui/react-icons";
 import { api } from "@/lib/api/client";
 import { useToast } from "@/components/ui/toast";
+import { SCHEME_OPTIONS } from "@/lib/types/api";
 
 interface Endpoint {
   id: number;
@@ -165,8 +166,11 @@ export function EditEndpointPopover({
                   onChange={(e) => setScheme(e.target.value)}
                   className="w-full h-9 rounded-md border border-gray-6 bg-gray-3 px-3 text-sm text-gray-12 focus:border-accent-8 focus:outline-none focus:ring-1 focus:ring-accent-8"
                 >
-                  <option value="">exact</option>
-                  <option value="upto">upto</option>
+                  {SCHEME_OPTIONS.map((opt) => (
+                    <option key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </option>
+                  ))}
                 </select>
               </div>
             </div>

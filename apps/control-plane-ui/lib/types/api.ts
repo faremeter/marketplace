@@ -1,5 +1,14 @@
 import { type } from "arktype";
 
+// Add new schemes here - this is the single source of truth
+export const SCHEMES = ["exact"] as const;
+
+export const SchemeSchema = type("'exact'");
+
+export type Scheme = (typeof SCHEMES)[number];
+
+export const SCHEME_OPTIONS = SCHEMES.map((s) => ({ value: s, label: s }));
+
 export const TenantSchema = type({
   id: "number",
   name: "string",

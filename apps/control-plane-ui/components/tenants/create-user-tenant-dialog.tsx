@@ -13,6 +13,7 @@ import {
   CheckIcon,
 } from "@radix-ui/react-icons";
 import { api, ApiError } from "@/lib/api/client";
+import { SCHEME_OPTIONS } from "@/lib/types/api";
 import { useToast } from "@/components/ui/toast";
 import useSWR from "swr";
 
@@ -409,8 +410,11 @@ export function CreateUserTenantDialog({
                     onChange={(e) => setDefaultScheme(e.target.value)}
                     className="w-full rounded-md border border-gray-6 bg-gray-2 px-3 py-2 text-sm text-gray-12 focus:border-accent-8 focus:outline-none focus:ring-1 focus:ring-accent-8"
                   >
-                    <option value="exact">exact</option>
-                    <option value="upto">upto</option>
+                    {SCHEME_OPTIONS.map((opt) => (
+                      <option key={opt.value} value={opt.value}>
+                        {opt.label}
+                      </option>
+                    ))}
                   </select>
                 </div>
               </div>
