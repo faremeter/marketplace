@@ -42,13 +42,25 @@ export function AddEndpointDialog({
   const { toast } = useToast();
 
   useEffect(() => {
+    setSelectedPaths([]);
+
     if (!pathPattern.trim()) {
       setValidation(null);
-      setSelectedPaths([]);
       return;
     }
 
     const timer = setTimeout(async () => {
+      const catchAllPatterns = ["/", "/*", "^/$", "^/.*$"];
+      if (catchAllPatterns.includes(pathPattern)) {
+        setValidation({
+          valid: false,
+          isValidRegex: false,
+          matches: [],
+          error: "Edit the catch-all row in the table to set pricing for /",
+        });
+        return;
+      }
+
       // Only validate as regex if it starts with ^
       // Otherwise it's either OpenAPI-style ({param}) or literal prefix
       if (pathPattern.startsWith("^")) {
@@ -180,6 +192,9 @@ export function AddEndpointDialog({
               </p>
               {validating && (
                 <p className="mt-1 text-xs text-gray-11">Validating...</p>
+              )}
+              {validation?.error && (
+                <p className="mt-1 text-xs text-red-400">{validation.error}</p>
               )}
             </div>
 

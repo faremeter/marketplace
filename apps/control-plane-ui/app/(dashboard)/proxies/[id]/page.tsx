@@ -343,10 +343,12 @@ export default function ProxyDetailPage() {
         {activeTab === "endpoints" && (
           <EndpointsTab
             tenantId={tenantId}
+            orgId={currentOrg.id}
             defaultPriceUsdc={tenant.default_price_usdc}
             defaultScheme={tenant.default_scheme}
             hasOpenApiSpec={specData?.hasSpec ?? false}
             onSpecChange={() => mutateSpec()}
+            onDefaultsChange={() => mutateTenants()}
           />
         )}
       </div>

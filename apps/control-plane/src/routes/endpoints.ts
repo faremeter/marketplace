@@ -77,7 +77,20 @@ endpointsRoutes.post("/", async (c) => {
   const tenantId = parseInt(c.req.param("tenantId") ?? "");
   const body = await c.req.json();
 
-  const processed = processPathPattern(body.path ?? body.path_pattern);
+  const inputPath = body.path ?? body.path_pattern;
+
+  const catchAllPatterns = ["/", "/*", "^/$", "^/.*$"];
+  if (catchAllPatterns.includes(inputPath)) {
+    return c.json(
+      {
+        error:
+          "Cannot create catch-all endpoint. Use the default pricing instead.",
+      },
+      400,
+    );
+  }
+
+  const processed = processPathPattern(inputPath);
 
   const result = await db
     .insertInto("endpoints")

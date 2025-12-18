@@ -90,6 +90,8 @@ function extractPathsFromSpec(spec: OpenApiSpec): {
   if (!spec.paths) return paths;
 
   for (const [path, pathItem] of Object.entries(spec.paths)) {
+    if (path === "/" || path === "/*") continue;
+
     const item = pathItem as PathItem;
     // Get description from path-level or first operation
     let description: string | null = item.summary || item.description || null;

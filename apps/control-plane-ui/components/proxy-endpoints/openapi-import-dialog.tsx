@@ -99,7 +99,9 @@ function parseOpenApiSpec(spec: unknown): {
         }
       }
 
-      paths.push({ path, description });
+      if (path !== "/" && path !== "/*") {
+        paths.push({ path, description });
+      }
     }
   }
 

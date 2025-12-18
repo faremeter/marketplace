@@ -37,18 +37,22 @@ interface Endpoint {
 
 interface EndpointsTabProps {
   tenantId: number;
+  orgId: number;
   defaultPriceUsdc: number;
   defaultScheme: string;
   hasOpenApiSpec: boolean;
   onSpecChange: () => void;
+  onDefaultsChange: () => void;
 }
 
 export function EndpointsTab({
   tenantId,
+  orgId,
   defaultPriceUsdc,
   defaultScheme,
   hasOpenApiSpec,
   onSpecChange,
+  onDefaultsChange,
 }: EndpointsTabProps) {
   const [importDialogOpen, setImportDialogOpen] = useState(false);
   const [exportDialogOpen, setExportDialogOpen] = useState(false);
@@ -135,7 +139,7 @@ export function EndpointsTab({
         <div className="flex items-center justify-center py-12">
           <div className="h-8 w-8 animate-spin rounded-full border-2 border-gray-6 border-t-accent-9" />
         </div>
-      ) : endpoints?.length ? (
+      ) : (
         <div className="overflow-x-auto rounded-lg border border-gray-6">
           <table className="w-full min-w-[700px]">
             <thead className="bg-gray-3">
@@ -158,7 +162,7 @@ export function EndpointsTab({
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-6 bg-gray-2">
-              {endpoints.map((endpoint) => {
+              {endpoints?.map((endpoint) => {
                 const lineage = getLineageStatus(endpoint);
                 return (
                   <tr key={endpoint.id} className="hover:bg-gray-3">
@@ -276,33 +280,40 @@ export function EndpointsTab({
                   </tr>
                 );
               })}
+              <tr className="bg-gray-3/50">
+                <td className="px-4 py-3">
+                  <div className="flex items-center gap-2">
+                    <code className="text-sm text-accent-11">/</code>
+                    <span className="text-xs text-gray-11">(catch-all)</span>
+                  </div>
+                </td>
+                <td className="whitespace-nowrap px-4 py-3">
+                  <InlinePriceEdit
+                    priceUsdc={defaultPriceUsdc}
+                    onUpdate={onDefaultsChange}
+                    apiEndpoint={`/api/organizations/${orgId}/tenants/${tenantId}`}
+                    fieldName="default_price_usdc"
+                    label="Default Price"
+                  />
+                </td>
+                <td className="whitespace-nowrap px-4 py-3">
+                  <InlineSchemeEdit
+                    scheme={defaultScheme}
+                    onUpdate={onDefaultsChange}
+                    apiEndpoint={`/api/organizations/${orgId}/tenants/${tenantId}`}
+                    fieldName="default_scheme"
+                    label="Default Scheme"
+                  />
+                </td>
+                <td className="whitespace-nowrap px-4 py-3">
+                  <span className="text-xs text-gray-11">-</span>
+                </td>
+                <td className="whitespace-nowrap px-4 py-3">
+                  <span className="text-xs text-gray-11">-</span>
+                </td>
+              </tr>
             </tbody>
           </table>
-        </div>
-      ) : (
-        <div className="rounded-lg border border-gray-6 bg-gray-2 p-8 text-center">
-          <h2 className="mb-2 text-lg font-medium text-gray-12">
-            No endpoints configured
-          </h2>
-          <p className="mb-6 text-sm text-gray-11 max-w-md mx-auto">
-            Import an OpenAPI spec or add endpoints manually.
-          </p>
-          <div className="flex justify-center gap-2">
-            <button
-              onClick={() => setImportDialogOpen(true)}
-              className="inline-flex items-center gap-1.5 rounded-md border border-gray-6 bg-gray-3 px-3 py-1.5 text-sm font-medium text-gray-12 hover:bg-gray-4"
-            >
-              <UploadIcon className="h-3.5 w-3.5" />
-              Import OpenAPI
-            </button>
-            <button
-              onClick={() => setAddDialogOpen(true)}
-              className="inline-flex items-center gap-1.5 rounded-md bg-white px-3 py-1.5 text-sm font-medium text-black shadow-button transition-colors hover:bg-white/90"
-            >
-              <PlusIcon className="h-4 w-4" />
-              Add Endpoint
-            </button>
-          </div>
         </div>
       )}
 
