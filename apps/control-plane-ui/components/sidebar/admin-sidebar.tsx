@@ -11,6 +11,7 @@ import {
   GearIcon,
   ExitIcon,
   Link2Icon,
+  ShadowOuterIcon,
 } from "@radix-ui/react-icons";
 import { UserMenu } from "./user-menu";
 import { SidebarItem } from "./sidebar-item";
@@ -43,6 +44,16 @@ export function AdminSidebar() {
           href="/admin/endpoints"
           icon={<Link2Icon />}
           label="Endpoints"
+        />
+        <SidebarItem
+          href="/admin/wallets"
+          icon={
+            <span className="relative inline-flex items-center justify-center">
+              <ShadowOuterIcon />
+              <span className="absolute text-[7px] font-bold">$</span>
+            </span>
+          }
+          label="Wallets"
         />
         <SidebarItem
           href="/admin/transactions"
