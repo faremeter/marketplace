@@ -12,6 +12,7 @@ import {
   ExitIcon,
   Link2Icon,
   ShadowOuterIcon,
+  EnvelopeClosedIcon,
 } from "@radix-ui/react-icons";
 import { UserMenu } from "./user-menu";
 import { SidebarItem } from "./sidebar-item";
@@ -59,6 +60,11 @@ export function AdminSidebar() {
           href="/admin/transactions"
           icon={<FileTextIcon />}
           label="Transactions"
+        />
+        <SidebarItem
+          href="/admin/waitlist"
+          icon={<EnvelopeClosedIcon />}
+          label="Waitlist"
         />
         <SidebarItem
           href="/admin/settings"

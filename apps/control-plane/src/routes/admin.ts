@@ -1006,6 +1006,32 @@ adminRoutes.put("/settings", async (c) => {
   });
 });
 
+adminRoutes.get("/waitlist", async (c) => {
+  const waitlist = await db
+    .selectFrom("waitlist")
+    .select(["id", "email", "created_at"])
+    .orderBy("created_at", "desc")
+    .execute();
+
+  return c.json(waitlist);
+});
+
+adminRoutes.delete("/waitlist/:id", async (c) => {
+  const id = parseInt(c.req.param("id"));
+
+  const result = await db
+    .deleteFrom("waitlist")
+    .where("id", "=", id)
+    .returningAll()
+    .executeTakeFirst();
+
+  if (!result) {
+    return c.json({ error: "Entry not found" }, 404);
+  }
+
+  return c.json({ deleted: true });
+});
+
 adminRoutes.get("/settings/balances", async (c) => {
   const settings = await db
     .selectFrom("admin_settings")
