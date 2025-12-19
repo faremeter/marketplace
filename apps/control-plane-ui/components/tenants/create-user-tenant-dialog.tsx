@@ -16,6 +16,7 @@ import { api, ApiError } from "@/lib/api/client";
 import { SCHEME_OPTIONS } from "@/lib/types/api";
 import { useToast } from "@/components/ui/toast";
 import useSWR from "swr";
+import { refreshOnboardingStatus } from "@/lib/hooks/use-onboarding";
 
 interface Wallet {
   id: number;
@@ -153,6 +154,7 @@ export function CreateUserTenantDialog({
         description: `${name.trim()} has been created successfully.`,
         variant: "success",
       });
+      refreshOnboardingStatus(organizationId);
       onSuccess();
     } catch (err) {
       if (err instanceof ApiError && err.data) {

@@ -21,6 +21,7 @@ import {
   isValidEvmAddress,
 } from "@/lib/wallet";
 import { useToast } from "@/components/ui/toast";
+import { refreshOnboardingStatus } from "@/lib/hooks/use-onboarding";
 
 interface WalletConfig {
   solana?: {
@@ -758,6 +759,7 @@ export default function WalletsPage() {
         wallet_config: walletConfig,
       });
       await mutateWallets();
+      refreshOnboardingStatus(currentOrg.id);
       setShowCreateModal(false);
       toast({
         title: "Wallet created",

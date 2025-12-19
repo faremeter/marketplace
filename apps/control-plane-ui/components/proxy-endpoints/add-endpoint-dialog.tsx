@@ -6,6 +6,8 @@ import { Cross2Icon, PlusIcon, MinusIcon } from "@radix-ui/react-icons";
 import { api } from "@/lib/api/client";
 import { useToast } from "@/components/ui/toast";
 import { SCHEME_OPTIONS } from "@/lib/types/api";
+import { useAuth } from "@/lib/auth/context";
+import { refreshOnboardingStatus } from "@/lib/hooks/use-onboarding";
 
 interface AddEndpointDialogProps {
   open: boolean;
@@ -45,6 +47,7 @@ export function AddEndpointDialog({
   );
   const [selectedPaths, setSelectedPaths] = useState<string[]>([]);
   const { toast } = useToast();
+  const { currentOrg } = useAuth();
 
   useEffect(() => {
     setSelectedPaths([]);
@@ -140,6 +143,10 @@ export function AddEndpointDialog({
         title: "Endpoint created",
         variant: "default",
       });
+
+      if (currentOrg) {
+        refreshOnboardingStatus(currentOrg.id);
+      }
 
       setPathPattern("");
       setPriceUsdc("");

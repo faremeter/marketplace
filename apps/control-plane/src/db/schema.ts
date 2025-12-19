@@ -20,6 +20,8 @@ export interface OrganizationsTable {
   name: string;
   slug: string;
   is_admin: ColumnType<boolean, boolean | undefined, boolean>;
+  onboarding_completed: ColumnType<boolean, boolean | undefined, boolean>;
+  onboarding_completed_at: Date | null;
   created_at: ColumnType<Date, never, never>;
 }
 

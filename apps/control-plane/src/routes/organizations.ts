@@ -1012,29 +1012,142 @@ organizationsRoutes.delete("/:id/invitations/:invitationId", async (c) => {
   return c.json({ deleted: true });
 });
 
-interface WalletConfig {
-  solana?: {
-    "mainnet-beta"?: {
-      address: string;
-      key?: string;
-    };
-  };
-  evm?: {
-    base?: { address: string; key?: string };
-    polygon?: { address: string; key?: string };
-    monad?: { address: string; key?: string };
-  };
-}
+// Onboarding routes
 
-function extractAddresses(walletConfig: WalletConfig | null): {
-  solana: string | null;
-  evm: string | null;
-} {
-  if (!walletConfig) {
-    return { solana: null, evm: null };
+organizationsRoutes.get("/:id/onboarding-status", async (c) => {
+  const user = c.get("user");
+  const orgId = parseInt(c.req.param("id"));
+
+  const membership = await db
+    .selectFrom("user_organizations")
+    .select("role")
+    .where("user_id", "=", user.id)
+    .where("organization_id", "=", orgId)
+    .executeTakeFirst();
+
+  if (!membership && !user.is_admin) {
+    return c.json({ error: "Organization not found" }, 404);
   }
-  return {
-    solana: walletConfig.solana?.["mainnet-beta"]?.address ?? null,
-    evm: walletConfig.evm?.base?.address ?? null,
+
+  const org = await db
+    .selectFrom("organizations")
+    .select(["onboarding_completed", "onboarding_completed_at"])
+    .where("id", "=", orgId)
+    .executeTakeFirst();
+
+  if (!org) {
+    return c.json({ error: "Organization not found" }, 404);
+  }
+
+  const walletCount = await db
+    .selectFrom("wallets")
+    .select((eb) => eb.fn.count<number>("id").as("count"))
+    .where("organization_id", "=", orgId)
+    .executeTakeFirstOrThrow();
+
+  const fundedWalletCount = await db
+    .selectFrom("wallets")
+    .select((eb) => eb.fn.count<number>("id").as("count"))
+    .where("organization_id", "=", orgId)
+    .where("funding_status", "=", "funded")
+    .executeTakeFirstOrThrow();
+
+  const firstTenant = await db
+    .selectFrom("tenants")
+    .select("id")
+    .where("organization_id", "=", orgId)
+    .orderBy("created_at", "asc")
+    .executeTakeFirst();
+
+  const endpointCount = await db
+    .selectFrom("endpoints")
+    .innerJoin("tenants", "tenants.id", "endpoints.tenant_id")
+    .select((eb) => eb.fn.count<number>("endpoints.id").as("count"))
+    .where("tenants.organization_id", "=", orgId)
+    .where("endpoints.is_active", "=", true)
+    .executeTakeFirstOrThrow();
+
+  const steps = {
+    wallet: walletCount.count > 0,
+    funded: fundedWalletCount.count > 0,
+    proxy: !!firstTenant,
+    endpoint: endpointCount.count > 0,
   };
-}
+
+  const allStepsComplete =
+    steps.wallet && steps.funded && steps.proxy && steps.endpoint;
+
+  return c.json({
+    onboarding_completed: org.onboarding_completed,
+    onboarding_completed_at: org.onboarding_completed_at,
+    steps,
+    all_steps_complete: allStepsComplete,
+    first_proxy_id: firstTenant?.id ?? null,
+  });
+});
+
+organizationsRoutes.post("/:id/complete-onboarding", async (c) => {
+  const user = c.get("user");
+  const orgId = parseInt(c.req.param("id"));
+
+  const membership = await db
+    .selectFrom("user_organizations")
+    .select("role")
+    .where("user_id", "=", user.id)
+    .where("organization_id", "=", orgId)
+    .executeTakeFirst();
+
+  if (!membership && !user.is_admin) {
+    return c.json({ error: "Organization not found" }, 404);
+  }
+
+  const walletCount = await db
+    .selectFrom("wallets")
+    .select((eb) => eb.fn.count<number>("id").as("count"))
+    .where("organization_id", "=", orgId)
+    .executeTakeFirstOrThrow();
+
+  const fundedWalletCount = await db
+    .selectFrom("wallets")
+    .select((eb) => eb.fn.count<number>("id").as("count"))
+    .where("organization_id", "=", orgId)
+    .where("funding_status", "=", "funded")
+    .executeTakeFirstOrThrow();
+
+  const tenantCount = await db
+    .selectFrom("tenants")
+    .select((eb) => eb.fn.count<number>("id").as("count"))
+    .where("organization_id", "=", orgId)
+    .executeTakeFirstOrThrow();
+
+  const endpointCount = await db
+    .selectFrom("endpoints")
+    .innerJoin("tenants", "tenants.id", "endpoints.tenant_id")
+    .select((eb) => eb.fn.count<number>("endpoints.id").as("count"))
+    .where("tenants.organization_id", "=", orgId)
+    .where("endpoints.is_active", "=", true)
+    .executeTakeFirstOrThrow();
+
+  if (
+    walletCount.count === 0 ||
+    fundedWalletCount.count === 0 ||
+    tenantCount.count === 0 ||
+    endpointCount.count === 0
+  ) {
+    return c.json(
+      { error: "All onboarding steps must be completed first" },
+      400,
+    );
+  }
+
+  await db
+    .updateTable("organizations")
+    .set({
+      onboarding_completed: true,
+      onboarding_completed_at: new Date(),
+    })
+    .where("id", "=", orgId)
+    .execute();
+
+  return c.json({ success: true });
+});
