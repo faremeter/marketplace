@@ -1,8 +1,11 @@
 "use client";
 
+import { useState } from "react";
 import { useAuth } from "@/lib/auth/context";
 import useSWR from "swr";
 import { api } from "@/lib/api/client";
+import { InviteMemberDialog } from "@/components/settings/invite-member-dialog";
+import { Cross2Icon, CopyIcon, CheckIcon } from "@radix-ui/react-icons";
 
 interface OrgMember {
   id: number;
@@ -11,18 +14,54 @@ interface OrgMember {
   joined_at: string;
 }
 
+interface Invitation {
+  id: number;
+  email: string;
+  role: string;
+  token: string;
+  expires_at: string;
+  created_at: string;
+  invited_by_email: string | null;
+}
+
 export default function SettingsPage() {
   const { user, currentOrg } = useAuth();
+  const [inviteDialogOpen, setInviteDialogOpen] = useState(false);
+  const [copiedId, setCopiedId] = useState<number | null>(null);
 
   const { data: members } = useSWR(
     currentOrg ? `/api/organizations/${currentOrg.id}/members` : null,
     api.get<OrgMember[]>,
   );
 
+  const { data: invitations, mutate: mutateInvitations } = useSWR(
+    currentOrg ? `/api/organizations/${currentOrg.id}/invitations` : null,
+    api.get<Invitation[]>,
+  );
+
   const currentRole = user?.organizations.find(
     (o) => o.id === currentOrg?.id,
   )?.role;
-  const isOwner = currentRole === "owner";
+  const isOwnerOrAdmin = currentRole === "owner" || currentRole === "admin";
+
+  const handleCopyInviteLink = async (invitation: Invitation) => {
+    const url = `${window.location.origin}/invite/${invitation.token}`;
+    await navigator.clipboard.writeText(url);
+    setCopiedId(invitation.id);
+    setTimeout(() => setCopiedId(null), 2000);
+  };
+
+  const handleCancelInvitation = async (invitationId: number) => {
+    if (!currentOrg) return;
+    try {
+      await api.delete(
+        `/api/organizations/${currentOrg.id}/invitations/${invitationId}`,
+      );
+      mutateInvitations();
+    } catch {
+      // Error handling could be added here
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -97,8 +136,11 @@ export default function SettingsPage() {
             <section className="rounded-lg border border-gray-6 bg-gray-2 p-6">
               <div className="mb-4 flex items-center justify-between">
                 <h2 className="text-lg font-medium text-gray-12">Members</h2>
-                {isOwner && (
-                  <button className="rounded bg-accent-9 px-3 py-1.5 text-sm font-medium text-white hover:bg-accent-10">
+                {isOwnerOrAdmin && (
+                  <button
+                    onClick={() => setInviteDialogOpen(true)}
+                    className="rounded-md bg-white px-3 py-1.5 text-sm font-medium text-black transition-colors hover:bg-white/90"
+                  >
                     Invite Member
                   </button>
                 )}
@@ -127,6 +169,59 @@ export default function SettingsPage() {
                 <p className="text-sm text-gray-11">No members found.</p>
               )}
             </section>
+
+            {isOwnerOrAdmin && invitations && invitations.length > 0 && (
+              <section className="rounded-lg border border-gray-6 bg-gray-2 p-6">
+                <h2 className="mb-4 text-lg font-medium text-gray-12">
+                  Pending Invitations
+                </h2>
+                <ul className="divide-y divide-gray-6">
+                  {invitations.map((invitation) => (
+                    <li
+                      key={invitation.id}
+                      className="flex items-center justify-between py-3"
+                    >
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm text-gray-12">
+                          {invitation.email}
+                        </p>
+                        <p className="text-xs text-gray-9">
+                          Expires{" "}
+                          {new Date(invitation.expires_at).toLocaleDateString()}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => handleCopyInviteLink(invitation)}
+                          className="flex h-8 w-8 items-center justify-center rounded text-gray-11 hover:bg-gray-4 hover:text-gray-12"
+                          title="Copy invite link"
+                        >
+                          {copiedId === invitation.id ? (
+                            <CheckIcon className="h-4 w-4 text-green-500" />
+                          ) : (
+                            <CopyIcon className="h-4 w-4" />
+                          )}
+                        </button>
+                        <button
+                          onClick={() => handleCancelInvitation(invitation.id)}
+                          className="flex h-8 w-8 items-center justify-center rounded text-gray-11 hover:bg-red-900/20 hover:text-red-400"
+                          title="Cancel invitation"
+                        >
+                          <Cross2Icon className="h-4 w-4" />
+                        </button>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            )}
+
+            <InviteMemberDialog
+              open={inviteDialogOpen}
+              onOpenChange={setInviteDialogOpen}
+              organizationId={currentOrg.id}
+              onSuccess={() => mutateInvitations()}
+            />
           </>
         )}
       </div>

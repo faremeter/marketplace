@@ -1,4 +1,5 @@
 import { Hono } from "hono";
+import { randomBytes } from "crypto";
 import { db } from "../server.js";
 import { requireAuth } from "../middleware/auth.js";
 import { fetchWalletBalances } from "../lib/balances.js";
@@ -789,6 +790,173 @@ organizationsRoutes.post("/:id/tenants", async (c) => {
   }
 
   return c.json(tenant, 201);
+});
+
+// Invitation routes
+
+organizationsRoutes.get("/:id/invitations", async (c) => {
+  const user = c.get("user");
+  const orgId = parseInt(c.req.param("id"));
+
+  const membership = await db
+    .selectFrom("user_organizations")
+    .select("role")
+    .where("user_id", "=", user.id)
+    .where("organization_id", "=", orgId)
+    .executeTakeFirst();
+
+  if (!membership && !user.is_admin) {
+    return c.json({ error: "Organization not found" }, 404);
+  }
+
+  const invitations = await db
+    .selectFrom("organization_invitations")
+    .leftJoin("users", "users.id", "organization_invitations.invited_by")
+    .select([
+      "organization_invitations.id",
+      "organization_invitations.email",
+      "organization_invitations.role",
+      "organization_invitations.token",
+      "organization_invitations.expires_at",
+      "organization_invitations.created_at",
+      "users.email as invited_by_email",
+    ])
+    .where("organization_invitations.organization_id", "=", orgId)
+    .where("organization_invitations.accepted_at", "is", null)
+    .where("organization_invitations.expires_at", ">", new Date())
+    .orderBy("organization_invitations.created_at", "desc")
+    .execute();
+
+  return c.json(invitations);
+});
+
+organizationsRoutes.post("/:id/invitations", async (c) => {
+  const user = c.get("user");
+  const orgId = parseInt(c.req.param("id"));
+  const body = await c.req.json();
+
+  const membership = await db
+    .selectFrom("user_organizations")
+    .select("role")
+    .where("user_id", "=", user.id)
+    .where("organization_id", "=", orgId)
+    .executeTakeFirst();
+
+  if (!membership && !user.is_admin) {
+    return c.json({ error: "Organization not found" }, 404);
+  }
+
+  if (
+    membership &&
+    !["owner", "admin"].includes(membership.role) &&
+    !user.is_admin
+  ) {
+    return c.json({ error: "Insufficient permissions" }, 403);
+  }
+
+  if (!body.email?.trim()) {
+    return c.json({ error: "Email is required" }, 400);
+  }
+
+  const email = body.email.trim().toLowerCase();
+
+  // Check if user is already a member
+  const existingUser = await db
+    .selectFrom("users")
+    .select("id")
+    .where("email", "=", email)
+    .executeTakeFirst();
+
+  if (existingUser) {
+    const existingMembership = await db
+      .selectFrom("user_organizations")
+      .select("id")
+      .where("user_id", "=", existingUser.id)
+      .where("organization_id", "=", orgId)
+      .executeTakeFirst();
+
+    if (existingMembership) {
+      return c.json({ error: "User is already a member" }, 409);
+    }
+  }
+
+  // Check for existing pending invitation
+  const existingInvitation = await db
+    .selectFrom("organization_invitations")
+    .select("id")
+    .where("organization_id", "=", orgId)
+    .where("email", "=", email)
+    .where("accepted_at", "is", null)
+    .where("expires_at", ">", new Date())
+    .executeTakeFirst();
+
+  if (existingInvitation) {
+    return c.json(
+      { error: "An invitation is already pending for this email" },
+      409,
+    );
+  }
+
+  const token = randomBytes(32).toString("hex");
+  const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
+
+  const invitation = await db
+    .insertInto("organization_invitations")
+    .values({
+      organization_id: orgId,
+      email,
+      token,
+      role: body.role || "member",
+      invited_by: user.id,
+      expires_at: expiresAt,
+    })
+    .returningAll()
+    .executeTakeFirstOrThrow();
+
+  return c.json(invitation, 201);
+});
+
+organizationsRoutes.delete("/:id/invitations/:invitationId", async (c) => {
+  const user = c.get("user");
+  const orgId = parseInt(c.req.param("id"));
+  const invitationId = parseInt(c.req.param("invitationId"));
+
+  const membership = await db
+    .selectFrom("user_organizations")
+    .select("role")
+    .where("user_id", "=", user.id)
+    .where("organization_id", "=", orgId)
+    .executeTakeFirst();
+
+  if (!membership && !user.is_admin) {
+    return c.json({ error: "Organization not found" }, 404);
+  }
+
+  if (
+    membership &&
+    !["owner", "admin"].includes(membership.role) &&
+    !user.is_admin
+  ) {
+    return c.json({ error: "Insufficient permissions" }, 403);
+  }
+
+  const invitation = await db
+    .selectFrom("organization_invitations")
+    .select("id")
+    .where("id", "=", invitationId)
+    .where("organization_id", "=", orgId)
+    .executeTakeFirst();
+
+  if (!invitation) {
+    return c.json({ error: "Invitation not found" }, 404);
+  }
+
+  await db
+    .deleteFrom("organization_invitations")
+    .where("id", "=", invitationId)
+    .execute();
+
+  return c.json({ deleted: true });
 });
 
 interface WalletConfig {

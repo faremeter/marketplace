@@ -8,6 +8,7 @@ export interface Database {
   organizations: OrganizationsTable;
   users: UsersTable;
   user_organizations: UserOrganizationsTable;
+  organization_invitations: OrganizationInvitationsTable;
   tenant_nodes: TenantNodesTable;
   admin_settings: AdminSettingsTable;
   wallets: WalletsTable;
@@ -39,6 +40,18 @@ export interface UserOrganizationsTable {
   organization_id: number;
   role: string;
   joined_at: ColumnType<Date, never, never>;
+}
+
+export interface OrganizationInvitationsTable {
+  id: ColumnType<number, never, never>;
+  organization_id: number;
+  email: string;
+  token: string;
+  role: ColumnType<string, string | undefined, string>;
+  invited_by: number | null;
+  expires_at: Date;
+  accepted_at: Date | null;
+  created_at: ColumnType<Date, never, never>;
 }
 
 export interface TenantsTable {
