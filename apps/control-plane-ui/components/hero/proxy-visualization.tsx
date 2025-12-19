@@ -6,7 +6,7 @@ import { ProxyScene } from "./proxy-scene";
 
 export function ProxyVisualization() {
   return (
-    <div className="h-[350px] w-full">
+    <div className="h-[220px] w-full sm:h-[280px] md:h-[350px]">
       <Canvas
         camera={{ position: [0, 1.5, 7], fov: 45 }}
         gl={{ antialias: true, alpha: true }}

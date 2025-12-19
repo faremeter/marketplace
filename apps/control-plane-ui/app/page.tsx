@@ -12,7 +12,9 @@ const ProxyVisualization = dynamic(
     ),
   {
     ssr: false,
-    loading: () => <div className="h-[350px] w-full" />,
+    loading: () => (
+      <div className="h-[220px] w-full sm:h-[280px] md:h-[350px]" />
+    ),
   },
 );
 
@@ -30,15 +32,14 @@ export default function LandingPage() {
           <div className="relative mx-auto max-w-7xl px-4 pb-24 pt-20 sm:px-6 sm:pb-32 sm:pt-28 lg:px-8">
             <div className="mx-auto max-w-3xl text-center">
               <h1 className="text-4xl font-medium tracking-tight text-white sm:text-5xl lg:text-6xl">
-                API monetization
+                Turn any API into a
                 <br />
-                <span className="text-gray-9">for developers</span>
+                <span className="text-gray-9">Paid x402 Service</span>
               </h1>
 
               <p className="mx-auto mt-6 max-w-xl text-[17px] leading-relaxed text-gray-11">
-                Turn any API into a paid service with blockchain micropayments.
-                No credit cards, no invoices, no delays. Get paid in USDC
-                directly to your wallet.
+                The fastest tool for API monetization for developers. No credit
+                cards, no invoices, no delays. Get paid your way.
               </p>
 
               <div className="mt-10 flex flex-col items-center justify-center gap-4 sm:flex-row">
@@ -66,7 +67,7 @@ export default function LandingPage() {
             <div className="mx-auto mt-16 max-w-2xl">
               <div className="mb-6 text-center">
                 <h3 className="text-lg font-medium text-white">
-                  Call proxy APIs with one line of code
+                  Call x402 APIs with one line of code
                 </h3>
               </div>
               <div className="rounded-lg border border-white/10 bg-gray-2 p-1">
@@ -183,7 +184,7 @@ export default function LandingPage() {
               />
               <FeatureCard
                 title="Multi-chain payments"
-                description="Accept payments on Solana, Base, Polygon, and Monad. USDC stablecoin support."
+                description="Accept payments with any token on Solana, Base, Polygon, and Monad."
               />
               <FeatureCard
                 title="Instant settlement"
@@ -195,7 +196,7 @@ export default function LandingPage() {
               />
               <FeatureCard
                 title="Global by default"
-                description="Anyone with a crypto wallet can pay. No bank accounts or identity verification."
+                description="Anyone with a wallet can pay. No bank accounts or billing needed."
               />
               <FeatureCard
                 title="Real-time analytics"
@@ -213,7 +214,7 @@ export default function LandingPage() {
                 How it works
               </h2>
               <p className="mt-4 text-[15px] text-gray-9">
-                Three steps to monetize your API
+                Three simple steps to monetize your API
               </p>
             </div>
 
@@ -221,12 +222,12 @@ export default function LandingPage() {
               <StepCard
                 number="1"
                 title="Create your account"
-                description="Sign up and connect your wallet to receive payments."
+                description="Sign up and add your wallet to receive payments."
               />
               <StepCard
                 number="2"
                 title="Register your API"
-                description="Choose a name, provide your backend URL and API token, set endpoint pricing."
+                description="Choose a name, provide your backend URL and API token and name your price."
               />
               <StepCard
                 number="3"
@@ -245,7 +246,7 @@ export default function LandingPage() {
                 Ready to monetize your API?
               </h2>
               <p className="mt-4 text-[15px] text-gray-9">
-                Start accepting payments in minutes. No credit card required.
+                Start accepting payments in seconds. No billing required.
               </p>
               <div className="mt-8">
                 <Link

@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { useAuth } from "@/lib/auth/context";
 
 export function Header() {
@@ -9,10 +10,14 @@ export function Header() {
   return (
     <header className="border-b border-white/5 bg-black/50 backdrop-blur-xl">
       <div className="mx-auto flex h-14 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
-        <Link href="/" className="flex items-center gap-2">
-          <span className="text-[15px] font-medium text-white">
-            Corbits API
-          </span>
+        <Link href="/" className="flex items-center">
+          <Image
+            src="/corbits-wordmark-orange.svg"
+            alt="Corbits"
+            width={100}
+            height={24}
+            priority
+          />
         </Link>
 
         <nav className="flex items-center gap-1">

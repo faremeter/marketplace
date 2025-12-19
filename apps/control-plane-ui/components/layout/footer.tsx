@@ -1,4 +1,5 @@
 import Link from "next/link";
+import Image from "next/image";
 
 export function Footer() {
   const currentYear = new Date().getFullYear();
@@ -7,10 +8,13 @@ export function Footer() {
     <footer className="border-t border-white/5 bg-black">
       <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
         <div className="flex flex-col items-center justify-between gap-4 sm:flex-row">
-          <div className="flex items-center gap-2">
-            <span className="text-[13px] font-medium text-white">
-              Corbits API
-            </span>
+          <div className="flex items-center">
+            <Image
+              src="/corbits-wordmark-orange.svg"
+              alt="Corbits"
+              width={100}
+              height={24}
+            />
           </div>
 
           <nav className="flex items-center gap-6">
@@ -23,7 +27,7 @@ export function Footer() {
               Docs
             </Link>
             <Link
-              href="https://github.com/abklabs"
+              href="https://github.com/faremeter/faremeter"
               className="text-[13px] text-gray-9 transition-colors hover:text-white"
               target="_blank"
               rel="noopener noreferrer"
@@ -38,7 +42,9 @@ export function Footer() {
             </Link>
           </nav>
 
-          <p className="text-[13px] text-gray-9">{currentYear} Corbits</p>
+          <p className="text-[13px] text-gray-9">
+            &copy; {currentYear} Corbits. All rights reserved.
+          </p>
         </div>
       </div>
     </footer>

@@ -5,8 +5,8 @@ import { Providers } from "./providers";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Control Plane",
-  description: "x402 Proxy Control Plane Dashboard",
+  title: "Corbits API",
+  description: "Turn any API into a paid x402 service",
 };
 
 export default function RootLayout({
