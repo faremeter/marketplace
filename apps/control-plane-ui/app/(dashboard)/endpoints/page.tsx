@@ -2,20 +2,26 @@
 
 import { useAuth } from "@/lib/auth/context";
 import useSWR from "swr";
-import * as Tooltip from "@radix-ui/react-tooltip";
 import { api } from "@/lib/api/client";
-import { InlineActiveToggle } from "@/components/shared/inline-active-toggle";
 import { InlinePriceEdit } from "@/components/shared/inline-price-edit";
 import { InlineSchemeEdit } from "@/components/shared/inline-scheme-edit";
 import Link from "next/link";
-import { Pencil1Icon } from "@radix-ui/react-icons";
+import {
+  Pencil1Icon,
+  CopyIcon,
+  CheckIcon,
+  EyeOpenIcon,
+} from "@radix-ui/react-icons";
+import { useState } from "react";
+import { useToast } from "@/components/ui/toast";
 
 interface Tenant {
   id: number;
   name: string;
-  backend_url: string;
   is_active: boolean;
   status: string;
+  wallet_id: number | null;
+  wallet_funding_status: string | null;
   default_price_usdc: number;
   default_scheme: string;
 }
@@ -97,6 +103,8 @@ function TenantCard({
   orgId: number;
   onUpdate: () => void;
 }) {
+  const [copied, setCopied] = useState(false);
+  const { toast } = useToast();
   const {
     data: endpoints,
     isLoading,
@@ -106,52 +114,66 @@ function TenantCard({
   });
 
   const apiEndpoint = `/api/organizations/${orgId}/tenants/${tenant.id}`;
+  const proxyUrl = `https://${tenant.name}.api.corbits.dev`;
+
+  const handleCopy = async () => {
+    await navigator.clipboard.writeText(proxyUrl);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+    toast({ title: "URL copied to clipboard" });
+  };
 
   return (
     <div className="overflow-hidden rounded-lg border border-gray-6 bg-gray-2">
       <div className="flex items-center justify-between border-b border-gray-6 bg-gray-3 px-4 py-3">
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-3">
           <Link
             href={`/proxies/${tenant.id}`}
             className="text-lg font-medium text-gray-12 hover:text-accent-11 hover:underline"
           >
             {tenant.name}
           </Link>
-          <Tooltip.Provider delayDuration={200}>
-            <Tooltip.Root>
-              <Tooltip.Trigger asChild>
-                <code className="cursor-default rounded bg-gray-4 px-2 py-1 text-xs text-gray-11">
-                  {tenant.backend_url.length > 50
-                    ? `${tenant.backend_url.slice(0, 50)}...`
-                    : tenant.backend_url}
-                </code>
-              </Tooltip.Trigger>
-              {tenant.backend_url.length > 50 && (
-                <Tooltip.Portal>
-                  <Tooltip.Content
-                    className="rounded bg-gray-12 px-2 py-1 text-xs text-gray-1"
-                    sideOffset={5}
-                  >
-                    {tenant.backend_url}
-                    <Tooltip.Arrow className="fill-gray-12" />
-                  </Tooltip.Content>
-                </Tooltip.Portal>
+          <div className="flex items-center rounded-lg border border-gray-6 bg-gray-3/50">
+            <div className="flex items-center gap-2 px-3 py-1.5">
+              <div
+                className={`h-2 w-2 rounded-full ${
+                  tenant.status === "active" &&
+                  tenant.is_active &&
+                  tenant.wallet_id &&
+                  tenant.wallet_funding_status === "funded"
+                    ? "bg-green-500 animate-pulse"
+                    : tenant.status === "pending"
+                      ? "bg-yellow-500 animate-pulse"
+                      : tenant.status === "failed" ||
+                          tenant.status === "deleting" ||
+                          !tenant.wallet_id
+                        ? "bg-red-500"
+                        : "bg-gray-500"
+                }`}
+              />
+              <code className="text-sm text-gray-11">{proxyUrl}</code>
+            </div>
+            <button
+              onClick={handleCopy}
+              className="border-l border-gray-6 px-2 py-1.5 text-gray-11 hover:bg-gray-4 hover:text-gray-12 transition-colors rounded-r-lg"
+              title="Copy URL"
+            >
+              {copied ? (
+                <CheckIcon className="h-3.5 w-3.5 text-green-400" />
+              ) : (
+                <CopyIcon className="h-3.5 w-3.5" />
               )}
-            </Tooltip.Root>
-          </Tooltip.Provider>
+            </button>
+          </div>
         </div>
-        <div className="flex items-center gap-3">
-          {tenant.status === "active" ? (
-            <InlineActiveToggle
-              tenantId={tenant.id}
-              tenantName={tenant.name}
-              isActive={tenant.is_active}
-              onUpdate={onUpdate}
-              apiEndpoint={apiEndpoint}
-            />
-          ) : (
-            <TenantStatusBadge status={tenant.status} />
-          )}
+        <div className="flex items-center gap-2">
+          <Link
+            href={`/proxies/${tenant.id}`}
+            className="inline-flex items-center gap-1.5 rounded-md border border-gray-6 bg-gray-4 px-2.5 py-1 text-xs font-medium text-gray-11 hover:bg-gray-5 hover:text-gray-12"
+          >
+            <EyeOpenIcon className="h-3.5 w-3.5" />
+            View
+          </Link>
           <Link
             href={`/proxies/${tenant.id}?tab=endpoints`}
             className="inline-flex items-center gap-1.5 rounded-md border border-gray-6 bg-gray-4 px-2.5 py-1 text-xs font-medium text-gray-11 hover:bg-gray-5 hover:text-gray-12"
@@ -260,43 +282,5 @@ function TenantCard({
         )}
       </div>
     </div>
-  );
-}
-
-function TenantStatusBadge({ status }: { status: string }) {
-  const config: Record<
-    string,
-    { className: string; label: string; pulse: boolean }
-  > = {
-    pending: {
-      className: "border-yellow-800 bg-yellow-900/50 text-yellow-400",
-      label: "Pending",
-      pulse: true,
-    },
-    active: {
-      className: "border-green-800 bg-green-900/50 text-green-400",
-      label: "Ready",
-      pulse: false,
-    },
-    deleting: {
-      className: "border-red-800 bg-red-900/50 text-red-400",
-      label: "Deleting",
-      pulse: true,
-    },
-    failed: {
-      className: "border-yellow-800 bg-yellow-900/50 text-yellow-400",
-      label: "Pending",
-      pulse: true,
-    },
-  };
-
-  const { className, label, pulse } = config[status] ?? config.pending;
-
-  return (
-    <span
-      className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs ${className} ${pulse ? "animate-pulse" : ""}`}
-    >
-      {label}
-    </span>
   );
 }

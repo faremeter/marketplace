@@ -12,41 +12,14 @@ import { AdminEndpointsTable } from "./admin-endpoints-table";
 interface Tenant {
   id: number;
   name: string;
-  backend_url: string;
   default_price_usdc: number;
   default_scheme: string;
-  is_active: boolean;
-  status: string;
-  wallet_id: number | null;
-  wallet_funding_status: string | null;
 }
 
 interface CollapsibleTenantSectionProps {
   tenant: Tenant;
   onTenantUpdate?: () => void;
   defaultExpanded?: boolean;
-}
-
-function getTenantStatus(tenant: Tenant) {
-  if (tenant.status === "deleting") {
-    return { label: "Deleting", color: "red" };
-  }
-  if (tenant.status === "failed") {
-    return { label: "Failed", color: "red" };
-  }
-  if (tenant.status === "pending" || tenant.status === "provisioning") {
-    return { label: "Provisioning", color: "yellow" };
-  }
-  if (tenant.status === "initializing") {
-    return { label: "Initializing", color: "yellow" };
-  }
-  if (!tenant.wallet_id) {
-    return { label: "No Wallet", color: "red" };
-  }
-  if (tenant.wallet_funding_status !== "funded") {
-    return { label: "Unfunded", color: "yellow" };
-  }
-  return { label: "Ready", color: "green" };
 }
 
 export function CollapsibleTenantSection({
@@ -56,14 +29,7 @@ export function CollapsibleTenantSection({
 }: CollapsibleTenantSectionProps) {
   const [isExpanded, setIsExpanded] = useState(defaultExpanded);
   const { toast } = useToast();
-  const status = getTenantStatus(tenant);
   const apiUrl = `https://${tenant.name}.api.corbits.dev`;
-
-  const statusColors = {
-    green: "bg-green-900/50 text-green-400 border-green-800",
-    yellow: "bg-yellow-900/50 text-yellow-400 border-yellow-800",
-    red: "bg-red-900/50 text-red-400 border-red-800",
-  };
 
   const handleCopy = async (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -99,11 +65,6 @@ export function CollapsibleTenantSection({
         >
           <CopyIcon className="h-3 w-3" />
         </button>
-        <span
-          className={`ml-auto rounded px-1.5 py-0.5 text-[10px] font-medium border ${statusColors[status.color as keyof typeof statusColors]}`}
-        >
-          {status.label}
-        </span>
       </div>
       {isExpanded && (
         <div className="px-3 pb-3">
