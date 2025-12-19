@@ -30,6 +30,11 @@ interface Endpoint {
   created_at: string;
 }
 
+interface OpenApiSpecResponse {
+  spec: unknown | null;
+  hasSpec: boolean;
+}
+
 interface AdminEndpointsTableProps {
   tenantId: number;
   defaultPriceUsdc: number;
@@ -61,6 +66,13 @@ export function AdminEndpointsTable({
     api.get<Endpoint[]>,
     { refreshInterval: 5000 },
   );
+
+  const { data: specData } = useSWR(
+    enabled ? `/api/tenants/${tenantId}/openapi/spec` : null,
+    api.get<OpenApiSpecResponse>,
+  );
+
+  const hasOpenApiSpec = specData?.hasSpec ?? false;
 
   const handleDelete = async () => {
     if (!endpointToDelete) return;
@@ -123,9 +135,11 @@ export function AdminEndpointsTable({
               <th className="whitespace-nowrap px-4 py-3 text-left text-sm font-medium text-gray-11">
                 Scheme
               </th>
-              <th className="whitespace-nowrap px-4 py-3 text-left text-sm font-medium text-gray-11">
-                Lineage
-              </th>
+              {hasOpenApiSpec && (
+                <th className="whitespace-nowrap px-4 py-3 text-left text-sm font-medium text-gray-11">
+                  Lineage
+                </th>
+              )}
               <th className="whitespace-nowrap px-4 py-3 text-left text-sm font-medium text-gray-11">
                 Actions
               </th>
@@ -175,66 +189,68 @@ export function AdminEndpointsTable({
                       label="Scheme"
                     />
                   </td>
-                  <td className="whitespace-nowrap px-4 py-3">
-                    {lineage.hasLineage ? (
-                      <Tooltip.Provider delayDuration={100}>
-                        <Tooltip.Root>
-                          <Tooltip.Trigger asChild>
-                            <div className="flex items-center gap-1 text-green-400 cursor-pointer">
-                              <Link2Icon className="h-4 w-4" />
-                              <span className="text-xs">
-                                {lineage.paths.length} path
-                                {lineage.paths.length !== 1 ? "s" : ""}
-                              </span>
-                            </div>
-                          </Tooltip.Trigger>
-                          <Tooltip.Portal>
-                            <Tooltip.Content
-                              className="w-64 rounded-md border border-gray-6 bg-gray-2 p-2 shadow-lg"
-                              sideOffset={5}
-                            >
-                              <p className="mb-1 text-xs font-medium text-gray-11">
-                                OpenAPI Source Paths:
-                              </p>
-                              <ul className="space-y-0.5">
-                                {lineage.paths.map((path, i) => (
-                                  <li
-                                    key={i}
-                                    className="text-xs text-gray-12 font-mono"
-                                  >
-                                    {path}
-                                  </li>
-                                ))}
-                              </ul>
-                              <Tooltip.Arrow className="fill-gray-6" />
-                            </Tooltip.Content>
-                          </Tooltip.Portal>
-                        </Tooltip.Root>
-                      </Tooltip.Provider>
-                    ) : (
-                      <Tooltip.Provider delayDuration={100}>
-                        <Tooltip.Root>
-                          <Tooltip.Trigger asChild>
-                            <div className="flex items-center gap-1 text-yellow-400 cursor-pointer">
-                              <ExclamationTriangleIcon className="h-4 w-4" />
-                              <span className="text-xs">Orphan</span>
-                            </div>
-                          </Tooltip.Trigger>
-                          <Tooltip.Portal>
-                            <Tooltip.Content
-                              className="max-w-xs rounded-md border border-gray-6 bg-gray-2 p-2 shadow-lg"
-                              sideOffset={5}
-                            >
-                              <p className="text-xs text-gray-11">
-                                Not linked to any OpenAPI spec paths.
-                              </p>
-                              <Tooltip.Arrow className="fill-gray-6" />
-                            </Tooltip.Content>
-                          </Tooltip.Portal>
-                        </Tooltip.Root>
-                      </Tooltip.Provider>
-                    )}
-                  </td>
+                  {hasOpenApiSpec && (
+                    <td className="whitespace-nowrap px-4 py-3">
+                      {lineage.hasLineage ? (
+                        <Tooltip.Provider delayDuration={100}>
+                          <Tooltip.Root>
+                            <Tooltip.Trigger asChild>
+                              <div className="flex items-center gap-1 text-green-400 cursor-pointer">
+                                <Link2Icon className="h-4 w-4" />
+                                <span className="text-xs">
+                                  {lineage.paths.length} path
+                                  {lineage.paths.length !== 1 ? "s" : ""}
+                                </span>
+                              </div>
+                            </Tooltip.Trigger>
+                            <Tooltip.Portal>
+                              <Tooltip.Content
+                                className="w-64 rounded-md border border-gray-6 bg-gray-2 p-2 shadow-lg"
+                                sideOffset={5}
+                              >
+                                <p className="mb-1 text-xs font-medium text-gray-11">
+                                  OpenAPI Source Paths:
+                                </p>
+                                <ul className="space-y-0.5">
+                                  {lineage.paths.map((path, i) => (
+                                    <li
+                                      key={i}
+                                      className="text-xs text-gray-12 font-mono"
+                                    >
+                                      {path}
+                                    </li>
+                                  ))}
+                                </ul>
+                                <Tooltip.Arrow className="fill-gray-6" />
+                              </Tooltip.Content>
+                            </Tooltip.Portal>
+                          </Tooltip.Root>
+                        </Tooltip.Provider>
+                      ) : (
+                        <Tooltip.Provider delayDuration={100}>
+                          <Tooltip.Root>
+                            <Tooltip.Trigger asChild>
+                              <div className="flex items-center gap-1 text-yellow-400 cursor-pointer">
+                                <ExclamationTriangleIcon className="h-4 w-4" />
+                                <span className="text-xs">Orphan</span>
+                              </div>
+                            </Tooltip.Trigger>
+                            <Tooltip.Portal>
+                              <Tooltip.Content
+                                className="max-w-xs rounded-md border border-gray-6 bg-gray-2 p-2 shadow-lg"
+                                sideOffset={5}
+                              >
+                                <p className="text-xs text-gray-11">
+                                  Not linked to any OpenAPI spec paths.
+                                </p>
+                                <Tooltip.Arrow className="fill-gray-6" />
+                              </Tooltip.Content>
+                            </Tooltip.Portal>
+                          </Tooltip.Root>
+                        </Tooltip.Provider>
+                      )}
+                    </td>
+                  )}
                   <td className="whitespace-nowrap px-4 py-3">
                     <div className="flex items-center gap-1">
                       <button
@@ -294,9 +310,11 @@ export function AdminEndpointsTable({
                   label="Default Scheme"
                 />
               </td>
-              <td className="whitespace-nowrap px-4 py-3">
-                <span className="text-xs text-gray-11">-</span>
-              </td>
+              {hasOpenApiSpec && (
+                <td className="whitespace-nowrap px-4 py-3">
+                  <span className="text-xs text-gray-11">-</span>
+                </td>
+              )}
               <td className="whitespace-nowrap px-4 py-3">
                 <span className="text-xs text-gray-11">-</span>
               </td>
