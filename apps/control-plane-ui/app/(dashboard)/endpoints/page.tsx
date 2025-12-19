@@ -86,8 +86,19 @@ export default function EndpointsPage() {
           ))}
         </div>
       ) : (
-        <div className="rounded-lg border border-gray-6 bg-gray-2 p-6 text-center">
-          <p className="text-sm text-gray-11">No proxies found.</p>
+        <div className="rounded-lg border border-gray-6 bg-gray-2 p-8 text-center">
+          <h2 className="mb-2 text-lg font-medium text-gray-12">
+            No endpoints yet
+          </h2>
+          <p className="mb-6 text-sm text-gray-11">
+            Create a proxy to start managing your API endpoints.
+          </p>
+          <Link
+            href="/proxies"
+            className="inline-flex items-center gap-2 rounded-md bg-white px-4 py-2 text-sm font-medium text-black shadow-button transition-colors hover:bg-white/90"
+          >
+            Create a proxy
+          </Link>
         </div>
       )}
     </div>
