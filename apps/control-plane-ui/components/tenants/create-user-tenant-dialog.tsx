@@ -11,6 +11,8 @@ import {
   CrossCircledIcon,
   ChevronDownIcon,
   CheckIcon,
+  EyeOpenIcon,
+  EyeClosedIcon,
 } from "@radix-ui/react-icons";
 import { api, ApiError } from "@/lib/api/client";
 import { SCHEME_OPTIONS } from "@/lib/types/api";
@@ -55,6 +57,7 @@ export function CreateUserTenantDialog({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [nameAvailable, setNameAvailable] = useState<boolean | null>(null);
   const [isCheckingName, setIsCheckingName] = useState(false);
+  const [showAuthValue, setShowAuthValue] = useState(true);
   const checkTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
@@ -118,24 +121,84 @@ export function CreateUserTenantDialog({
     e.preventDefault();
     setError("");
 
-    if (!name.trim()) {
+    const trimmedName = name.trim();
+    const trimmedUrl = backendUrl.trim();
+    const trimmedHeader = authHeader.trim();
+    const trimmedValue = authValue.trim();
+    const price = parseFloat(defaultPrice) || 0;
+
+    if (!trimmedName) {
       setError("Name is required");
+      return;
+    }
+    if (trimmedName.length > 63) {
+      setError("Name must be 63 characters or less");
       return;
     }
     if (nameAvailable === false) {
       setError("This name is already taken");
       return;
     }
-    if (!backendUrl.trim()) {
+    if (!trimmedUrl) {
       setError("Backend URL is required");
+      return;
+    }
+    if (trimmedUrl.length > 2048) {
+      setError("Backend URL is too long (max 2048 characters)");
+      return;
+    }
+    try {
+      const url = new URL(trimmedUrl);
+      if (!["http:", "https:"].includes(url.protocol)) {
+        setError("Backend URL must use http or https");
+        return;
+      }
+    } catch {
+      setError("Invalid backend URL");
+      return;
+    }
+    if (trimmedHeader.length > 256) {
+      setError("Auth header is too long (max 256 characters)");
+      return;
+    }
+    if (trimmedValue.length > 4096) {
+      setError("Auth value is too long (max 4096 characters)");
       return;
     }
     if (!walletId) {
       setError("Wallet is required");
       return;
     }
+    if (price <= 0) {
+      setError("Price must be greater than 0");
+      return;
+    }
+    if (price > 100) {
+      setError("Price must be $100 or less");
+      return;
+    }
 
     setIsSubmitting(true);
+
+    // Recheck name availability before submitting
+    try {
+      const sanitizedName = name
+        .trim()
+        .toLowerCase()
+        .replace(/[^a-z0-9-]/g, "-");
+      const result = await api.get<{ available: boolean }>(
+        `/api/organizations/${organizationId}/tenants/check-name?name=${encodeURIComponent(sanitizedName)}`,
+      );
+      if (!result.available) {
+        setNameAvailable(false);
+        setError("This name was just taken. Please choose another.");
+        setIsSubmitting(false);
+        return;
+      }
+    } catch {
+      // Continue with submission if check fails
+    }
+
     try {
       await api.post(`/api/organizations/${organizationId}/tenants`, {
         name: name.trim(),
@@ -338,13 +401,26 @@ export function CreateUserTenantDialog({
                     <label className="mb-1.5 block text-sm text-gray-11">
                       Auth Value
                     </label>
-                    <input
-                      type="password"
-                      value={authValue}
-                      onChange={(e) => setAuthValue(e.target.value)}
-                      placeholder="Bearer token..."
-                      className="w-full rounded-md border border-gray-6 bg-gray-2 px-3 py-2 text-sm text-gray-12 placeholder-gray-9 focus:border-accent-8 focus:outline-none focus:ring-1 focus:ring-accent-8"
-                    />
+                    <div className="relative">
+                      <input
+                        type={showAuthValue ? "text" : "password"}
+                        value={authValue}
+                        onChange={(e) => setAuthValue(e.target.value)}
+                        placeholder="Bearer token..."
+                        className="w-full rounded-md border border-gray-6 bg-gray-2 px-3 py-2 pr-9 text-sm text-gray-12 placeholder-gray-9 focus:border-accent-8 focus:outline-none focus:ring-1 focus:ring-accent-8"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowAuthValue(!showAuthValue)}
+                        className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-gray-11 hover:text-gray-12"
+                      >
+                        {showAuthValue ? (
+                          <EyeOpenIcon className="h-4 w-4" />
+                        ) : (
+                          <EyeClosedIcon className="h-4 w-4" />
+                        )}
+                      </button>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -407,17 +483,39 @@ export function CreateUserTenantDialog({
                   <label className="mb-1.5 block text-sm text-gray-11">
                     Scheme
                   </label>
-                  <select
+                  <Select.Root
                     value={defaultScheme}
-                    onChange={(e) => setDefaultScheme(e.target.value)}
-                    className="w-full rounded-md border border-gray-6 bg-gray-2 px-3 py-2 text-sm text-gray-12 focus:border-accent-8 focus:outline-none focus:ring-1 focus:ring-accent-8"
+                    onValueChange={setDefaultScheme}
                   >
-                    {SCHEME_OPTIONS.map((opt) => (
-                      <option key={opt.value} value={opt.value}>
-                        {opt.label}
-                      </option>
-                    ))}
-                  </select>
+                    <Select.Trigger className="flex w-full items-center justify-between rounded-md border border-gray-6 bg-gray-2 px-3 py-2 text-sm text-gray-12 focus:border-accent-8 focus:outline-none focus:ring-1 focus:ring-accent-8">
+                      <Select.Value />
+                      <Select.Icon>
+                        <ChevronDownIcon className="h-4 w-4 text-gray-11" />
+                      </Select.Icon>
+                    </Select.Trigger>
+                    <Select.Portal>
+                      <Select.Content
+                        className="overflow-hidden rounded-md border border-gray-6 bg-gray-2 shadow-lg"
+                        position="popper"
+                        sideOffset={4}
+                      >
+                        <Select.Viewport className="p-1">
+                          {SCHEME_OPTIONS.map((opt) => (
+                            <Select.Item
+                              key={opt.value}
+                              value={opt.value}
+                              className="relative flex cursor-pointer select-none items-center rounded px-8 py-2 text-sm outline-none hover:bg-gray-4 data-[highlighted]:bg-gray-4"
+                            >
+                              <Select.ItemIndicator className="absolute left-2 inline-flex items-center">
+                                <CheckIcon className="h-4 w-4 text-accent-11" />
+                              </Select.ItemIndicator>
+                              <Select.ItemText>{opt.label}</Select.ItemText>
+                            </Select.Item>
+                          ))}
+                        </Select.Viewport>
+                      </Select.Content>
+                    </Select.Portal>
+                  </Select.Root>
                 </div>
               </div>
             </section>
@@ -439,8 +537,29 @@ export function CreateUserTenantDialog({
               <button
                 type="submit"
                 disabled={isSubmitting}
-                className="rounded-md bg-white px-4 py-2 text-sm font-medium text-black shadow-button transition-colors hover:bg-white/90 disabled:opacity-50"
+                className="inline-flex items-center justify-center gap-2 rounded-md bg-white px-4 py-2 text-sm font-medium text-black shadow-button transition-colors hover:bg-white/90 disabled:cursor-not-allowed disabled:opacity-70"
               >
+                {isSubmitting && (
+                  <svg
+                    className="h-4 w-4 animate-spin"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                  >
+                    <circle
+                      className="opacity-25"
+                      cx="12"
+                      cy="12"
+                      r="10"
+                      stroke="currentColor"
+                      strokeWidth="4"
+                    />
+                    <path
+                      className="opacity-75"
+                      fill="currentColor"
+                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                    />
+                  </svg>
+                )}
                 {isSubmitting ? "Creating..." : "Create Proxy"}
               </button>
             </div>

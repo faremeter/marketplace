@@ -780,21 +780,34 @@ organizationsRoutes.post("/:id/tenants", async (c) => {
 
   const nodeIds = nodesWithCounts.map((n) => n.id);
 
-  const tenant = await db
-    .insertInto("tenants")
-    .values({
-      name: body.name.trim(),
-      backend_url: body.backend_url.trim(),
-      node_id: nodeIds[0],
-      organization_id: orgId,
-      wallet_id: body.wallet_id,
-      default_price_usdc: body.default_price_usdc ?? 0,
-      default_scheme: body.default_scheme ?? "exact",
-      upstream_auth_header: body.upstream_auth_header?.trim() || null,
-      upstream_auth_value: body.upstream_auth_value?.trim() || null,
-    })
-    .returningAll()
-    .executeTakeFirstOrThrow();
+  let tenant;
+  try {
+    tenant = await db
+      .insertInto("tenants")
+      .values({
+        name: body.name.trim(),
+        backend_url: body.backend_url.trim(),
+        node_id: nodeIds[0],
+        organization_id: orgId,
+        wallet_id: body.wallet_id,
+        default_price_usdc: body.default_price_usdc ?? 0,
+        default_scheme: body.default_scheme ?? "exact",
+        upstream_auth_header: body.upstream_auth_header?.trim() || null,
+        upstream_auth_value: body.upstream_auth_value?.trim() || null,
+      })
+      .returningAll()
+      .executeTakeFirstOrThrow();
+  } catch (err: unknown) {
+    if (
+      err &&
+      typeof err === "object" &&
+      "code" in err &&
+      err.code === "23505"
+    ) {
+      return c.json({ error: "A proxy with this name already exists" }, 409);
+    }
+    throw err;
+  }
 
   for (const [i, nodeId] of nodeIds.entries()) {
     const isPrimary = i === 0;
