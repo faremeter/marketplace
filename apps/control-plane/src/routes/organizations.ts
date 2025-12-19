@@ -46,12 +46,29 @@ organizationsRoutes.get("/", async (c) => {
   return c.json(organizations);
 });
 
+const MAX_ORGS_PER_USER = 5;
+
 organizationsRoutes.post("/", async (c) => {
   const user = c.get("user");
   const body = await c.req.json();
 
   if (!body.name) {
     return c.json({ error: "Organization name is required" }, 400);
+  }
+
+  // Check org limit
+  const orgCount = await db
+    .selectFrom("user_organizations")
+    .select((eb) => eb.fn.count<number>("id").as("count"))
+    .where("user_id", "=", user.id)
+    .where("role", "=", "owner")
+    .executeTakeFirstOrThrow();
+
+  if (orgCount.count >= MAX_ORGS_PER_USER) {
+    return c.json(
+      { error: `You can only create up to ${MAX_ORGS_PER_USER} organizations` },
+      400,
+    );
   }
 
   let slug = body.slug || slugify(body.name);

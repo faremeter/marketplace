@@ -7,6 +7,8 @@ import { CheckIcon, PlusIcon, ChevronDownIcon } from "@radix-ui/react-icons";
 import { useAuth, type Organization } from "@/lib/auth/context";
 import { CreateOrgDialog } from "./create-org-dialog";
 
+const MAX_ORGS_PER_USER = 5;
+
 export function OrgSwitcher() {
   const { user, currentOrg, setCurrentOrg } = useAuth();
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
@@ -16,6 +18,10 @@ export function OrgSwitcher() {
   }
 
   const orgInitial = currentOrg?.name.charAt(0).toUpperCase() ?? "?";
+  const ownedOrgsCount = user.organizations.filter(
+    (o) => o.role === "owner",
+  ).length;
+  const canCreateOrg = ownedOrgsCount < MAX_ORGS_PER_USER;
 
   return (
     <DropdownMenu.Root>
@@ -53,13 +59,20 @@ export function OrgSwitcher() {
           <DropdownMenu.Separator className="my-1 h-px bg-white/5" />
 
           <DropdownMenu.Item
-            onSelect={() => setCreateDialogOpen(true)}
-            className="flex cursor-pointer items-center gap-2 rounded-xl px-2 py-2 text-[13px] font-semibold text-gray-9 outline-none hover:bg-white/5 hover:text-white focus:bg-white/5"
+            onSelect={() => canCreateOrg && setCreateDialogOpen(true)}
+            disabled={!canCreateOrg}
+            className={`flex items-center gap-2 rounded-xl px-2 py-2 text-[13px] font-semibold outline-none ${
+              canCreateOrg
+                ? "cursor-pointer text-gray-9 hover:bg-white/5 hover:text-white focus:bg-white/5"
+                : "cursor-not-allowed text-gray-11 opacity-50"
+            }`}
           >
             <div className="flex h-6 w-6 items-center justify-center">
               <PlusIcon className="h-4 w-4" />
             </div>
-            <span>Create Organization</span>
+            <span>
+              {canCreateOrg ? "Create Organization" : "Org limit reached"}
+            </span>
           </DropdownMenu.Item>
         </DropdownMenu.Content>
       </DropdownMenu.Portal>
