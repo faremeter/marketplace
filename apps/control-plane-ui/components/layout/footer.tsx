@@ -35,8 +35,10 @@ export function Footer() {
               GitHub
             </Link>
             <Link
-              href="mailto:support@corbits.dev"
+              href="https://t.me/+r80b_8WkFJ45NjM5"
               className="text-[13px] text-gray-9 transition-colors hover:text-white"
+              target="_blank"
+              rel="noopener noreferrer"
             >
               Support
             </Link>
