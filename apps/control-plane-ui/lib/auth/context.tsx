@@ -96,9 +96,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         password,
       });
       await mutate(response.user, false);
+      if (response.user.organizations?.length) {
+        setCurrentOrg(response.user.organizations[0]);
+      }
       return response.user;
     },
-    [mutate],
+    [mutate, setCurrentOrg],
   );
 
   const logout = useCallback(async () => {
