@@ -10,7 +10,7 @@ export default function AdminLayout({
 }) {
   return (
     <AdminRoute>
-      <div className="flex min-h-screen">
+      <div className="flex h-screen overflow-hidden">
         <AdminSidebar />
         <main className="flex-1 overflow-auto bg-gray-1 p-6">{children}</main>
       </div>
