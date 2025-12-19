@@ -12,6 +12,10 @@ publicRoutes.post("/waitlist", async (c) => {
     return c.json({ error: "Email is required" }, 400);
   }
 
+  if (email.length > 254) {
+    return c.json({ error: "Email is too long" }, 400);
+  }
+
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
   if (!emailRegex.test(email)) {
     return c.json({ error: "Invalid email format" }, 400);

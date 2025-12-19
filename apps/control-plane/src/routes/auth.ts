@@ -10,6 +10,10 @@ export const authRoutes = new Hono();
 const SALT_ROUNDS = 10;
 
 authRoutes.post("/signup", async (c) => {
+  if (process.env.NODE_ENV === "production") {
+    return c.json({ error: "Signups are temporarily disabled" }, 403);
+  }
+
   const body = await c.req.json();
 
   if (!body.email || !body.password) {
