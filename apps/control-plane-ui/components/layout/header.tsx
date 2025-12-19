@@ -37,9 +37,18 @@ export function Header() {
               >
                 Log in
               </Link>
-              <BetaSignupButton className="rounded-md bg-white px-3 py-1.5 text-[13px] font-medium text-black shadow-button transition-colors hover:bg-white/90">
-                Sign up
-              </BetaSignupButton>
+              {process.env.NODE_ENV === "development" ? (
+                <Link
+                  href="/signup"
+                  className="rounded-md bg-white px-3 py-1.5 text-[13px] font-medium text-black shadow-button transition-colors hover:bg-white/90"
+                >
+                  Sign up
+                </Link>
+              ) : (
+                <BetaSignupButton className="rounded-md bg-white px-3 py-1.5 text-[13px] font-medium text-black shadow-button transition-colors hover:bg-white/90">
+                  Sign up
+                </BetaSignupButton>
+              )}
             </>
           )}
         </nav>
