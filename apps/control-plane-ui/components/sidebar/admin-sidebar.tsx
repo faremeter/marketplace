@@ -70,7 +70,7 @@ export function AdminSidebar() {
       <Separator.Root className="h-px bg-white/5" />
 
       <div className="p-4">
-        <SidebarItem href="/" icon={<ExitIcon />} label="Exit Admin" />
+        <SidebarItem href="/proxies" icon={<ExitIcon />} label="Exit Admin" />
       </div>
 
       <Separator.Root className="h-px bg-white/5" />
