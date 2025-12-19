@@ -250,7 +250,7 @@ export default function AdminTenantsPage() {
                             <Tooltip.Trigger asChild>
                               <div className="flex items-center gap-2">
                                 <span
-                                  className={`inline-flex cursor-help rounded-full border px-2 py-0.5 text-xs ${
+                                  className={`inline-flex whitespace-nowrap cursor-help rounded-full border px-2 py-0.5 text-xs ${
                                     color === "yellow"
                                       ? "border-yellow-800 bg-yellow-900/50 text-yellow-400"
                                       : color === "red"
@@ -345,6 +345,16 @@ export default function AdminTenantsPage() {
                             label="Unfunded"
                             tooltip="Wallet not funded - tenant cannot process requests"
                             color="yellow"
+                          />
+                        );
+                      }
+
+                      if (!tenant.is_active) {
+                        return (
+                          <StatusBadge
+                            label="Inactive"
+                            tooltip="Tenant is disabled"
+                            color="gray"
                           />
                         );
                       }

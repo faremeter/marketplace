@@ -101,6 +101,13 @@ function getStatus(tenant: Tenant): {
     };
   }
 
+  if (!tenant.is_active) {
+    return {
+      label: "Inactive",
+      color: "bg-gray-800/50 text-gray-400 border-gray-700",
+    };
+  }
+
   return {
     label: "Ready",
     color: "bg-green-900/50 text-green-400 border-green-800",

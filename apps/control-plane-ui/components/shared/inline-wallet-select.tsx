@@ -73,7 +73,7 @@ export function InlineWalletSelect({
   const getStatusColor = () => {
     if (isSaving) return "opacity-50 border-gray-6 bg-gray-3 text-gray-11";
     if (!currentWalletId)
-      return "border-red-700 bg-red-900/30 text-red-400 hover:bg-red-900/40";
+      return "border-red-800 bg-red-900/50 text-red-400 hover:bg-red-900/60";
     return "border-accent-7 bg-accent-3 text-accent-11 hover:bg-accent-4";
   };
 

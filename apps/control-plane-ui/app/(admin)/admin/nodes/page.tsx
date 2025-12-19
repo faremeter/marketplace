@@ -283,9 +283,9 @@ function FundingStatusBadge({
 }) {
   const config = {
     pending: {
-      className: "border-yellow-800 bg-yellow-900/50 text-yellow-400",
-      label: "Pending",
-      pulse: true,
+      className: "border-red-800 bg-red-900/50 text-red-400",
+      label: "No Wallet",
+      pulse: false,
     },
     funded: {
       className: "border-green-800 bg-green-900/50 text-green-400",

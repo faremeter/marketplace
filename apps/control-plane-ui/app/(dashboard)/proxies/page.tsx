@@ -10,6 +10,7 @@ import {
   TrashIcon,
   Cross2Icon,
   ExclamationTriangleIcon,
+  EyeOpenIcon,
 } from "@radix-ui/react-icons";
 import * as Dialog from "@radix-ui/react-dialog";
 import { InlineUrlEdit } from "@/components/shared/inline-url-edit";
@@ -86,6 +87,13 @@ function getStatus(tenant: Tenant): {
     return {
       label: "Unfunded",
       color: "bg-yellow-900/50 text-yellow-400 border-yellow-800",
+    };
+  }
+
+  if (!tenant.is_active) {
+    return {
+      label: "Inactive",
+      color: "bg-gray-800/50 text-gray-400 border-gray-700",
     };
   }
 
@@ -343,18 +351,27 @@ export default function TenantsPage() {
                       {new Date(tenant.created_at).toLocaleDateString()}
                     </td>
                     <td className="px-4 py-3">
-                      <button
-                        onClick={() => handleDeleteClick(tenant)}
-                        disabled={
-                          deletingId === tenant.id ||
-                          tenant.status === "pending" ||
-                          tenant.status === "deleting"
-                        }
-                        className="rounded p-1.5 text-gray-11 hover:bg-red-900/30 hover:text-red-400 disabled:opacity-50"
-                        title="Delete proxy"
-                      >
-                        <TrashIcon className="h-4 w-4" />
-                      </button>
+                      <div className="flex items-center gap-1">
+                        <Link
+                          href={`/proxies/${tenant.id}`}
+                          className="rounded p-1.5 text-gray-11 hover:bg-gray-4 hover:text-gray-12"
+                          title="View details"
+                        >
+                          <EyeOpenIcon className="h-4 w-4" />
+                        </Link>
+                        <button
+                          onClick={() => handleDeleteClick(tenant)}
+                          disabled={
+                            deletingId === tenant.id ||
+                            tenant.status === "pending" ||
+                            tenant.status === "deleting"
+                          }
+                          className="rounded p-1.5 text-gray-11 hover:bg-red-900/30 hover:text-red-400 disabled:opacity-50"
+                          title="Delete proxy"
+                        >
+                          <TrashIcon className="h-4 w-4" />
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 );
