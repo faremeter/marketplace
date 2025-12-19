@@ -1,13 +1,15 @@
 "use client";
 
+import { useState } from "react";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import * as Avatar from "@radix-ui/react-avatar";
 import { CheckIcon, PlusIcon, ChevronDownIcon } from "@radix-ui/react-icons";
-import Link from "next/link";
 import { useAuth, type Organization } from "@/lib/auth/context";
+import { CreateOrgDialog } from "./create-org-dialog";
 
 export function OrgSwitcher() {
   const { user, currentOrg, setCurrentOrg } = useAuth();
+  const [createDialogOpen, setCreateDialogOpen] = useState(false);
 
   if (!user || !user.organizations.length) {
     return null;
@@ -36,7 +38,7 @@ export function OrgSwitcher() {
           align="start"
         >
           <DropdownMenu.Label className="px-2 py-1.5 text-[11px] font-normal text-gray-9">
-            Teams
+            Organizations
           </DropdownMenu.Label>
 
           {user.organizations.map((org) => (
@@ -50,19 +52,22 @@ export function OrgSwitcher() {
 
           <DropdownMenu.Separator className="my-1 h-px bg-white/5" />
 
-          <DropdownMenu.Item asChild>
-            <Link
-              href="/organizations/new"
-              className="flex cursor-pointer items-center gap-2 rounded-xl px-2 py-2 text-[13px] font-semibold text-gray-9 outline-none hover:bg-white/5 hover:text-white focus:bg-white/5"
-            >
-              <div className="flex h-6 w-6 items-center justify-center">
-                <PlusIcon className="h-4 w-4" />
-              </div>
-              <span>Create Team</span>
-            </Link>
+          <DropdownMenu.Item
+            onSelect={() => setCreateDialogOpen(true)}
+            className="flex cursor-pointer items-center gap-2 rounded-xl px-2 py-2 text-[13px] font-semibold text-gray-9 outline-none hover:bg-white/5 hover:text-white focus:bg-white/5"
+          >
+            <div className="flex h-6 w-6 items-center justify-center">
+              <PlusIcon className="h-4 w-4" />
+            </div>
+            <span>Create Organization</span>
           </DropdownMenu.Item>
         </DropdownMenu.Content>
       </DropdownMenu.Portal>
+
+      <CreateOrgDialog
+        open={createDialogOpen}
+        onOpenChange={setCreateDialogOpen}
+      />
     </DropdownMenu.Root>
   );
 }
