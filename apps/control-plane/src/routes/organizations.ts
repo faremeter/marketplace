@@ -2,7 +2,14 @@ import { Hono } from "hono";
 import { randomBytes } from "crypto";
 import { db } from "../server.js";
 import { requireAuth } from "../middleware/auth.js";
-import { fetchWalletBalances } from "../lib/balances.js";
+import {
+  fetchWalletBalances,
+  extractAddresses,
+  checkBalancesMeetMinimum,
+  BALANCE_CACHE_TTL_MS,
+  type WalletBalances,
+  type WalletConfig,
+} from "../lib/balances.js";
 import { logger } from "../logger.js";
 import { syncToNode } from "../lib/sync.js";
 import { createHealthCheck, upsertNodeDnsRecord } from "../lib/dns.js";
@@ -630,7 +637,13 @@ organizationsRoutes.get("/:id/can-create-proxy", async (c) => {
 
   const wallets = await db
     .selectFrom("wallets")
-    .select(["wallet_config", "funding_status"])
+    .select([
+      "id",
+      "wallet_config",
+      "funding_status",
+      "cached_balances",
+      "balances_cached_at",
+    ])
     .where("organization_id", "=", orgId)
     .execute();
 
@@ -643,34 +656,57 @@ organizationsRoutes.get("/:id/can-create-proxy", async (c) => {
     });
   }
 
-  // First check if any wallet has funding_status = "funded" (cached status)
-  const hasFundedWallet = wallets.some((w) => w.funding_status === "funded");
-  if (hasFundedWallet) {
-    return c.json({ available: true });
-  }
-
-  // Fallback: fetch live balances for wallets with Solana addresses
+  // Check each wallet
   for (const wallet of wallets) {
-    const walletConfig = wallet.wallet_config as {
-      solana?: { "mainnet-beta"?: { address?: string } };
-    } | null;
-    const solanaAddress = walletConfig?.solana?.["mainnet-beta"]?.address;
+    const cachedAt = wallet.balances_cached_at;
+    const isCacheFresh =
+      cachedAt &&
+      wallet.cached_balances &&
+      Date.now() - new Date(cachedAt).getTime() < BALANCE_CACHE_TTL_MS;
 
-    if (!solanaAddress) continue;
-
-    try {
-      const balances = await fetchWalletBalances({
-        solana: solanaAddress,
-        evm: null,
-      });
-      const solBalance = parseFloat(balances.solana.native);
-      const usdcBalance = parseFloat(balances.solana.usdc);
-
-      if (solBalance >= minSol && usdcBalance >= minUsdc) {
+    if (isCacheFresh) {
+      // Use cached balances
+      const cached = wallet.cached_balances as WalletBalances;
+      if (checkBalancesMeetMinimum(cached, minSol, minUsdc)) {
         return c.json({ available: true });
       }
-    } catch {
-      // RPC failure, continue checking other wallets
+    } else {
+      // Cache is stale or missing, fetch fresh balances
+      const config = wallet.wallet_config as WalletConfig | null;
+      const addresses = extractAddresses(config);
+
+      if (!addresses.solana && !addresses.evm) continue;
+
+      try {
+        const balances = await fetchWalletBalances(addresses);
+        const isFunded = checkBalancesMeetMinimum(balances, minSol, minUsdc);
+
+        // Update cache and funding_status
+        await db
+          .updateTable("wallets")
+          .set({
+            cached_balances: JSON.stringify(balances),
+            balances_cached_at: new Date(),
+            funding_status: isFunded ? "funded" : "pending",
+          })
+          .where("id", "=", wallet.id)
+          .execute();
+
+        if (isFunded) {
+          return c.json({ available: true });
+        }
+      } catch (err) {
+        logger.error(
+          `Failed to fetch balances for wallet ${wallet.id}: ${err}`,
+        );
+        // If fetch fails but we have stale cache, use it as fallback
+        if (wallet.cached_balances) {
+          const cached = wallet.cached_balances as WalletBalances;
+          if (checkBalancesMeetMinimum(cached, minSol, minUsdc)) {
+            return c.json({ available: true });
+          }
+        }
+      }
     }
   }
 

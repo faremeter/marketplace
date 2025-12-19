@@ -140,3 +140,52 @@ export async function fetchWalletBalances(addresses: {
     monad: monadBalances,
   };
 }
+
+export const BALANCE_CACHE_TTL_MS = 60 * 1000; // 1 minute
+
+export interface WalletConfig {
+  solana?: { "mainnet-beta"?: { address?: string; key?: string } };
+  evm?: {
+    base?: { address?: string; key?: string };
+    polygon?: { address?: string; key?: string };
+    monad?: { address?: string; key?: string };
+  };
+}
+
+export function extractAddresses(config: WalletConfig | null): {
+  solana: string | null;
+  evm: string | null;
+} {
+  if (!config) return { solana: null, evm: null };
+  return {
+    solana: config.solana?.["mainnet-beta"]?.address ?? null,
+    evm: config.evm?.base?.address ?? null,
+  };
+}
+
+export function checkBalancesMeetMinimum(
+  balances: WalletBalances | null,
+  minSol: number,
+  minUsdc: number,
+): boolean {
+  if (!balances) return false;
+
+  // Check Solana
+  if (balances.solana) {
+    const sol = parseFloat(balances.solana.native || "0");
+    const usdc = parseFloat(balances.solana.usdc || "0");
+    if (sol >= minSol && usdc >= minUsdc) return true;
+  }
+
+  // Check EVM chains (any chain with sufficient native + USDC)
+  for (const chain of ["base", "polygon", "monad"] as const) {
+    const chainBalances = balances[chain];
+    if (chainBalances) {
+      const native = parseFloat(chainBalances.native || "0");
+      const usdc = parseFloat(chainBalances.usdc || "0");
+      if (native > 0 && usdc >= minUsdc) return true;
+    }
+  }
+
+  return false;
+}

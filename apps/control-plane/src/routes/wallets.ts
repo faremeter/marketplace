@@ -1,39 +1,18 @@
 import { Hono } from "hono";
 import { db } from "../server.js";
 import { requireAuth, requireAdmin } from "../middleware/auth.js";
-import { fetchWalletBalances } from "../lib/balances.js";
+import {
+  fetchWalletBalances,
+  extractAddresses,
+  BALANCE_CACHE_TTL_MS,
+  type WalletConfig,
+} from "../lib/balances.js";
 import { enqueueBalanceCheck } from "../lib/queue.js";
 import { logger } from "../logger.js";
 
 export const walletsRoutes = new Hono();
 
 walletsRoutes.use("*", requireAuth);
-
-interface WalletConfig {
-  solana?: {
-    "mainnet-beta"?: {
-      address: string;
-    };
-  };
-  evm?: {
-    base?: { address: string };
-    polygon?: { address: string };
-    monad?: { address: string };
-  };
-}
-
-function extractAddresses(walletConfig: WalletConfig | null): {
-  solana: string | null;
-  evm: string | null;
-} {
-  if (!walletConfig) {
-    return { solana: null, evm: null };
-  }
-  return {
-    solana: walletConfig.solana?.["mainnet-beta"]?.address ?? null,
-    evm: walletConfig.evm?.base?.address ?? null,
-  };
-}
 
 // List wallets for an organization
 walletsRoutes.get("/organization/:orgId", async (c) => {
@@ -138,9 +117,6 @@ walletsRoutes.get("/:id", async (c) => {
 
   return c.json(wallet);
 });
-
-// Cache TTL in milliseconds (60 seconds)
-const BALANCE_CACHE_TTL_MS = 60 * 1000;
 
 // Get wallet balances
 walletsRoutes.get("/:id/balances", async (c) => {
