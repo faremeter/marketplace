@@ -1,9 +1,9 @@
 "use client";
 
 import { useState } from "react";
+import * as Switch from "@radix-ui/react-switch";
 import { api } from "@/lib/api/client";
 import { useToast } from "@/components/ui/toast";
-import { CheckCircledIcon, CrossCircledIcon } from "@radix-ui/react-icons";
 
 interface InlineActiveToggleProps {
   tenantId: number;
@@ -48,23 +48,23 @@ export function InlineActiveToggle({
   };
 
   return (
-    <button
-      onClick={handleToggle}
+    <Switch.Root
+      checked={isActive}
+      onCheckedChange={handleToggle}
       disabled={isSaving}
-      className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs transition-colors ${
+      className={`relative h-5 w-9 rounded-full transition-colors ${
         isSaving
-          ? "opacity-50 cursor-not-allowed border-gray-6 bg-gray-3 text-gray-11"
+          ? "opacity-50 cursor-not-allowed bg-gray-6"
           : isActive
-            ? "border-green-800 bg-green-900/50 text-green-400 hover:bg-green-900/70 cursor-pointer"
-            : "border-gray-700 bg-gray-800/50 text-gray-400 hover:bg-gray-700/50 cursor-pointer"
+            ? "bg-green-600"
+            : "bg-gray-6"
       }`}
     >
-      {isActive ? (
-        <CheckCircledIcon className="h-3 w-3" />
-      ) : (
-        <CrossCircledIcon className="h-3 w-3" />
-      )}
-      {isSaving ? "..." : isActive ? "Active" : "Inactive"}
-    </button>
+      <Switch.Thumb
+        className={`block h-4 w-4 rounded-full bg-white shadow transition-transform ${
+          isActive ? "translate-x-[18px]" : "translate-x-[2px]"
+        }`}
+      />
+    </Switch.Root>
   );
 }
