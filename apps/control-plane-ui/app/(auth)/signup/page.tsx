@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useAuth } from "@/lib/auth/context";
@@ -8,18 +8,6 @@ import { GuestRoute } from "@/lib/auth/guard";
 import { ApiError } from "@/lib/api/client";
 
 export default function SignupPage() {
-  const router = useRouter();
-
-  useEffect(() => {
-    if (process.env.NODE_ENV !== "development") {
-      router.replace("/");
-    }
-  }, [router]);
-
-  if (process.env.NODE_ENV !== "development") {
-    return null;
-  }
-
   return (
     <GuestRoute>
       <SignupForm />

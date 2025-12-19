@@ -107,14 +107,15 @@ function LoginForm() {
         </button>
       </form>
 
-      {process.env.NODE_ENV === "development" && (
-        <p className="mt-6 text-center text-[13px] text-gray-9">
-          Don&apos;t have an account?{" "}
-          <Link href="/signup" className="text-white hover:underline">
-            Sign up
-          </Link>
-        </p>
-      )}
+      <p className="mt-6 text-center text-[13px] text-gray-9">
+        Don&apos;t have an account?{" "}
+        <Link
+          href="/signup"
+          className="text-accent-11 transition-colors hover:text-accent-10"
+        >
+          Sign up
+        </Link>
+      </p>
     </div>
   );
 }

@@ -1,9 +1,7 @@
 "use client";
 
-import { useState } from "react";
 import Link from "next/link";
 import dynamic from "next/dynamic";
-import { useAuth } from "@/lib/auth/context";
 import { Header } from "@/components/layout/header";
 import { Footer } from "@/components/layout/footer";
 
@@ -18,165 +16,10 @@ const ProxyVisualization = dynamic(
   },
 );
 
-const isDev = process.env.NODE_ENV === "development";
-
-function PlaceholderPage() {
-  const { user } = useAuth();
-  const [email, setEmail] = useState("");
-  const [status, setStatus] = useState<
-    "idle" | "loading" | "success" | "error"
-  >("idle");
-  const [errorMessage, setErrorMessage] = useState("");
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!email.trim()) return;
-
-    setStatus("loading");
-    setErrorMessage("");
-
-    try {
-      const res = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:1337"}/api/waitlist`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ email: email.trim() }),
-        },
-      );
-
-      if (!res.ok) {
-        const data = await res.json();
-        throw new Error(data.error || "Failed to join waitlist");
-      }
-
-      setStatus("success");
-      setEmail("");
-    } catch (err) {
-      setStatus("error");
-      setErrorMessage(
-        err instanceof Error ? err.message : "Something went wrong",
-      );
-    }
-  };
-
-  return (
-    <div className="flex min-h-screen flex-col bg-black">
-      <header className="absolute left-0 right-0 top-0 z-10">
-        <div className="mx-auto flex h-14 max-w-7xl items-center justify-end px-4 sm:px-6 lg:px-8">
-          {user ? (
-            <Link
-              href="/dashboard"
-              className="rounded-md bg-white px-3 py-1.5 text-[13px] font-medium text-black transition-colors hover:bg-white/90"
-            >
-              Dashboard
-            </Link>
-          ) : (
-            <Link
-              href="/login"
-              className="rounded-md bg-white px-3 py-1.5 text-[13px] font-medium text-black transition-colors hover:bg-white/90"
-            >
-              Log in
-            </Link>
-          )}
-        </div>
-      </header>
-
-      <main className="flex flex-1 flex-col items-center justify-center px-4">
-        <h1 className="text-4xl font-medium tracking-tight text-white sm:text-5xl lg:text-6xl">
-          Corbits API
-        </h1>
-
-        {status === "success" ? (
-          <div className="mt-10 rounded-lg border border-green-800 bg-green-900/20 px-6 py-4 text-center">
-            <p className="text-sm text-green-400">
-              You&apos;re on the list! We&apos;ll be in touch soon.
-            </p>
-          </div>
-        ) : (
-          <form onSubmit={handleSubmit} className="mt-10 w-full max-w-md">
-            <div className="flex flex-col gap-3 sm:flex-row">
-              <input
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="Enter your email"
-                required
-                className="flex-1 rounded-md border border-white/10 bg-white/5 px-4 py-3 text-sm text-white placeholder-gray-9 transition-colors focus:border-white/20 focus:outline-none focus:ring-1 focus:ring-white/20"
-              />
-              <button
-                type="submit"
-                disabled={status === "loading"}
-                className="rounded-md bg-white px-6 py-3 text-sm font-medium text-black shadow-button transition-colors hover:bg-white/90 disabled:opacity-50"
-              >
-                {status === "loading" ? "Joining..." : "Join Waitlist"}
-              </button>
-            </div>
-            {status === "error" && (
-              <p className="mt-3 text-center text-sm text-red-400">
-                {errorMessage}
-              </p>
-            )}
-          </form>
-        )}
-      </main>
-    </div>
-  );
-}
-
 export default function LandingPage() {
-  const [showSignupAlert, setShowSignupAlert] = useState(false);
-
-  if (!isDev) {
-    return <PlaceholderPage />;
-  }
-
   return (
     <div className="flex min-h-screen flex-col bg-black">
-      {showSignupAlert && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm">
-          <div className="mx-4 w-full max-w-md rounded-lg border border-white/10 bg-gray-2 p-6 shadow-2xl">
-            <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-accent-9/20">
-              <svg
-                className="h-6 w-6 text-accent-11"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                />
-              </svg>
-            </div>
-            <h2 className="mb-2 text-lg font-medium text-white">
-              Signups temporarily disabled
-            </h2>
-            <p className="mb-6 text-[14px] leading-relaxed text-gray-9">
-              We&apos;re currently in private beta. Join our waitlist to get
-              early access when we open up signups.
-            </p>
-            <div className="flex gap-3">
-              <button
-                onClick={() => setShowSignupAlert(false)}
-                className="flex-1 rounded-md border border-white/10 bg-white/5 px-4 py-2 text-center text-[14px] font-medium text-white transition-colors hover:bg-white/10"
-              >
-                Close
-              </button>
-              <a
-                href="mailto:waitlist@corbits.dev"
-                className="flex-1 rounded-md bg-white px-4 py-2 text-center text-[14px] font-medium text-black shadow-button transition-colors hover:bg-white/90"
-              >
-                Join waitlist
-              </a>
-            </div>
-          </div>
-        </div>
-      )}
-
-      <Header onSignupClick={() => setShowSignupAlert(true)} />
+      <Header />
 
       <main className="flex-1">
         {/* Hero Section */}
@@ -199,12 +42,12 @@ export default function LandingPage() {
               </p>
 
               <div className="mt-10 flex flex-col items-center justify-center gap-4 sm:flex-row">
-                <button
-                  onClick={() => setShowSignupAlert(true)}
+                <Link
+                  href="/signup"
                   className="inline-flex h-11 items-center justify-center rounded-md bg-white px-6 text-[14px] font-medium text-black shadow-button transition-colors hover:bg-white/90"
                 >
                   Get started
-                </button>
+                </Link>
                 <Link
                   href="https://docs.corbits.dev"
                   className="inline-flex h-11 items-center justify-center rounded-md border border-white/10 bg-white/5 px-6 text-[14px] font-medium text-white transition-colors hover:bg-white/10"
@@ -405,12 +248,12 @@ export default function LandingPage() {
                 Start accepting payments in minutes. No credit card required.
               </p>
               <div className="mt-8">
-                <button
-                  onClick={() => setShowSignupAlert(true)}
+                <Link
+                  href="/signup"
                   className="inline-flex h-11 items-center justify-center rounded-md bg-white px-8 text-[14px] font-medium text-black shadow-button transition-colors hover:bg-white/90"
                 >
                   Create free account
-                </button>
+                </Link>
               </div>
             </div>
           </div>

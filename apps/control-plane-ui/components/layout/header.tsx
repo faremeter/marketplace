@@ -3,9 +3,7 @@
 import Link from "next/link";
 import { useAuth } from "@/lib/auth/context";
 
-const isDev = process.env.NODE_ENV === "development";
-
-export function Header({ onSignupClick }: { onSignupClick?: () => void }) {
+export function Header() {
   const { user } = useAuth();
 
   return (
@@ -33,22 +31,12 @@ export function Header({ onSignupClick }: { onSignupClick?: () => void }) {
               >
                 Log in
               </Link>
-              {isDev &&
-                (onSignupClick ? (
-                  <button
-                    onClick={onSignupClick}
-                    className="rounded-md bg-white px-3 py-1.5 text-[13px] font-medium text-black shadow-button transition-colors hover:bg-white/90"
-                  >
-                    Sign up
-                  </button>
-                ) : (
-                  <Link
-                    href="/signup"
-                    className="rounded-md bg-white px-3 py-1.5 text-[13px] font-medium text-black shadow-button transition-colors hover:bg-white/90"
-                  >
-                    Sign up
-                  </Link>
-                ))}
+              <Link
+                href="/signup"
+                className="rounded-md bg-white px-3 py-1.5 text-[13px] font-medium text-black shadow-button transition-colors hover:bg-white/90"
+              >
+                Sign up
+              </Link>
             </>
           )}
         </nav>
