@@ -84,14 +84,8 @@ export default function AdminTenantsPage() {
       });
     } catch (err) {
       if (err instanceof ApiError && err.data) {
-        const data = err.data as { error?: string; hasWalletFunds?: boolean };
-        if (data.hasWalletFunds) {
-          setDeleteError(
-            "This tenant has funds in its wallet. Withdraw all funds before deleting.",
-          );
-        } else {
-          setDeleteError(data.error || "Failed to delete tenant");
-        }
+        const data = err.data as { error?: string };
+        setDeleteError(data.error || "Failed to delete tenant");
       } else {
         setDeleteError("Failed to delete tenant");
       }
@@ -425,14 +419,6 @@ export default function AdminTenantsPage() {
                 </p>
               </div>
             </Dialog.Description>
-
-            <div className="mt-4 flex items-start gap-2 rounded-lg border border-amber-800 bg-amber-900/20 p-3">
-              <ExclamationTriangleIcon className="h-4 w-4 flex-shrink-0 text-amber-400" />
-              <p className="text-sm text-amber-300">
-                The tenant wallet will be verified empty before deletion. If
-                funds remain, you will be prompted to withdraw them first.
-              </p>
-            </div>
 
             {deleteError && (
               <div className="mt-4 flex items-start gap-2 rounded-lg border border-red-800 bg-red-900/20 p-3">

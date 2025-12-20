@@ -546,43 +546,6 @@ organizationsRoutes.delete("/:id/tenants/:tenantId", async (c) => {
     return c.json({ error: "Proxy is already being deleted" }, 400);
   }
 
-  // Check wallet funds if tenant has a wallet
-  if (tenant.wallet_id && tenant.wallet_config) {
-    const walletConfig = tenant.wallet_config as WalletConfig;
-    const addresses = extractAddresses(walletConfig);
-
-    if (addresses.solana || addresses.evm) {
-      try {
-        const balances = await fetchWalletBalances(addresses);
-
-        const hasNonZeroBalance =
-          parseFloat(balances.solana?.native || "0") > 0 ||
-          parseFloat(balances.solana?.usdc || "0") > 0 ||
-          parseFloat(balances.base?.native || "0") > 0 ||
-          parseFloat(balances.base?.usdc || "0") > 0 ||
-          parseFloat(balances.polygon?.native || "0") > 0 ||
-          parseFloat(balances.polygon?.usdc || "0") > 0 ||
-          parseFloat(balances.monad?.native || "0") > 0 ||
-          parseFloat(balances.monad?.usdc || "0") > 0;
-
-        if (hasNonZeroBalance) {
-          return c.json(
-            {
-              error: "Please complete a payout before deleting this proxy",
-              hasWalletFunds: true,
-            },
-            400,
-          );
-        }
-      } catch (err) {
-        logger.error(
-          `Failed to check wallet balances for tenant ${tenantId}: ${err}`,
-        );
-        return c.json({ error: "Failed to verify wallet is empty" }, 500);
-      }
-    }
-  }
-
   await db
     .updateTable("tenants")
     .set({ status: "deleting" })
