@@ -21,6 +21,7 @@ import {
   setupAccountWithAddresses,
   updateAccountAddresses,
 } from "../lib/corbits-dash.js";
+import { validateProxyName } from "../lib/proxy-name.js";
 
 export const organizationsRoutes = new Hono();
 
@@ -720,8 +721,14 @@ organizationsRoutes.post("/:id/tenants", async (c) => {
   }
 
   if (!body.name?.trim()) {
-    return c.json({ error: "Tenant name is required" }, 400);
+    return c.json({ error: "Proxy name is required" }, 400);
   }
+
+  const nameValidation = validateProxyName(body.name);
+  if (!nameValidation.valid) {
+    return c.json({ error: nameValidation.error }, 400);
+  }
+  const sanitizedName = nameValidation.sanitized;
 
   if (!body.backend_url?.trim()) {
     return c.json({ error: "Backend URL is required" }, 400);
@@ -770,7 +777,7 @@ organizationsRoutes.post("/:id/tenants", async (c) => {
     tenant = await db
       .insertInto("tenants")
       .values({
-        name: body.name.trim(),
+        name: sanitizedName,
         backend_url: body.backend_url.trim(),
         node_id: nodeIds[0],
         organization_id: orgId,

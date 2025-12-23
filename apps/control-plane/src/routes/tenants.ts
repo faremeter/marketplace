@@ -10,6 +10,7 @@ import {
   deleteHealthCheck,
 } from "../lib/dns.js";
 import { enqueueCertProvisioning } from "../lib/queue.js";
+import { validateProxyName } from "../lib/proxy-name.js";
 
 export const tenantsRoutes = new Hono();
 
@@ -39,10 +40,20 @@ tenantsRoutes.get("/:id", async (c) => {
 tenantsRoutes.post("/", async (c) => {
   const body = await c.req.json();
 
+  if (!body.name?.trim()) {
+    return c.json({ error: "Tenant name is required" }, 400);
+  }
+
+  const nameValidation = validateProxyName(body.name);
+  if (!nameValidation.valid) {
+    return c.json({ error: nameValidation.error }, 400);
+  }
+  const sanitizedName = nameValidation.sanitized;
+
   const result = await db
     .insertInto("tenants")
     .values({
-      name: body.name,
+      name: sanitizedName,
       backend_url: body.backend_url,
       wallet_id: body.wallet_id ?? null,
       default_price_usdc: body.default_price_usdc,

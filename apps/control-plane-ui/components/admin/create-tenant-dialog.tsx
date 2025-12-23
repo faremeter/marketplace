@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import * as Dialog from "@radix-ui/react-dialog";
 import * as Checkbox from "@radix-ui/react-checkbox";
 import * as Select from "@radix-ui/react-select";
@@ -10,11 +10,14 @@ import {
   ChevronDownIcon,
   PlusIcon,
   MinusIcon,
+  CheckCircledIcon,
+  CrossCircledIcon,
 } from "@radix-ui/react-icons";
 import useSWR from "swr";
 import { api } from "@/lib/api/client";
 import { SCHEME_OPTIONS } from "@/lib/types/api";
 import { useToast } from "@/components/ui/toast";
+import { sanitizeProxyName } from "@/lib/proxy-name";
 
 interface Node {
   id: number;
@@ -73,6 +76,48 @@ export function CreateTenantDialog({
   const [defaultScheme, setDefaultScheme] = useState("exact");
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [nameAvailable, setNameAvailable] = useState<boolean | null>(null);
+  const [isCheckingName, setIsCheckingName] = useState(false);
+  const checkTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  useEffect(() => {
+    if (!name.trim()) {
+      setNameAvailable(null);
+      return;
+    }
+
+    setIsCheckingName(true);
+    setNameAvailable(null);
+
+    if (checkTimeoutRef.current) {
+      clearTimeout(checkTimeoutRef.current);
+    }
+
+    checkTimeoutRef.current = setTimeout(async () => {
+      try {
+        const sanitized = sanitizeProxyName(name);
+        if (!sanitized) {
+          setNameAvailable(null);
+          setIsCheckingName(false);
+          return;
+        }
+        const result = await api.get<{ available: boolean }>(
+          `/api/admin/tenants/check-name?name=${encodeURIComponent(sanitized)}`,
+        );
+        setNameAvailable(result.available);
+      } catch {
+        setNameAvailable(null);
+      } finally {
+        setIsCheckingName(false);
+      }
+    }, 500);
+
+    return () => {
+      if (checkTimeoutRef.current) {
+        clearTimeout(checkTimeoutRef.current);
+      }
+    };
+  }, [name]);
 
   useEffect(() => {
     if (open && organizations && !organizationId) {
@@ -107,6 +152,8 @@ export function CreateTenantDialog({
     setDefaultPrice("0.01");
     setDefaultScheme("exact");
     setError("");
+    setNameAvailable(null);
+    setIsCheckingName(false);
   };
 
   const handleOpenChange = (newOpen: boolean) => {
@@ -174,6 +221,43 @@ export function CreateTenantDialog({
             <Dialog.Close className="rounded p-1 text-gray-11 hover:bg-gray-4 hover:text-gray-12">
               <Cross2Icon className="h-4 w-4" />
             </Dialog.Close>
+          </div>
+
+          {/* URL Preview */}
+          <div className="mb-6 rounded-md border border-gray-6 bg-gray-2 px-4 py-3 text-center">
+            <p className="text-xs text-gray-11 mb-1">
+              Tenant will be available at
+            </p>
+            <div className="flex items-center justify-center gap-2">
+              <code className="font-mono text-sm">
+                {name.trim() ? (
+                  <span className="text-gray-12">
+                    {sanitizeProxyName(name) || "<name>"}.api.corbits.dev
+                  </span>
+                ) : (
+                  <>
+                    <span className="text-gray-9">&lt;name&gt;</span>
+                    <span className="text-gray-12">.api.corbits.dev</span>
+                  </>
+                )}
+              </code>
+              {name.trim() && (
+                <>
+                  {isCheckingName ? (
+                    <div className="h-4 w-4 animate-spin rounded-full border-2 border-gray-6 border-t-gray-11" />
+                  ) : nameAvailable === true ? (
+                    <CheckCircledIcon className="h-4 w-4 text-green-500" />
+                  ) : nameAvailable === false ? (
+                    <CrossCircledIcon className="h-4 w-4 text-red-500" />
+                  ) : null}
+                </>
+              )}
+            </div>
+            {name.trim() && nameAvailable === false && !isCheckingName && (
+              <p className="mt-1 text-xs text-red-400">
+                This name is already taken
+              </p>
+            )}
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-6">

@@ -20,6 +20,7 @@ import {
   setupAccountWithAddresses,
   updateAccountAddresses,
 } from "../lib/corbits-dash.js";
+import { validateProxyName } from "../lib/proxy-name.js";
 
 export const adminRoutes = new Hono();
 
@@ -241,10 +242,36 @@ adminRoutes.get("/tenants", async (c) => {
   return c.json(result);
 });
 
+adminRoutes.get("/tenants/check-name", async (c) => {
+  const name = c.req.query("name");
+
+  if (!name?.trim()) {
+    return c.json({ available: false });
+  }
+
+  const existing = await db
+    .selectFrom("tenants")
+    .select("id")
+    .where("name", "=", name.trim())
+    .executeTakeFirst();
+
+  return c.json({ available: !existing });
+});
+
 adminRoutes.post("/tenants", async (c) => {
   const body = await c.req.json();
   const nodeIds: number[] =
     body.node_ids ?? (body.node_id ? [body.node_id] : []);
+
+  if (!body.name?.trim()) {
+    return c.json({ error: "Tenant name is required" }, 400);
+  }
+
+  const nameValidation = validateProxyName(body.name);
+  if (!nameValidation.valid) {
+    return c.json({ error: nameValidation.error }, 400);
+  }
+  const sanitizedName = nameValidation.sanitized;
 
   // Get or default to master wallet
   let walletId = body.wallet_id;
@@ -265,7 +292,7 @@ adminRoutes.post("/tenants", async (c) => {
   const tenant = await db
     .insertInto("tenants")
     .values({
-      name: body.name,
+      name: sanitizedName,
       backend_url: body.backend_url,
       node_id: nodeIds[0] ?? null,
       organization_id: body.organization_id ?? null,

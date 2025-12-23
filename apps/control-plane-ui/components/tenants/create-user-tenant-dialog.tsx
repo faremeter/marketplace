@@ -17,6 +17,7 @@ import {
 import { api, ApiError } from "@/lib/api/client";
 import { SCHEME_OPTIONS } from "@/lib/types/api";
 import { useToast } from "@/components/ui/toast";
+import { sanitizeProxyName } from "@/lib/proxy-name";
 import useSWR from "swr";
 import { refreshOnboardingStatus } from "@/lib/hooks/use-onboarding";
 
@@ -75,12 +76,14 @@ export function CreateUserTenantDialog({
 
     checkTimeoutRef.current = setTimeout(async () => {
       try {
-        const sanitizedName = name
-          .trim()
-          .toLowerCase()
-          .replace(/[^a-z0-9-]/g, "-");
+        const sanitized = sanitizeProxyName(name);
+        if (!sanitized) {
+          setNameAvailable(null);
+          setIsCheckingName(false);
+          return;
+        }
         const result = await api.get<{ available: boolean }>(
-          `/api/organizations/${organizationId}/tenants/check-name?name=${encodeURIComponent(sanitizedName)}`,
+          `/api/organizations/${organizationId}/tenants/check-name?name=${encodeURIComponent(sanitized)}`,
         );
         setNameAvailable(result.available);
       } catch {
@@ -182,12 +185,9 @@ export function CreateUserTenantDialog({
 
     // Recheck name availability before submitting
     try {
-      const sanitizedName = name
-        .trim()
-        .toLowerCase()
-        .replace(/[^a-z0-9-]/g, "-");
+      const sanitized = sanitizeProxyName(name);
       const result = await api.get<{ available: boolean }>(
-        `/api/organizations/${organizationId}/tenants/check-name?name=${encodeURIComponent(sanitizedName)}`,
+        `/api/organizations/${organizationId}/tenants/check-name?name=${encodeURIComponent(sanitized)}`,
       );
       if (!result.available) {
         setNameAvailable(false);
@@ -254,11 +254,7 @@ export function CreateUserTenantDialog({
               <code className="font-mono text-sm">
                 {name.trim() ? (
                   <span className="text-gray-12">
-                    {name
-                      .trim()
-                      .toLowerCase()
-                      .replace(/[^a-z0-9-]/g, "-")}
-                    .api.corbits.dev
+                    {sanitizeProxyName(name) || "<name>"}.api.corbits.dev
                   </span>
                 ) : (
                   <>
