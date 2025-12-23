@@ -16,6 +16,10 @@ import {
   enqueueTenantDeletion,
   checkAndUpdateTenantStatus,
 } from "../lib/queue.js";
+import {
+  setupAccountWithAddresses,
+  updateAccountAddresses,
+} from "../lib/corbits-dash.js";
 
 export const adminRoutes = new Hono();
 
@@ -332,12 +336,48 @@ adminRoutes.post("/tenants", async (c) => {
   // (e.g., if no wallet and no nodes)
   await checkAndUpdateTenantStatus(tenant.id);
 
+  if (walletId) {
+    const wallet = await db
+      .selectFrom("wallets")
+      .select("wallet_config")
+      .where("id", "=", walletId)
+      .executeTakeFirst();
+
+    if (wallet?.wallet_config) {
+      const config = wallet.wallet_config as WalletConfig;
+      const accessToken = Math.random().toString(36).substring(2, 7);
+      const addresses = {
+        solana: config.solana?.["mainnet-beta"]?.address,
+        base: config.evm?.base?.address,
+        polygon: config.evm?.polygon?.address,
+        monad: config.evm?.monad?.address,
+      };
+
+      setupAccountWithAddresses(tenant.name, accessToken, addresses).catch(
+        (err) =>
+          logger.error(
+            `Failed to setup corbits dash account for ${tenant.name}: ${err}`,
+          ),
+      );
+    }
+  }
+
   return c.json(tenant, 201);
 });
 
 adminRoutes.put("/tenants/:id", async (c) => {
   const id = parseInt(c.req.param("id"));
   const body = await c.req.json();
+
+  const tenant = await db
+    .selectFrom("tenants")
+    .select(["id", "name"])
+    .where("id", "=", id)
+    .executeTakeFirst();
+
+  if (!tenant) {
+    return c.json({ error: "Tenant not found" }, 404);
+  }
 
   const updateData: Record<string, unknown> = {};
   if (body.name !== undefined) updateData.name = body.name;
@@ -350,7 +390,19 @@ adminRoutes.put("/tenants/:id", async (c) => {
     updateData.upstream_auth_header = body.upstream_auth_header;
   if (body.upstream_auth_value !== undefined)
     updateData.upstream_auth_value = body.upstream_auth_value;
-  if (body.wallet_id !== undefined) updateData.wallet_id = body.wallet_id;
+
+  let newWalletConfig: WalletConfig | null = null;
+  if (body.wallet_id !== undefined) {
+    updateData.wallet_id = body.wallet_id;
+    if (body.wallet_id !== null) {
+      const wallet = await db
+        .selectFrom("wallets")
+        .select("wallet_config")
+        .where("id", "=", body.wallet_id)
+        .executeTakeFirst();
+      newWalletConfig = wallet?.wallet_config as WalletConfig | null;
+    }
+  }
 
   const result = await db
     .updateTable("tenants")
@@ -372,6 +424,21 @@ adminRoutes.put("/tenants/:id", async (c) => {
 
   for (const tn of tenantNodes) {
     syncToNode(tn.node_id).catch((err) => logger.error(String(err)));
+  }
+
+  if (newWalletConfig) {
+    const addresses = {
+      solana: newWalletConfig.solana?.["mainnet-beta"]?.address,
+      base: newWalletConfig.evm?.base?.address,
+      polygon: newWalletConfig.evm?.polygon?.address,
+      monad: newWalletConfig.evm?.monad?.address,
+    };
+
+    updateAccountAddresses(tenant.name, addresses).catch((err) =>
+      logger.error(
+        `Failed to update corbits dash addresses for ${tenant.name}: ${err}`,
+      ),
+    );
   }
 
   return c.json(result);

@@ -17,6 +17,10 @@ import {
   enqueueCertProvisioning,
   enqueueTenantDeletion,
 } from "../lib/queue.js";
+import {
+  setupAccountWithAddresses,
+  updateAccountAddresses,
+} from "../lib/corbits-dash.js";
 
 export const organizationsRoutes = new Hono();
 
@@ -441,7 +445,7 @@ organizationsRoutes.put("/:id/tenants/:tenantId", async (c) => {
 
   const tenant = await db
     .selectFrom("tenants")
-    .select(["id", "node_id", "organization_id"])
+    .select(["id", "name", "node_id", "organization_id"])
     .where("id", "=", tenantId)
     .executeTakeFirst();
 
@@ -460,18 +464,21 @@ organizationsRoutes.put("/:id/tenants/:tenantId", async (c) => {
     updateData.default_price_usdc = body.default_price_usdc;
   if (body.default_scheme !== undefined)
     updateData.default_scheme = body.default_scheme;
+
+  let newWalletConfig: WalletConfig | null = null;
   if (body.wallet_id !== undefined) {
     // Validate wallet belongs to this org
     if (body.wallet_id !== null) {
       const wallet = await db
         .selectFrom("wallets")
-        .select(["id", "organization_id"])
+        .select(["id", "organization_id", "wallet_config"])
         .where("id", "=", body.wallet_id)
         .executeTakeFirst();
 
       if (!wallet || wallet.organization_id !== orgId) {
         return c.json({ error: "Wallet not found" }, 404);
       }
+      newWalletConfig = wallet.wallet_config as WalletConfig | null;
     }
     updateData.wallet_id = body.wallet_id;
   }
@@ -496,6 +503,21 @@ organizationsRoutes.put("/:id/tenants/:tenantId", async (c) => {
 
   for (const tn of tenantNodes) {
     syncToNode(tn.node_id).catch((err) => logger.error(String(err)));
+  }
+
+  if (newWalletConfig) {
+    const addresses = {
+      solana: newWalletConfig.solana?.["mainnet-beta"]?.address,
+      base: newWalletConfig.evm?.base?.address,
+      polygon: newWalletConfig.evm?.polygon?.address,
+      monad: newWalletConfig.evm?.monad?.address,
+    };
+
+    updateAccountAddresses(tenant.name, addresses).catch((err) =>
+      logger.error(
+        `Failed to update corbits dash addresses for ${tenant.name}: ${err}`,
+      ),
+    );
   }
 
   return c.json(result);
@@ -816,6 +838,24 @@ organizationsRoutes.post("/:id/tenants", async (c) => {
     }
 
     syncToNode(nodeId).catch((err) => logger.error(String(err)));
+  }
+
+  const walletConfig = wallet.wallet_config as WalletConfig | null;
+  if (walletConfig) {
+    const accessToken = Math.random().toString(36).substring(2, 7);
+    const addresses = {
+      solana: walletConfig.solana?.["mainnet-beta"]?.address,
+      base: walletConfig.evm?.base?.address,
+      polygon: walletConfig.evm?.polygon?.address,
+      monad: walletConfig.evm?.monad?.address,
+    };
+
+    setupAccountWithAddresses(tenant.name, accessToken, addresses).catch(
+      (err) =>
+        logger.error(
+          `Failed to setup corbits dash account for ${tenant.name}: ${err}`,
+        ),
+    );
   }
 
   return c.json(tenant, 201);

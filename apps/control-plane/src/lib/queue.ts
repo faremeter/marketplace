@@ -7,6 +7,7 @@ import {
 } from "./dns.js";
 import { syncToNode } from "./sync.js";
 import { fetchWalletBalances } from "./balances.js";
+import { cleanupAccount } from "./corbits-dash.js";
 import { logger } from "../logger.js";
 import { db } from "../server.js";
 
@@ -190,7 +191,8 @@ export async function startQueue(config: {
             ),
           );
 
-          // Finally delete the tenant
+          await cleanupAccount(tenantName);
+
           await db.deleteFrom("tenants").where("id", "=", tenantId).execute();
 
           logger.info(`Tenant ${tenantName} deleted successfully`);
