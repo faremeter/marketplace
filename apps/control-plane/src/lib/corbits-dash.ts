@@ -1,4 +1,17 @@
 import { logger } from "../logger.js";
+import { evm, solana } from "@faremeter/info";
+
+// USDC addresses for filtering transactions
+const USDC_ADDRESSES = new Set<string>(
+  [
+    solana.lookupKnownSPLToken("mainnet-beta", "USDC")?.address,
+    evm.lookupKnownAsset("base", "USDC")?.address?.toLowerCase(),
+    evm.lookupKnownAsset("eip155:137", "USDC")?.address?.toLowerCase(),
+    evm.lookupKnownAsset("eip155:10143", "USDC")?.address?.toLowerCase(),
+  ].filter((addr): addr is string => addr !== undefined),
+);
+
+const USDC_DECIMALS = 6;
 
 const CORBITS_DASH_API_URL =
   process.env.CORBITS_DASH_API_URL || "https://dashboard.corbits.dev/api/v1";
@@ -19,6 +32,21 @@ interface TrackedAddress {
   chain: string;
   address: string;
   is_active: boolean;
+  created_at: string;
+}
+
+export interface CorbitsTransaction {
+  id: number;
+  chain: string;
+  signature: string;
+  block_time: string;
+  from_address: string | null;
+  to_address: string | null;
+  amount: string;
+  direction: "incoming" | "outgoing" | "fee" | null;
+  status: "pending" | "confirmed" | "finalized" | "failed";
+  mint_address: string | null;
+  tracked_address_id: number;
   created_at: string;
 }
 
@@ -123,6 +151,67 @@ export async function getTrackedAddressesForAccount(
     `/tracked-addresses?account_id=${accountId}&limit=100`,
   );
   return response.data;
+}
+
+function isUsdcTransaction(tx: CorbitsTransaction): boolean {
+  if (!tx.mint_address) return false;
+  const mintLower = tx.mint_address.toLowerCase();
+  return USDC_ADDRESSES.has(tx.mint_address) || USDC_ADDRESSES.has(mintLower);
+}
+
+function formatUsdcAmount(rawAmount: string): string {
+  const num = parseFloat(rawAmount) / 10 ** USDC_DECIMALS;
+  return num.toFixed(2);
+}
+
+export async function getTransactionsForAccount(
+  accountId: number,
+  options?: { limit?: number; offset?: number },
+): Promise<ListResponse<CorbitsTransaction>> {
+  const addresses = await getTrackedAddressesForAccount(accountId);
+  if (addresses.length === 0) {
+    return {
+      data: [],
+      meta: {
+        total: 0,
+        limit: options?.limit ?? 50,
+        offset: 0,
+        has_more: false,
+      },
+    };
+  }
+
+  const params = new URLSearchParams();
+  for (const addr of addresses) {
+    params.append("tracked_address_id", addr.id.toString());
+  }
+  // Fetch more to allow for filtering
+  params.set("limit", "200");
+  params.set("sort", "block_time");
+  params.set("order", "desc");
+
+  const response = await apiRequest<ListResponse<CorbitsTransaction>>(
+    "GET",
+    `/transactions?${params}`,
+  );
+
+  // Filter to USDC only and format amounts
+  const usdcTransactions = response.data
+    .filter(isUsdcTransaction)
+    .map((tx) => ({
+      ...tx,
+      amount: formatUsdcAmount(tx.amount),
+    }));
+
+  return {
+    data: usdcTransactions,
+    meta: {
+      total: usdcTransactions.length,
+      limit: options?.limit ?? 50,
+      offset: options?.offset ?? 0,
+      has_more: false,
+    },
+  };
 }
 
 export async function deactivateTrackedAddress(

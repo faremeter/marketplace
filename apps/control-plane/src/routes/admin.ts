@@ -19,10 +19,21 @@ import {
 import {
   setupAccountWithAddresses,
   updateAccountAddresses,
+  findAccountByName,
+  getTransactionsForAccount,
+  type CorbitsTransaction,
 } from "../lib/corbits-dash.js";
 import { validateProxyName } from "../lib/proxy-name.js";
 
 export const adminRoutes = new Hono();
+
+// In-memory cache for Corbits transactions
+interface TransactionCacheEntry {
+  transactions: CorbitsTransaction[];
+  cachedAt: number;
+}
+const transactionCache = new Map<number, TransactionCacheEntry>();
+const TRANSACTIONS_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
 
 adminRoutes.use("*", requireAdmin);
 
@@ -840,6 +851,120 @@ adminRoutes.get("/transactions", async (c) => {
     limit,
     offset,
   });
+});
+
+// Get Corbits transactions for a single tenant with pagination
+adminRoutes.get("/tenants/:id/corbits-transactions", async (c) => {
+  const tenantId = parseInt(c.req.param("id"));
+  const limit = parseInt(c.req.query("limit") || "10");
+  const offset = parseInt(c.req.query("offset") || "0");
+  const forceRefresh = c.req.query("refresh") === "true";
+
+  const tenant = await db
+    .selectFrom("tenants")
+    .select(["id", "name"])
+    .where("id", "=", tenantId)
+    .executeTakeFirst();
+
+  if (!tenant) {
+    return c.json({ error: "Tenant not found" }, 404);
+  }
+
+  // Check cache first (unless force refresh)
+  const cached = transactionCache.get(tenantId);
+  const isCacheFresh =
+    cached &&
+    !forceRefresh &&
+    Date.now() - cached.cachedAt < TRANSACTIONS_CACHE_TTL_MS;
+
+  if (isCacheFresh) {
+    const paginatedTransactions = cached.transactions.slice(
+      offset,
+      offset + limit,
+    );
+    return c.json({
+      transactions: paginatedTransactions,
+      total: cached.transactions.length,
+      limit,
+      offset,
+      cached: true,
+      cached_at: new Date(cached.cachedAt).toISOString(),
+    });
+  }
+
+  try {
+    const account = await findAccountByName(tenant.name);
+    if (!account) {
+      return c.json({
+        transactions: [],
+        total: 0,
+        limit,
+        offset,
+        error: "No Corbits account",
+      });
+    }
+
+    // Fetch more transactions to cache (up to 100)
+    const response = await getTransactionsForAccount(account.id, {
+      limit: 100,
+    });
+
+    // Update cache
+    transactionCache.set(tenantId, {
+      transactions: response.data,
+      cachedAt: Date.now(),
+    });
+
+    const paginatedTransactions = response.data.slice(offset, offset + limit);
+    return c.json({
+      transactions: paginatedTransactions,
+      total: response.data.length,
+      limit,
+      offset,
+      cached: false,
+    });
+  } catch (err) {
+    logger.error(
+      `Failed to fetch Corbits transactions for ${tenant.name}: ${err}`,
+    );
+    // Return cached data if available, even if stale
+    if (cached) {
+      const paginatedTransactions = cached.transactions.slice(
+        offset,
+        offset + limit,
+      );
+      return c.json({
+        transactions: paginatedTransactions,
+        total: cached.transactions.length,
+        limit,
+        offset,
+        cached: true,
+        stale: true,
+        cached_at: new Date(cached.cachedAt).toISOString(),
+      });
+    }
+    return c.json({ error: "Failed to fetch transactions" }, 500);
+  }
+});
+
+// Get list of tenants with wallets for transaction display
+adminRoutes.get("/tenants-with-wallets", async (c) => {
+  const tenants = await db
+    .selectFrom("tenants")
+    .leftJoin("organizations", "organizations.id", "tenants.organization_id")
+    .select([
+      "tenants.id",
+      "tenants.name",
+      "tenants.organization_id",
+      "organizations.name as organization_name",
+    ])
+    .where("tenants.wallet_id", "is not", null)
+    .where("tenants.is_active", "=", true)
+    .orderBy("organizations.name", "asc")
+    .orderBy("tenants.name", "asc")
+    .execute();
+
+  return c.json(tenants);
 });
 
 adminRoutes.get("/nodes", async (c) => {
