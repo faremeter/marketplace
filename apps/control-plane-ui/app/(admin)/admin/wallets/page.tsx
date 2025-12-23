@@ -50,7 +50,7 @@ export default function AdminWalletsPage() {
     data: wallets,
     isLoading: walletsLoading,
     mutate: mutateWallets,
-  } = useSWR("/api/wallets/admin/all", api.get<Wallet[]>);
+  } = useSWR("/api/admin/wallets", api.get<Wallet[]>);
 
   const isLoading = orgsLoading || walletsLoading;
 

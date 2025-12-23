@@ -59,7 +59,7 @@ export function EditTenantDialog({
   );
 
   const { data: wallets } = useSWR(
-    open ? "/api/wallets/admin/all" : null,
+    open ? "/api/admin/wallets" : null,
     api.get<Wallet[]>,
   );
 

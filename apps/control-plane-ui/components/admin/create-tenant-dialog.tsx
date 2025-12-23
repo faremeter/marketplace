@@ -119,14 +119,17 @@ export function CreateTenantDialog({
     };
   }, [name]);
 
+  const [hasSelectedOrg, setHasSelectedOrg] = useState(false);
+
   useEffect(() => {
-    if (open && organizations && !organizationId) {
+    if (open && organizations && !hasSelectedOrg) {
       const adminOrg = organizations.find((o) => o.is_admin);
       if (adminOrg) {
         setOrganizationId(String(adminOrg.id));
+        setHasSelectedOrg(true);
       }
     }
-  }, [open, organizations, organizationId]);
+  }, [open, organizations, hasSelectedOrg]);
 
   // Filter wallets based on selected organization
   const availableWallets = allWallets?.filter((w) => {
@@ -141,6 +144,18 @@ export function CreateTenantDialog({
     );
   });
 
+  // Reset wallet selection when organization changes
+  useEffect(() => {
+    if (walletId && availableWallets) {
+      const walletStillAvailable = availableWallets.some(
+        (w) => w.id === walletId,
+      );
+      if (!walletStillAvailable) {
+        setWalletId(null);
+      }
+    }
+  }, [organizationId, availableWallets, walletId]);
+
   const resetForm = () => {
     setName("");
     setSelectedNodeIds([]);
@@ -154,6 +169,7 @@ export function CreateTenantDialog({
     setError("");
     setNameAvailable(null);
     setIsCheckingName(false);
+    setHasSelectedOrg(false);
   };
 
   const handleOpenChange = (newOpen: boolean) => {

@@ -408,23 +408,3 @@ walletsRoutes.post("/admin/master", requireAdmin, async (c) => {
 
   return c.json(wallet, 201);
 });
-
-// Admin: list all wallets
-walletsRoutes.get("/admin/all", requireAdmin, async (c) => {
-  const wallets = await db
-    .selectFrom("wallets")
-    .leftJoin("organizations", "organizations.id", "wallets.organization_id")
-    .select([
-      "wallets.id",
-      "wallets.organization_id",
-      "wallets.name",
-      "wallets.wallet_config",
-      "wallets.funding_status",
-      "wallets.created_at",
-      "organizations.name as organization_name",
-    ])
-    .orderBy("wallets.created_at", "desc")
-    .execute();
-
-  return c.json(wallets);
-});
