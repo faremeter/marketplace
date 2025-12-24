@@ -1,0 +1,64 @@
+import { Hono } from "hono";
+import { db } from "../server.js";
+import { enqueueTransactionRecording } from "../lib/queue.js";
+import { logger } from "../logger.js";
+
+export const internalRoutes = new Hono();
+
+interface TransactionPayload {
+  tx_hash: string;
+  tenant_name: string;
+  endpoint_id: number | null;
+  amount_usdc: number;
+  network: string;
+  request_path: string;
+}
+
+internalRoutes.post("/transactions", async (c) => {
+  let body: TransactionPayload;
+  try {
+    body = await c.req.json<TransactionPayload>();
+  } catch {
+    return c.json({ error: "Invalid JSON" }, 400);
+  }
+
+  if (!body.tx_hash || !body.tenant_name || !body.network) {
+    return c.json({ error: "Missing required fields" }, 400);
+  }
+
+  if (typeof body.amount_usdc !== "number" || body.amount_usdc < 0) {
+    return c.json({ error: "Invalid amount_usdc" }, 400);
+  }
+
+  if (!body.request_path) {
+    return c.json({ error: "Missing request_path" }, 400);
+  }
+
+  const tenant = await db
+    .selectFrom("tenants")
+    .select(["id", "organization_id"])
+    .where("name", "=", body.tenant_name)
+    .executeTakeFirst();
+
+  if (!tenant) {
+    logger.warn(`Transaction received for unknown tenant: ${body.tenant_name}`);
+    return c.json({ error: "Tenant not found" }, 404);
+  }
+
+  try {
+    await enqueueTransactionRecording({
+      tx_hash: body.tx_hash,
+      tenant_id: tenant.id,
+      organization_id: tenant.organization_id,
+      endpoint_id: body.endpoint_id ?? null,
+      amount_usdc: body.amount_usdc,
+      network: body.network,
+      request_path: body.request_path,
+    });
+
+    return c.json({ success: true });
+  } catch (error) {
+    logger.error(`Failed to enqueue transaction: ${error}`);
+    return c.json({ error: "Failed to enqueue transaction" }, 500);
+  }
+});

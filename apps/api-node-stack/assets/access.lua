@@ -53,6 +53,7 @@ end
 
 local price = tenant_config.default_price_usdc
 local scheme = tenant_config.default_scheme
+local matched_endpoint_id = nil
 if tenant_config.endpoints then
     for _, endpoint in ipairs(tenant_config.endpoints) do
         local pattern = endpoint.path_pattern
@@ -72,6 +73,7 @@ if tenant_config.endpoints then
         end
 
         if matched then
+            matched_endpoint_id = endpoint.id
             if endpoint.price_usdc then
                 price = endpoint.price_usdc
             end
@@ -303,3 +305,36 @@ end
 
 ngx.log(ngx.INFO, "Payment settled successfully: ", settle_response.txHash or "unknown")
 ngx.log(ngx.INFO, "Tenant: ", tenant_name, " Request: ", ngx.req.get_method(), " ", ngx.var.uri)
+
+-- Record transaction asynchronously (only if we have a tx_hash)
+local tx_hash = settle_response.txHash
+if tx_hash then
+    local tx_network = matching_req.network
+    local tx_amount = tonumber(price) or 0
+    local tx_request_path = ngx.var.uri
+    local tx_tenant_name = tenant_name
+    local tx_endpoint_id = matched_endpoint_id
+    ngx.timer.at(0, function(premature)
+        if premature then return end
+        local http = require("resty.http").new()
+        local tx_body = cjson.encode({
+            tx_hash = tx_hash,
+            tenant_name = tx_tenant_name,
+            endpoint_id = tx_endpoint_id or cjson.null,
+            amount_usdc = tx_amount,
+            network = tx_network,
+            request_path = tx_request_path
+        })
+        local tx_res, tx_err = http:request_uri("http://10.12.0.1:1337/internal/transactions", {
+            method = "POST",
+            headers = { ["Content-Type"] = "application/json" },
+            body = tx_body,
+            timeout = 5000
+        })
+        if not tx_res then
+            ngx.log(ngx.ERR, "Failed to record transaction: ", tx_err)
+        elseif tx_res.status ~= 200 then
+            ngx.log(ngx.WARN, "Transaction recording returned status: ", tx_res.status)
+        end
+    end)
+end

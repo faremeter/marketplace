@@ -24,6 +24,13 @@ import {
   type CorbitsTransaction,
 } from "../lib/corbits-dash.js";
 import { validateProxyName } from "../lib/proxy-name.js";
+import {
+  getOrganizationEarnings,
+  getTenantEarnings,
+  getEndpointEarnings,
+  getEarningsByPeriod,
+  type Granularity,
+} from "../lib/analytics.js";
 
 export const adminRoutes = new Hono();
 
@@ -1256,5 +1263,98 @@ adminRoutes.get("/settings/balances", async (c) => {
   } catch (error) {
     logger.error(`Failed to fetch master wallet balances: ${error}`);
     return c.json({ error: "Failed to fetch balances" }, 500);
+  }
+});
+
+// Analytics routes
+adminRoutes.get("/organizations/:id/analytics", async (c) => {
+  const id = parseInt(c.req.param("id"));
+  if (isNaN(id)) {
+    return c.json({ error: "Invalid organization ID" }, 400);
+  }
+
+  try {
+    const earnings = await getOrganizationEarnings(id);
+    return c.json(earnings);
+  } catch (error) {
+    logger.error(`Failed to get organization analytics: ${error}`);
+    return c.json({ error: "Failed to get analytics" }, 500);
+  }
+});
+
+adminRoutes.get("/tenants/:id/analytics", async (c) => {
+  const id = parseInt(c.req.param("id"));
+  if (isNaN(id)) {
+    return c.json({ error: "Invalid tenant ID" }, 400);
+  }
+
+  try {
+    const earnings = await getTenantEarnings(id);
+    return c.json(earnings);
+  } catch (error) {
+    logger.error(`Failed to get tenant analytics: ${error}`);
+    return c.json({ error: "Failed to get analytics" }, 500);
+  }
+});
+
+adminRoutes.get(
+  "/tenants/:tenantId/endpoints/:endpointId/analytics",
+  async (c) => {
+    const endpointId = parseInt(c.req.param("endpointId"));
+    if (isNaN(endpointId)) {
+      return c.json({ error: "Invalid endpoint ID" }, 400);
+    }
+
+    try {
+      const earnings = await getEndpointEarnings(endpointId);
+      return c.json(earnings);
+    } catch (error) {
+      logger.error(`Failed to get endpoint analytics: ${error}`);
+      return c.json({ error: "Failed to get analytics" }, 500);
+    }
+  },
+);
+
+adminRoutes.get("/analytics/earnings", async (c) => {
+  const level = c.req.query("level") as "organization" | "tenant" | "endpoint";
+  const idStr = c.req.query("id");
+  const granularityParam = c.req.query("granularity") || "month";
+  const periodsStr = c.req.query("periods");
+
+  if (!level || !["organization", "tenant", "endpoint"].includes(level)) {
+    return c.json(
+      { error: "Invalid level. Must be organization, tenant, or endpoint" },
+      400,
+    );
+  }
+
+  if (!idStr) {
+    return c.json({ error: "ID is required" }, 400);
+  }
+
+  const id = parseInt(idStr);
+  if (isNaN(id)) {
+    return c.json({ error: "Invalid ID" }, 400);
+  }
+
+  if (!["day", "week", "month"].includes(granularityParam)) {
+    return c.json(
+      { error: "Invalid granularity. Must be day, week, or month" },
+      400,
+    );
+  }
+  const granularity = granularityParam as Granularity;
+
+  const periods = periodsStr ? parseInt(periodsStr) : 12;
+  if (isNaN(periods) || periods < 1 || periods > 365) {
+    return c.json({ error: "Invalid periods. Must be between 1 and 365" }, 400);
+  }
+
+  try {
+    const data = await getEarningsByPeriod(level, id, granularity, periods);
+    return c.json(data);
+  } catch (error) {
+    logger.error(`Failed to get earnings analytics: ${error}`);
+    return c.json({ error: "Failed to get analytics" }, 500);
   }
 });

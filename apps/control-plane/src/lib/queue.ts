@@ -16,6 +16,7 @@ let boss: PgBoss | null = null;
 const CERT_PROVISIONING_QUEUE = "cert-provisioning";
 const TENANT_DELETION_QUEUE = "tenant-deletion";
 const BALANCE_CHECK_QUEUE = "balance-check";
+const TRANSACTION_RECORDING_QUEUE = "transaction-recording";
 
 interface CertProvisioningJob {
   nodeId: number;
@@ -30,6 +31,16 @@ interface TenantDeletionJob {
 interface BalanceCheckJob {
   walletId: number;
   solanaAddress: string;
+}
+
+export interface TransactionRecordingJob {
+  tx_hash: string;
+  tenant_id: number;
+  organization_id: number | null;
+  endpoint_id: number | null;
+  amount_usdc: number;
+  network: string;
+  request_path: string;
 }
 
 export async function checkAndUpdateTenantStatus(
@@ -122,6 +133,9 @@ export async function startQueue(config: {
 
   await boss.createQueue(BALANCE_CHECK_QUEUE);
   logger.info(`Created queue: ${BALANCE_CHECK_QUEUE}`);
+
+  await boss.createQueue(TRANSACTION_RECORDING_QUEUE);
+  logger.info(`Created queue: ${TRANSACTION_RECORDING_QUEUE}`);
 
   await boss.work<CertProvisioningJob>(
     CERT_PROVISIONING_QUEUE,
@@ -293,6 +307,49 @@ export async function startQueue(config: {
   );
 
   logger.info("Balance check worker started");
+
+  await boss.work<TransactionRecordingJob>(
+    TRANSACTION_RECORDING_QUEUE,
+    { batchSize: 10 },
+    async (jobs) => {
+      for (const job of jobs) {
+        const {
+          tx_hash,
+          tenant_id,
+          organization_id,
+          endpoint_id,
+          amount_usdc,
+          network,
+          request_path,
+        } = job.data;
+
+        try {
+          await db
+            .insertInto("transactions")
+            .values({
+              tx_hash,
+              tenant_id,
+              organization_id,
+              endpoint_id,
+              amount_usdc,
+              network,
+              request_path,
+            })
+            .onConflict((oc) => oc.column("tx_hash").doNothing())
+            .execute();
+
+          logger.info(
+            `Recorded transaction ${tx_hash} for tenant ${tenant_id}`,
+          );
+        } catch (error) {
+          logger.error(`Failed to record transaction ${tx_hash}: ${error}`);
+          throw error;
+        }
+      }
+    },
+  );
+
+  logger.info("Transaction recording worker started");
 }
 
 export async function stopQueue(): Promise<void> {
@@ -398,5 +455,30 @@ export async function enqueueBalanceCheck(
 
   logger.info(
     `Enqueued balance check job ${jobId} for wallet ${walletId} (${solanaAddress})`,
+  );
+}
+
+export async function enqueueTransactionRecording(
+  data: TransactionRecordingJob,
+): Promise<void> {
+  if (!boss) {
+    throw new Error("Queue not initialized");
+  }
+
+  const jobId = await boss.send(TRANSACTION_RECORDING_QUEUE, data, {
+    retryLimit: 3,
+    retryDelay: 5,
+    retryBackoff: true,
+    expireInSeconds: 300,
+  });
+
+  if (!jobId) {
+    throw new Error(
+      `Failed to enqueue transaction recording for ${data.tx_hash}`,
+    );
+  }
+
+  logger.info(
+    `Enqueued transaction recording job ${jobId} for ${data.tx_hash}`,
   );
 }

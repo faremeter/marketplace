@@ -22,6 +22,13 @@ import {
   updateAccountAddresses,
 } from "../lib/corbits-dash.js";
 import { validateProxyName } from "../lib/proxy-name.js";
+import {
+  getOrganizationEarnings,
+  getTenantEarnings,
+  getEndpointEarnings,
+  getEarningsByPeriod,
+  type Granularity,
+} from "../lib/analytics.js";
 
 export const organizationsRoutes = new Hono();
 
@@ -1173,4 +1180,199 @@ organizationsRoutes.post("/:id/complete-onboarding", async (c) => {
     .execute();
 
   return c.json({ success: true });
+});
+
+// Analytics routes
+
+organizationsRoutes.get("/:id/analytics", async (c) => {
+  const user = c.get("user");
+  const orgId = parseInt(c.req.param("id"));
+
+  const membership = await db
+    .selectFrom("user_organizations")
+    .select("role")
+    .where("user_id", "=", user.id)
+    .where("organization_id", "=", orgId)
+    .executeTakeFirst();
+
+  if (!membership && !user.is_admin) {
+    return c.json({ error: "Organization not found" }, 404);
+  }
+
+  try {
+    const earnings = await getOrganizationEarnings(orgId);
+    return c.json(earnings);
+  } catch (error) {
+    logger.error(`Failed to get organization analytics: ${error}`);
+    return c.json({ error: "Failed to get analytics" }, 500);
+  }
+});
+
+organizationsRoutes.get("/:id/tenants/:tenantId/analytics", async (c) => {
+  const user = c.get("user");
+  const orgId = parseInt(c.req.param("id"));
+  const tenantId = parseInt(c.req.param("tenantId"));
+
+  const membership = await db
+    .selectFrom("user_organizations")
+    .select("role")
+    .where("user_id", "=", user.id)
+    .where("organization_id", "=", orgId)
+    .executeTakeFirst();
+
+  if (!membership && !user.is_admin) {
+    return c.json({ error: "Organization not found" }, 404);
+  }
+
+  const tenant = await db
+    .selectFrom("tenants")
+    .select("id")
+    .where("id", "=", tenantId)
+    .where("organization_id", "=", orgId)
+    .executeTakeFirst();
+
+  if (!tenant) {
+    return c.json({ error: "Tenant not found" }, 404);
+  }
+
+  try {
+    const earnings = await getTenantEarnings(tenantId);
+    return c.json(earnings);
+  } catch (error) {
+    logger.error(`Failed to get tenant analytics: ${error}`);
+    return c.json({ error: "Failed to get analytics" }, 500);
+  }
+});
+
+organizationsRoutes.get(
+  "/:id/tenants/:tenantId/endpoints/:endpointId/analytics",
+  async (c) => {
+    const user = c.get("user");
+    const orgId = parseInt(c.req.param("id"));
+    const tenantId = parseInt(c.req.param("tenantId"));
+    const endpointId = parseInt(c.req.param("endpointId"));
+
+    const membership = await db
+      .selectFrom("user_organizations")
+      .select("role")
+      .where("user_id", "=", user.id)
+      .where("organization_id", "=", orgId)
+      .executeTakeFirst();
+
+    if (!membership && !user.is_admin) {
+      return c.json({ error: "Organization not found" }, 404);
+    }
+
+    const endpoint = await db
+      .selectFrom("endpoints")
+      .innerJoin("tenants", "tenants.id", "endpoints.tenant_id")
+      .select("endpoints.id")
+      .where("endpoints.id", "=", endpointId)
+      .where("endpoints.tenant_id", "=", tenantId)
+      .where("tenants.organization_id", "=", orgId)
+      .executeTakeFirst();
+
+    if (!endpoint) {
+      return c.json({ error: "Endpoint not found" }, 404);
+    }
+
+    try {
+      const earnings = await getEndpointEarnings(endpointId);
+      return c.json(earnings);
+    } catch (error) {
+      logger.error(`Failed to get endpoint analytics: ${error}`);
+      return c.json({ error: "Failed to get analytics" }, 500);
+    }
+  },
+);
+
+organizationsRoutes.get("/:id/analytics/earnings", async (c) => {
+  const user = c.get("user");
+  const orgId = parseInt(c.req.param("id"));
+  const level = c.req.query("level") as "organization" | "tenant" | "endpoint";
+  const targetIdStr = c.req.query("targetId");
+  const granularityParam = c.req.query("granularity") || "month";
+  const periodsStr = c.req.query("periods");
+
+  const membership = await db
+    .selectFrom("user_organizations")
+    .select("role")
+    .where("user_id", "=", user.id)
+    .where("organization_id", "=", orgId)
+    .executeTakeFirst();
+
+  if (!membership && !user.is_admin) {
+    return c.json({ error: "Organization not found" }, 404);
+  }
+
+  if (!level || !["organization", "tenant", "endpoint"].includes(level)) {
+    return c.json(
+      { error: "Invalid level. Must be organization, tenant, or endpoint" },
+      400,
+    );
+  }
+
+  let targetId = orgId;
+  if (level !== "organization") {
+    if (!targetIdStr) {
+      return c.json(
+        { error: "targetId is required for tenant/endpoint level" },
+        400,
+      );
+    }
+    targetId = parseInt(targetIdStr);
+    if (isNaN(targetId)) {
+      return c.json({ error: "Invalid targetId" }, 400);
+    }
+
+    // Verify the target belongs to this org
+    if (level === "tenant") {
+      const tenant = await db
+        .selectFrom("tenants")
+        .select("id")
+        .where("id", "=", targetId)
+        .where("organization_id", "=", orgId)
+        .executeTakeFirst();
+      if (!tenant) {
+        return c.json({ error: "Tenant not found" }, 404);
+      }
+    } else if (level === "endpoint") {
+      const endpoint = await db
+        .selectFrom("endpoints")
+        .innerJoin("tenants", "tenants.id", "endpoints.tenant_id")
+        .select("endpoints.id")
+        .where("endpoints.id", "=", targetId)
+        .where("tenants.organization_id", "=", orgId)
+        .executeTakeFirst();
+      if (!endpoint) {
+        return c.json({ error: "Endpoint not found" }, 404);
+      }
+    }
+  }
+
+  if (!["day", "week", "month"].includes(granularityParam)) {
+    return c.json(
+      { error: "Invalid granularity. Must be day, week, or month" },
+      400,
+    );
+  }
+  const granularity = granularityParam as Granularity;
+
+  const periods = periodsStr ? parseInt(periodsStr) : 12;
+  if (isNaN(periods) || periods < 1 || periods > 365) {
+    return c.json({ error: "Invalid periods. Must be between 1 and 365" }, 400);
+  }
+
+  try {
+    const data = await getEarningsByPeriod(
+      level,
+      targetId,
+      granularity,
+      periods,
+    );
+    return c.json(data);
+  } catch (error) {
+    logger.error(`Failed to get earnings analytics: ${error}`);
+    return c.json({ error: "Failed to get analytics" }, 500);
+  }
 });

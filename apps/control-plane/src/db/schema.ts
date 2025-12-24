@@ -117,6 +117,7 @@ export interface TransactionsTable {
   id: ColumnType<number, never, never>;
   endpoint_id: number | null;
   tenant_id: number;
+  organization_id: number | null;
   amount_usdc: number;
   tx_hash: string;
   network: string;
