@@ -13,6 +13,7 @@ import {
   Link2Icon,
   ShadowOuterIcon,
   EnvelopeClosedIcon,
+  PieChartIcon,
 } from "@radix-ui/react-icons";
 import { UserMenu } from "./user-menu";
 import { SidebarItem } from "./sidebar-item";
@@ -34,6 +35,11 @@ export function AdminSidebar() {
           href="/admin/organizations"
           icon={<HomeIcon />}
           label="Organizations"
+        />
+        <SidebarItem
+          href="/admin/analytics"
+          icon={<PieChartIcon />}
+          label="Analytics"
         />
         <SidebarItem href="/admin/nodes" icon={<CubeIcon />} label="Nodes" />
         <SidebarItem
