@@ -15,6 +15,13 @@ import * as AlertDialog from "@radix-ui/react-alert-dialog";
 import { InlinePriceEdit } from "@/components/shared/inline-price-edit";
 import { InlineSchemeEdit } from "@/components/shared/inline-scheme-edit";
 import { useToast } from "@/components/ui/toast";
+import {
+  type EarningsAnalytics,
+  formatUSDC,
+  getValueColor,
+  getChangeColor,
+  formatChange,
+} from "@/lib/analytics";
 
 interface Endpoint {
   id: number;
@@ -98,16 +105,6 @@ export function AdminEndpointsTable({
     }
   };
 
-  const getLineageStatus = (endpoint: Endpoint) => {
-    if (
-      !endpoint.openapi_source_paths ||
-      endpoint.openapi_source_paths.length === 0
-    ) {
-      return { hasLineage: false, paths: [] as string[] };
-    }
-    return { hasLineage: true, paths: endpoint.openapi_source_paths };
-  };
-
   if (!enabled) {
     return null;
   }
@@ -135,6 +132,18 @@ export function AdminEndpointsTable({
               <th className="whitespace-nowrap px-4 py-3 text-left text-sm font-medium text-gray-11">
                 Scheme
               </th>
+              <th className="whitespace-nowrap px-4 py-3 text-right text-sm font-medium text-gray-11">
+                Earned
+              </th>
+              <th className="whitespace-nowrap px-4 py-3 text-right text-sm font-medium text-gray-11">
+                This Month
+              </th>
+              <th className="whitespace-nowrap px-4 py-3 text-right text-sm font-medium text-gray-11">
+                Change
+              </th>
+              <th className="whitespace-nowrap px-4 py-3 text-right text-sm font-medium text-gray-11">
+                Calls
+              </th>
               {hasOpenApiSpec && (
                 <th className="whitespace-nowrap px-4 py-3 text-left text-sm font-medium text-gray-11">
                   Lineage
@@ -146,179 +155,29 @@ export function AdminEndpointsTable({
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-6 bg-gray-2">
-            {endpoints?.map((endpoint) => {
-              const lineage = getLineageStatus(endpoint);
-              return (
-                <tr key={endpoint.id} className="hover:bg-gray-3">
-                  <td className="px-4 py-3">
-                    <div className="flex flex-col gap-1">
-                      <code className="inline-block w-fit rounded bg-accent-4 px-1.5 py-0.5 text-xs text-accent-11">
-                        {endpoint.path ?? endpoint.path_pattern}
-                      </code>
-                      {endpoint.description && (
-                        <span className="text-xs text-gray-11">
-                          {endpoint.description}
-                        </span>
-                      )}
-                    </div>
-                  </td>
-                  <td className="whitespace-nowrap px-4 py-3">
-                    <div className="flex items-center gap-2">
-                      <InlinePriceEdit
-                        priceUsdc={endpoint.price_usdc ?? defaultPriceUsdc}
-                        defaultPriceUsdc={defaultPriceUsdc}
-                        onUpdate={() => mutate()}
-                        apiEndpoint={`/api/admin/tenants/${tenantId}/endpoints/${endpoint.id}`}
-                        fieldName="price_usdc"
-                        label="Price"
-                      />
-                      {(endpoint.price_usdc ?? defaultPriceUsdc) === 0 && (
-                        <span className="rounded bg-green-900/50 px-1.5 py-0.5 text-xs font-medium text-green-400 border border-green-800">
-                          Free
-                        </span>
-                      )}
-                    </div>
-                  </td>
-                  <td className="whitespace-nowrap px-4 py-3">
-                    <InlineSchemeEdit
-                      scheme={endpoint.scheme ?? defaultScheme}
-                      defaultScheme={defaultScheme}
-                      onUpdate={() => mutate()}
-                      apiEndpoint={`/api/admin/tenants/${tenantId}/endpoints/${endpoint.id}`}
-                      fieldName="scheme"
-                      label="Scheme"
-                    />
-                  </td>
-                  {hasOpenApiSpec && (
-                    <td className="whitespace-nowrap px-4 py-3">
-                      {lineage.hasLineage ? (
-                        <Tooltip.Provider delayDuration={100}>
-                          <Tooltip.Root>
-                            <Tooltip.Trigger asChild>
-                              <div className="flex items-center gap-1 text-green-400 cursor-pointer">
-                                <Link2Icon className="h-4 w-4" />
-                                <span className="text-xs">
-                                  {lineage.paths.length} path
-                                  {lineage.paths.length !== 1 ? "s" : ""}
-                                </span>
-                              </div>
-                            </Tooltip.Trigger>
-                            <Tooltip.Portal>
-                              <Tooltip.Content
-                                className="w-64 rounded-md border border-gray-6 bg-gray-2 p-2 shadow-lg"
-                                sideOffset={5}
-                              >
-                                <p className="mb-1 text-xs font-medium text-gray-11">
-                                  OpenAPI Source Paths:
-                                </p>
-                                <ul className="space-y-0.5">
-                                  {lineage.paths.map((path, i) => (
-                                    <li
-                                      key={i}
-                                      className="text-xs text-gray-12 font-mono"
-                                    >
-                                      {path}
-                                    </li>
-                                  ))}
-                                </ul>
-                                <Tooltip.Arrow className="fill-gray-6" />
-                              </Tooltip.Content>
-                            </Tooltip.Portal>
-                          </Tooltip.Root>
-                        </Tooltip.Provider>
-                      ) : (
-                        <Tooltip.Provider delayDuration={100}>
-                          <Tooltip.Root>
-                            <Tooltip.Trigger asChild>
-                              <div className="flex items-center gap-1 text-yellow-400 cursor-pointer">
-                                <ExclamationTriangleIcon className="h-4 w-4" />
-                                <span className="text-xs">Orphan</span>
-                              </div>
-                            </Tooltip.Trigger>
-                            <Tooltip.Portal>
-                              <Tooltip.Content
-                                className="max-w-xs rounded-md border border-gray-6 bg-gray-2 p-2 shadow-lg"
-                                sideOffset={5}
-                              >
-                                <p className="text-xs text-gray-11">
-                                  Not linked to any OpenAPI spec paths.
-                                </p>
-                                <Tooltip.Arrow className="fill-gray-6" />
-                              </Tooltip.Content>
-                            </Tooltip.Portal>
-                          </Tooltip.Root>
-                        </Tooltip.Provider>
-                      )}
-                    </td>
-                  )}
-                  <td className="whitespace-nowrap px-4 py-3">
-                    <div className="flex items-center gap-1">
-                      <button
-                        onClick={() => setEditingEndpoint(endpoint)}
-                        className="rounded p-1.5 text-gray-11 hover:bg-gray-4 hover:text-gray-12"
-                        title="Edit endpoint"
-                      >
-                        <Pencil1Icon className="h-4 w-4" />
-                      </button>
-                      <button
-                        onClick={() => setEndpointToDelete(endpoint)}
-                        className="rounded p-1.5 text-gray-11 hover:bg-red-900/30 hover:text-red-400"
-                        title="Delete endpoint"
-                      >
-                        <TrashIcon className="h-4 w-4" />
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              );
-            })}
-            <tr className="bg-gray-3/50">
-              <td className="px-4 py-3">
-                <code className="rounded bg-accent-4 px-1.5 py-0.5 text-xs text-accent-11">
-                  /
-                </code>
-                <span className="ml-2 text-xs text-gray-11">(default)</span>
-              </td>
-              <td className="whitespace-nowrap px-4 py-3">
-                <div className="flex items-center gap-2">
-                  <InlinePriceEdit
-                    priceUsdc={defaultPriceUsdc}
-                    onUpdate={() => {
-                      mutate();
-                      onDefaultsChange?.();
-                    }}
-                    apiEndpoint={`/api/admin/tenants/${tenantId}`}
-                    fieldName="default_price_usdc"
-                    label="Default Price"
-                  />
-                  {defaultPriceUsdc === 0 && (
-                    <span className="rounded bg-green-900/50 px-1.5 py-0.5 text-xs font-medium text-green-400 border border-green-800">
-                      Free
-                    </span>
-                  )}
-                </div>
-              </td>
-              <td className="whitespace-nowrap px-4 py-3">
-                <InlineSchemeEdit
-                  scheme={defaultScheme}
-                  onUpdate={() => {
-                    mutate();
-                    onDefaultsChange?.();
-                  }}
-                  apiEndpoint={`/api/admin/tenants/${tenantId}`}
-                  fieldName="default_scheme"
-                  label="Default Scheme"
-                />
-              </td>
-              {hasOpenApiSpec && (
-                <td className="whitespace-nowrap px-4 py-3">
-                  <span className="text-xs text-gray-11">-</span>
-                </td>
-              )}
-              <td className="whitespace-nowrap px-4 py-3">
-                <span className="text-xs text-gray-11">-</span>
-              </td>
-            </tr>
+            {endpoints?.map((endpoint) => (
+              <EndpointRow
+                key={endpoint.id}
+                endpoint={endpoint}
+                tenantId={tenantId}
+                defaultPriceUsdc={defaultPriceUsdc}
+                defaultScheme={defaultScheme}
+                hasOpenApiSpec={hasOpenApiSpec}
+                onUpdate={() => mutate()}
+                onEdit={() => setEditingEndpoint(endpoint)}
+                onDelete={() => setEndpointToDelete(endpoint)}
+              />
+            ))}
+            <DefaultRow
+              tenantId={tenantId}
+              defaultPriceUsdc={defaultPriceUsdc}
+              defaultScheme={defaultScheme}
+              hasOpenApiSpec={hasOpenApiSpec}
+              onUpdate={() => {
+                mutate();
+                onDefaultsChange?.();
+              }}
+            />
           </tbody>
         </table>
       </div>
@@ -371,5 +230,258 @@ export function AdminEndpointsTable({
         />
       )}
     </div>
+  );
+}
+
+function EndpointRow({
+  endpoint,
+  tenantId,
+  defaultPriceUsdc,
+  defaultScheme,
+  hasOpenApiSpec,
+  onUpdate,
+  onEdit,
+  onDelete,
+}: {
+  endpoint: Endpoint;
+  tenantId: number;
+  defaultPriceUsdc: number;
+  defaultScheme: string;
+  hasOpenApiSpec: boolean;
+  onUpdate: () => void;
+  onEdit: () => void;
+  onDelete: () => void;
+}) {
+  const { data: analytics, isLoading } = useSWR(
+    `/api/admin/tenants/${tenantId}/endpoints/${endpoint.id}/analytics`,
+    api.get<EarningsAnalytics>,
+  );
+
+  const lineage = {
+    hasLineage:
+      endpoint.openapi_source_paths && endpoint.openapi_source_paths.length > 0,
+    paths: endpoint.openapi_source_paths ?? [],
+  };
+
+  return (
+    <tr className="hover:bg-gray-3">
+      <td className="px-4 py-3">
+        <div className="flex flex-col gap-1">
+          <code className="inline-block w-fit rounded bg-accent-4 px-1.5 py-0.5 text-xs text-accent-11">
+            {endpoint.path ?? endpoint.path_pattern}
+          </code>
+          {endpoint.description && (
+            <span className="text-xs text-gray-11">{endpoint.description}</span>
+          )}
+        </div>
+      </td>
+      <td className="whitespace-nowrap px-4 py-3">
+        <div className="flex items-center gap-2">
+          <InlinePriceEdit
+            priceUsdc={endpoint.price_usdc ?? defaultPriceUsdc}
+            defaultPriceUsdc={defaultPriceUsdc}
+            onUpdate={onUpdate}
+            apiEndpoint={`/api/admin/tenants/${tenantId}/endpoints/${endpoint.id}`}
+            fieldName="price_usdc"
+            label="Price"
+          />
+          {(endpoint.price_usdc ?? defaultPriceUsdc) === 0 && (
+            <span className="rounded bg-green-900/50 px-1.5 py-0.5 text-xs font-medium text-green-400 border border-green-800">
+              Free
+            </span>
+          )}
+        </div>
+      </td>
+      <td className="whitespace-nowrap px-4 py-3">
+        <InlineSchemeEdit
+          scheme={endpoint.scheme ?? defaultScheme}
+          defaultScheme={defaultScheme}
+          onUpdate={onUpdate}
+          apiEndpoint={`/api/admin/tenants/${tenantId}/endpoints/${endpoint.id}`}
+          fieldName="scheme"
+          label="Scheme"
+        />
+      </td>
+      <td
+        className={`whitespace-nowrap px-4 py-3 text-right text-sm ${isLoading ? "text-gray-9" : getValueColor(analytics?.total_earned_usdc)}`}
+      >
+        {isLoading ? "..." : formatUSDC(analytics?.total_earned_usdc)}
+      </td>
+      <td
+        className={`whitespace-nowrap px-4 py-3 text-right text-sm ${isLoading ? "text-gray-9" : getValueColor(analytics?.current_month_earned_usdc)}`}
+      >
+        {isLoading ? "..." : formatUSDC(analytics?.current_month_earned_usdc)}
+      </td>
+      <td
+        className={`whitespace-nowrap px-4 py-3 text-right text-sm ${isLoading ? "text-gray-9" : getChangeColor(analytics?.percent_change)}`}
+      >
+        {isLoading ? "..." : formatChange(analytics?.percent_change)}
+      </td>
+      <td className="whitespace-nowrap px-4 py-3 text-right text-sm text-white">
+        {isLoading
+          ? "..."
+          : (analytics?.total_transactions ?? 0).toLocaleString()}
+      </td>
+      {hasOpenApiSpec && (
+        <td className="whitespace-nowrap px-4 py-3">
+          {lineage.hasLineage ? (
+            <Tooltip.Provider delayDuration={100}>
+              <Tooltip.Root>
+                <Tooltip.Trigger asChild>
+                  <div className="flex items-center gap-1 text-green-400 cursor-pointer">
+                    <Link2Icon className="h-4 w-4" />
+                    <span className="text-xs">
+                      {lineage.paths.length} path
+                      {lineage.paths.length !== 1 ? "s" : ""}
+                    </span>
+                  </div>
+                </Tooltip.Trigger>
+                <Tooltip.Portal>
+                  <Tooltip.Content
+                    className="w-64 rounded-md border border-gray-6 bg-gray-2 p-2 shadow-lg"
+                    sideOffset={5}
+                  >
+                    <p className="mb-1 text-xs font-medium text-gray-11">
+                      OpenAPI Source Paths:
+                    </p>
+                    <ul className="space-y-0.5">
+                      {lineage.paths.map((path, i) => (
+                        <li key={i} className="text-xs text-gray-12 font-mono">
+                          {path}
+                        </li>
+                      ))}
+                    </ul>
+                    <Tooltip.Arrow className="fill-gray-6" />
+                  </Tooltip.Content>
+                </Tooltip.Portal>
+              </Tooltip.Root>
+            </Tooltip.Provider>
+          ) : (
+            <Tooltip.Provider delayDuration={100}>
+              <Tooltip.Root>
+                <Tooltip.Trigger asChild>
+                  <div className="flex items-center gap-1 text-yellow-400 cursor-pointer">
+                    <ExclamationTriangleIcon className="h-4 w-4" />
+                    <span className="text-xs">Orphan</span>
+                  </div>
+                </Tooltip.Trigger>
+                <Tooltip.Portal>
+                  <Tooltip.Content
+                    className="max-w-xs rounded-md border border-gray-6 bg-gray-2 p-2 shadow-lg"
+                    sideOffset={5}
+                  >
+                    <p className="text-xs text-gray-11">
+                      Not linked to any OpenAPI spec paths.
+                    </p>
+                    <Tooltip.Arrow className="fill-gray-6" />
+                  </Tooltip.Content>
+                </Tooltip.Portal>
+              </Tooltip.Root>
+            </Tooltip.Provider>
+          )}
+        </td>
+      )}
+      <td className="whitespace-nowrap px-4 py-3">
+        <div className="flex items-center gap-1">
+          <button
+            onClick={onEdit}
+            className="rounded p-1.5 text-gray-11 hover:bg-gray-4 hover:text-gray-12"
+            title="Edit endpoint"
+          >
+            <Pencil1Icon className="h-4 w-4" />
+          </button>
+          <button
+            onClick={onDelete}
+            className="rounded p-1.5 text-gray-11 hover:bg-red-900/30 hover:text-red-400"
+            title="Delete endpoint"
+          >
+            <TrashIcon className="h-4 w-4" />
+          </button>
+        </div>
+      </td>
+    </tr>
+  );
+}
+
+function DefaultRow({
+  tenantId,
+  defaultPriceUsdc,
+  defaultScheme,
+  hasOpenApiSpec,
+  onUpdate,
+}: {
+  tenantId: number;
+  defaultPriceUsdc: number;
+  defaultScheme: string;
+  hasOpenApiSpec: boolean;
+  onUpdate: () => void;
+}) {
+  const { data: analytics, isLoading } = useSWR(
+    `/api/admin/tenants/${tenantId}/analytics`,
+    api.get<EarningsAnalytics>,
+  );
+
+  return (
+    <tr className="bg-gray-3/50">
+      <td className="px-4 py-3">
+        <code className="rounded bg-accent-4 px-1.5 py-0.5 text-xs text-accent-11">
+          /
+        </code>
+        <span className="ml-2 text-xs text-gray-11">(default)</span>
+      </td>
+      <td className="whitespace-nowrap px-4 py-3">
+        <div className="flex items-center gap-2">
+          <InlinePriceEdit
+            priceUsdc={defaultPriceUsdc}
+            onUpdate={onUpdate}
+            apiEndpoint={`/api/admin/tenants/${tenantId}`}
+            fieldName="default_price_usdc"
+            label="Default Price"
+          />
+          {defaultPriceUsdc === 0 && (
+            <span className="rounded bg-green-900/50 px-1.5 py-0.5 text-xs font-medium text-green-400 border border-green-800">
+              Free
+            </span>
+          )}
+        </div>
+      </td>
+      <td className="whitespace-nowrap px-4 py-3">
+        <InlineSchemeEdit
+          scheme={defaultScheme}
+          onUpdate={onUpdate}
+          apiEndpoint={`/api/admin/tenants/${tenantId}`}
+          fieldName="default_scheme"
+          label="Default Scheme"
+        />
+      </td>
+      <td
+        className={`whitespace-nowrap px-4 py-3 text-right text-sm ${isLoading ? "text-gray-9" : getValueColor(analytics?.total_earned_usdc)}`}
+      >
+        {isLoading ? "..." : formatUSDC(analytics?.total_earned_usdc)}
+      </td>
+      <td
+        className={`whitespace-nowrap px-4 py-3 text-right text-sm ${isLoading ? "text-gray-9" : getValueColor(analytics?.current_month_earned_usdc)}`}
+      >
+        {isLoading ? "..." : formatUSDC(analytics?.current_month_earned_usdc)}
+      </td>
+      <td
+        className={`whitespace-nowrap px-4 py-3 text-right text-sm ${isLoading ? "text-gray-9" : getChangeColor(analytics?.percent_change)}`}
+      >
+        {isLoading ? "..." : formatChange(analytics?.percent_change)}
+      </td>
+      <td className="whitespace-nowrap px-4 py-3 text-right text-sm text-white">
+        {isLoading
+          ? "..."
+          : (analytics?.total_transactions ?? 0).toLocaleString()}
+      </td>
+      {hasOpenApiSpec && (
+        <td className="whitespace-nowrap px-4 py-3">
+          <span className="text-xs text-gray-11">-</span>
+        </td>
+      )}
+      <td className="whitespace-nowrap px-4 py-3">
+        <span className="text-xs text-gray-11">-</span>
+      </td>
+    </tr>
   );
 }
