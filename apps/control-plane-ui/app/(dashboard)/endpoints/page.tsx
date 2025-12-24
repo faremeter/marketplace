@@ -14,6 +14,13 @@ import {
 } from "@radix-ui/react-icons";
 import { useState } from "react";
 import { useToast } from "@/components/ui/toast";
+import {
+  type EarningsAnalytics,
+  formatUSDC,
+  getValueColor,
+  getChangeColor,
+  formatChange,
+} from "@/lib/analytics";
 
 interface Tenant {
   id: number;
@@ -203,95 +210,183 @@ function TenantCard({
         ) : (
           <table className="w-full">
             <thead>
-              <tr className="border-b border-gray-6">
-                <th className="w-full pb-2 text-left text-xs font-medium text-gray-11">
-                  Path
-                </th>
-                <th className="whitespace-nowrap pb-2 pr-4 text-right text-xs font-medium text-gray-11">
-                  Price
-                </th>
-                <th className="whitespace-nowrap pb-2 text-right text-xs font-medium text-gray-11">
-                  Scheme
-                </th>
+              <tr className="border-b border-gray-6 text-xs font-medium text-gray-11">
+                <th className="pb-2 text-left">Path</th>
+                <th className="w-20 pb-2 text-right">Price</th>
+                <th className="w-20 pb-2 text-right">Scheme</th>
+                <th className="w-20 pb-2 text-right">Earned</th>
+                <th className="w-24 pb-2 text-right">This Month</th>
+                <th className="w-16 pb-2 text-right">Change</th>
+                <th className="w-16 pb-2 text-right">Calls</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-6">
-              <tr className="bg-gray-3/50">
-                <td className="py-2 align-middle">
-                  <code className="rounded bg-accent-4 px-1.5 py-0.5 text-xs text-accent-11">
-                    /
-                  </code>
-                  <span className="ml-2 text-xs text-gray-11">(catch-all)</span>
-                </td>
-                <td className="whitespace-nowrap py-2 pl-4 pr-4 text-right align-middle">
-                  <div className="flex items-center justify-end gap-2">
-                    <InlinePriceEdit
-                      priceUsdc={tenant.default_price_usdc}
-                      onUpdate={onUpdate}
-                      apiEndpoint={apiEndpoint}
-                      fieldName="default_price_usdc"
-                      label="Default Price"
-                    />
-                    {tenant.default_price_usdc === 0 && (
-                      <span className="rounded bg-green-900/50 px-1.5 py-0.5 text-[10px] font-medium text-green-400 border border-green-800">
-                        Free
-                      </span>
-                    )}
-                  </div>
-                </td>
-                <td className="whitespace-nowrap py-2 pl-4 text-right align-middle">
-                  <InlineSchemeEdit
-                    scheme={tenant.default_scheme}
-                    onUpdate={onUpdate}
-                    apiEndpoint={apiEndpoint}
-                    fieldName="default_scheme"
-                    label="Default Scheme"
-                  />
-                </td>
-              </tr>
+              <CatchAllRow
+                tenant={tenant}
+                orgId={orgId}
+                apiEndpoint={apiEndpoint}
+                onUpdate={onUpdate}
+              />
               {endpoints?.map((endpoint) => (
-                <tr key={endpoint.id} className="bg-gray-3/50">
-                  <td className="py-2 align-middle">
-                    <code className="rounded bg-accent-4 px-1.5 py-0.5 text-xs text-accent-11">
-                      {endpoint.path ?? endpoint.path_pattern}
-                    </code>
-                  </td>
-                  <td className="whitespace-nowrap py-2 pl-4 pr-4 text-right align-middle">
-                    <div className="flex items-center justify-end gap-2">
-                      <InlinePriceEdit
-                        priceUsdc={
-                          endpoint.price_usdc ?? tenant.default_price_usdc
-                        }
-                        defaultPriceUsdc={tenant.default_price_usdc}
-                        onUpdate={() => mutateEndpoints()}
-                        apiEndpoint={`/api/tenants/${tenant.id}/endpoints/${endpoint.id}`}
-                        fieldName="price_usdc"
-                        label="Price"
-                      />
-                      {(endpoint.price_usdc ?? tenant.default_price_usdc) ===
-                        0 && (
-                        <span className="rounded bg-green-900/50 px-1.5 py-0.5 text-[10px] font-medium text-green-400 border border-green-800">
-                          Free
-                        </span>
-                      )}
-                    </div>
-                  </td>
-                  <td className="whitespace-nowrap py-2 pl-4 text-right align-middle">
-                    <InlineSchemeEdit
-                      scheme={endpoint.scheme ?? tenant.default_scheme}
-                      defaultScheme={tenant.default_scheme}
-                      onUpdate={() => mutateEndpoints()}
-                      apiEndpoint={`/api/tenants/${tenant.id}/endpoints/${endpoint.id}`}
-                      fieldName="scheme"
-                      label="Scheme"
-                    />
-                  </td>
-                </tr>
+                <EndpointRow
+                  key={endpoint.id}
+                  endpoint={endpoint}
+                  tenant={tenant}
+                  orgId={orgId}
+                  onUpdate={() => mutateEndpoints()}
+                />
               ))}
             </tbody>
           </table>
         )}
       </div>
     </div>
+  );
+}
+
+function CatchAllRow({
+  tenant,
+  orgId,
+  apiEndpoint,
+  onUpdate,
+}: {
+  tenant: Tenant;
+  orgId: number;
+  apiEndpoint: string;
+  onUpdate: () => void;
+}) {
+  const { data: analytics, isLoading } = useSWR(
+    `/api/organizations/${orgId}/tenants/${tenant.id}/analytics`,
+    api.get<EarningsAnalytics>,
+  );
+
+  return (
+    <tr className="bg-gray-3/50">
+      <td className="py-2 align-middle">
+        <code className="rounded bg-accent-4 px-1.5 py-0.5 text-xs text-accent-11">
+          /
+        </code>
+        <span className="ml-2 text-xs text-gray-11">(catch-all)</span>
+      </td>
+      <td className="whitespace-nowrap py-2 pl-4 text-right align-middle">
+        <div className="flex items-center justify-end gap-2">
+          <InlinePriceEdit
+            priceUsdc={tenant.default_price_usdc}
+            onUpdate={onUpdate}
+            apiEndpoint={apiEndpoint}
+            fieldName="default_price_usdc"
+            label="Default Price"
+          />
+          {tenant.default_price_usdc === 0 && (
+            <span className="rounded bg-green-900/50 px-1.5 py-0.5 text-[10px] font-medium text-green-400 border border-green-800">
+              Free
+            </span>
+          )}
+        </div>
+      </td>
+      <td className="whitespace-nowrap py-2 pl-4 text-right align-middle">
+        <InlineSchemeEdit
+          scheme={tenant.default_scheme}
+          onUpdate={onUpdate}
+          apiEndpoint={apiEndpoint}
+          fieldName="default_scheme"
+          label="Default Scheme"
+        />
+      </td>
+      <td
+        className={`whitespace-nowrap py-2 text-right align-middle text-xs ${isLoading ? "text-gray-9" : getValueColor(analytics?.total_earned_usdc)}`}
+      >
+        {isLoading ? "..." : formatUSDC(analytics?.total_earned_usdc)}
+      </td>
+      <td
+        className={`whitespace-nowrap py-2 text-right align-middle text-xs ${isLoading ? "text-gray-9" : getValueColor(analytics?.current_month_earned_usdc)}`}
+      >
+        {isLoading ? "..." : formatUSDC(analytics?.current_month_earned_usdc)}
+      </td>
+      <td
+        className={`whitespace-nowrap py-2 text-right align-middle text-xs ${isLoading ? "text-gray-9" : getChangeColor(analytics?.percent_change)}`}
+      >
+        {isLoading ? "..." : formatChange(analytics?.percent_change)}
+      </td>
+      <td className="whitespace-nowrap py-2 text-right align-middle text-xs text-white">
+        {isLoading
+          ? "..."
+          : (analytics?.total_transactions ?? 0).toLocaleString()}
+      </td>
+    </tr>
+  );
+}
+
+function EndpointRow({
+  endpoint,
+  tenant,
+  orgId,
+  onUpdate,
+}: {
+  endpoint: Endpoint;
+  tenant: Tenant;
+  orgId: number;
+  onUpdate: () => void;
+}) {
+  const { data: analytics, isLoading } = useSWR(
+    `/api/organizations/${orgId}/tenants/${tenant.id}/endpoints/${endpoint.id}/analytics`,
+    api.get<EarningsAnalytics>,
+  );
+
+  return (
+    <tr className="bg-gray-3/50">
+      <td className="py-2 align-middle">
+        <code className="rounded bg-accent-4 px-1.5 py-0.5 text-xs text-accent-11">
+          {endpoint.path ?? endpoint.path_pattern}
+        </code>
+      </td>
+      <td className="whitespace-nowrap py-2 pl-4 text-right align-middle">
+        <div className="flex items-center justify-end gap-2">
+          <InlinePriceEdit
+            priceUsdc={endpoint.price_usdc ?? tenant.default_price_usdc}
+            defaultPriceUsdc={tenant.default_price_usdc}
+            onUpdate={onUpdate}
+            apiEndpoint={`/api/tenants/${tenant.id}/endpoints/${endpoint.id}`}
+            fieldName="price_usdc"
+            label="Price"
+          />
+          {(endpoint.price_usdc ?? tenant.default_price_usdc) === 0 && (
+            <span className="rounded bg-green-900/50 px-1.5 py-0.5 text-[10px] font-medium text-green-400 border border-green-800">
+              Free
+            </span>
+          )}
+        </div>
+      </td>
+      <td className="whitespace-nowrap py-2 pl-4 text-right align-middle">
+        <InlineSchemeEdit
+          scheme={endpoint.scheme ?? tenant.default_scheme}
+          defaultScheme={tenant.default_scheme}
+          onUpdate={onUpdate}
+          apiEndpoint={`/api/tenants/${tenant.id}/endpoints/${endpoint.id}`}
+          fieldName="scheme"
+          label="Scheme"
+        />
+      </td>
+      <td
+        className={`whitespace-nowrap py-2 text-right align-middle text-xs ${isLoading ? "text-gray-9" : getValueColor(analytics?.total_earned_usdc)}`}
+      >
+        {isLoading ? "..." : formatUSDC(analytics?.total_earned_usdc)}
+      </td>
+      <td
+        className={`whitespace-nowrap py-2 text-right align-middle text-xs ${isLoading ? "text-gray-9" : getValueColor(analytics?.current_month_earned_usdc)}`}
+      >
+        {isLoading ? "..." : formatUSDC(analytics?.current_month_earned_usdc)}
+      </td>
+      <td
+        className={`whitespace-nowrap py-2 text-right align-middle text-xs ${isLoading ? "text-gray-9" : getChangeColor(analytics?.percent_change)}`}
+      >
+        {isLoading ? "..." : formatChange(analytics?.percent_change)}
+      </td>
+      <td className="whitespace-nowrap py-2 text-right align-middle text-xs text-white">
+        {isLoading
+          ? "..."
+          : (analytics?.total_transactions ?? 0).toLocaleString()}
+      </td>
+    </tr>
   );
 }
