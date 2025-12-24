@@ -1,12 +1,17 @@
 "use client";
 
+import { useState } from "react";
 import { useAuth } from "@/lib/auth/context";
 import useSWR from "swr";
 import { api } from "@/lib/api/client";
+import * as Dialog from "@radix-ui/react-dialog";
+import { Cross2Icon, PieChartIcon } from "@radix-ui/react-icons";
 import {
   type EarningsAnalytics,
   formatUSDC,
   getValueColor,
+  getChangeColor,
+  formatChange,
 } from "@/lib/analytics";
 
 interface TenantStats {
@@ -18,6 +23,12 @@ interface Tenant {
   id: number;
   name: string;
   status: string;
+}
+
+interface Endpoint {
+  id: number;
+  path: string | null;
+  path_pattern: string;
 }
 
 export default function DashboardPage() {
@@ -123,29 +134,19 @@ function EarningsCard({
   value?: number;
   percentChange?: number | null;
 }) {
-  const valueColor = getValueColor(value);
-
-  const changeColor =
-    percentChange === null || percentChange === undefined || percentChange === 0
-      ? "text-gray-9"
-      : percentChange > 0
-        ? "text-green-500"
-        : "text-red-500";
-
-  const changeText =
-    percentChange === null || percentChange === undefined
-      ? ""
-      : `${percentChange > 0 ? "+" : ""}${percentChange.toFixed(1)}%`;
+  const changeText = formatChange(percentChange);
 
   return (
     <div className="rounded-lg border border-white/10 bg-gray-2 p-4">
       <p className="text-[12px] text-gray-9">{title}</p>
       <div className="mt-1 flex items-baseline gap-2">
-        <p className={`text-[15px] font-medium ${valueColor}`}>
+        <p className={`text-[15px] font-medium ${getValueColor(value)}`}>
           {formatUSDC(value)}
         </p>
-        {changeText && (
-          <span className={`text-[12px] font-medium ${changeColor}`}>
+        {changeText !== "-" && (
+          <span
+            className={`text-[12px] font-medium ${getChangeColor(percentChange)}`}
+          >
             {changeText}
           </span>
         )}
@@ -170,6 +171,8 @@ function TenantEarningsTable({
             <th className="pb-3 font-medium">Total Earned</th>
             <th className="pb-3 font-medium">This Month</th>
             <th className="pb-3 font-medium">Change</th>
+            <th className="pb-3 font-medium">Calls</th>
+            <th className="pb-3 font-medium">Analytics</th>
           </tr>
         </thead>
         <tbody>
@@ -189,41 +192,207 @@ function TenantEarningsRow({
   tenant: Tenant;
   orgId: number;
 }) {
+  const [showEndpointDialog, setShowEndpointDialog] = useState(false);
   const { data: analytics, isLoading } = useSWR(
     `/api/organizations/${orgId}/tenants/${tenant.id}/analytics`,
     api.get<EarningsAnalytics>,
   );
 
-  const changeColor =
-    analytics?.percent_change === null ||
-    analytics?.percent_change === undefined
-      ? "text-gray-9"
-      : analytics.percent_change > 0
-        ? "text-green-500"
-        : analytics.percent_change < 0
-          ? "text-red-500"
-          : "text-gray-9";
-
-  const changeText =
-    analytics?.percent_change === null ||
-    analytics?.percent_change === undefined
-      ? "-"
-      : `${analytics.percent_change > 0 ? "+" : ""}${analytics.percent_change.toFixed(1)}%`;
-
-  const totalColor = getValueColor(analytics?.total_earned_usdc);
-  const monthColor = getValueColor(analytics?.current_month_earned_usdc);
-
   return (
     <tr className="border-b border-white/5 text-[13px]">
       <td className="py-3 text-white">{tenant.name}</td>
-      <td className={`py-3 ${isLoading ? "text-gray-9" : totalColor}`}>
+      <td
+        className={`py-3 ${isLoading ? "text-gray-9" : getValueColor(analytics?.total_earned_usdc)}`}
+      >
         {isLoading ? "..." : formatUSDC(analytics?.total_earned_usdc)}
       </td>
-      <td className={`py-3 ${isLoading ? "text-gray-9" : monthColor}`}>
+      <td
+        className={`py-3 ${isLoading ? "text-gray-9" : getValueColor(analytics?.current_month_earned_usdc)}`}
+      >
         {isLoading ? "..." : formatUSDC(analytics?.current_month_earned_usdc)}
       </td>
-      <td className={`py-3 ${isLoading ? "text-gray-9" : changeColor}`}>
-        {isLoading ? "..." : changeText}
+      <td
+        className={`py-3 ${isLoading ? "text-gray-9" : getChangeColor(analytics?.percent_change)}`}
+      >
+        {isLoading ? "..." : formatChange(analytics?.percent_change)}
+      </td>
+      <td className="py-3 text-white">
+        {isLoading
+          ? "..."
+          : (analytics?.total_transactions ?? 0).toLocaleString()}
+      </td>
+      <td className="py-3">
+        <button
+          onClick={() => setShowEndpointDialog(true)}
+          className="rounded p-1.5 text-gray-11 hover:bg-gray-4 hover:text-gray-12"
+          title="View endpoint breakdown"
+        >
+          <PieChartIcon className="h-4 w-4" />
+        </button>
+        {showEndpointDialog && (
+          <EndpointEarningsDialog
+            tenant={tenant}
+            orgId={orgId}
+            onClose={() => setShowEndpointDialog(false)}
+          />
+        )}
+      </td>
+    </tr>
+  );
+}
+
+function EndpointEarningsDialog({
+  tenant,
+  orgId,
+  onClose,
+}: {
+  tenant: Tenant;
+  orgId: number;
+  onClose: () => void;
+}) {
+  const { data: endpoints, isLoading } = useSWR(
+    `/api/tenants/${tenant.id}/endpoints`,
+    api.get<Endpoint[]>,
+  );
+
+  return (
+    <Dialog.Root open onOpenChange={(open) => !open && onClose()}>
+      <Dialog.Portal>
+        <Dialog.Overlay className="fixed inset-0 bg-black/50" />
+        <Dialog.Content className="fixed left-1/2 top-1/2 w-full max-w-2xl -translate-x-1/2 -translate-y-1/2 rounded-lg border border-gray-6 bg-gray-2 p-6 shadow-lg">
+          <div className="flex items-center justify-between">
+            <Dialog.Title className="text-lg font-semibold text-gray-12">
+              Endpoint Earnings for {tenant.name}
+            </Dialog.Title>
+            <Dialog.Close className="rounded p-1 text-gray-11 hover:bg-gray-4 hover:text-gray-12">
+              <Cross2Icon className="h-4 w-4" />
+            </Dialog.Close>
+          </div>
+
+          <div className="mt-4 max-h-[60vh] overflow-y-auto">
+            {isLoading ? (
+              <div className="flex items-center justify-center py-8">
+                <div className="h-6 w-6 animate-spin rounded-full border-2 border-gray-6 border-t-accent-9" />
+              </div>
+            ) : endpoints && endpoints.length > 0 ? (
+              <table className="w-full">
+                <thead>
+                  <tr className="border-b border-white/10 text-left text-[12px] text-gray-9">
+                    <th className="pb-3 font-medium">Path</th>
+                    <th className="pb-3 font-medium">Total Earned</th>
+                    <th className="pb-3 font-medium">This Month</th>
+                    <th className="pb-3 font-medium">Change</th>
+                    <th className="pb-3 font-medium">Calls</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {endpoints.map((endpoint) => (
+                    <EndpointEarningsRow
+                      key={endpoint.id}
+                      endpoint={endpoint}
+                      tenantId={tenant.id}
+                      orgId={orgId}
+                    />
+                  ))}
+                  <CatchAllEarningsRow tenantId={tenant.id} orgId={orgId} />
+                </tbody>
+              </table>
+            ) : (
+              <p className="py-4 text-center text-[13px] text-gray-9">
+                No endpoints configured.
+              </p>
+            )}
+          </div>
+        </Dialog.Content>
+      </Dialog.Portal>
+    </Dialog.Root>
+  );
+}
+
+function EndpointEarningsRow({
+  endpoint,
+  tenantId,
+  orgId,
+}: {
+  endpoint: Endpoint;
+  tenantId: number;
+  orgId: number;
+}) {
+  const { data: analytics, isLoading } = useSWR(
+    `/api/organizations/${orgId}/tenants/${tenantId}/endpoints/${endpoint.id}/analytics`,
+    api.get<EarningsAnalytics>,
+  );
+
+  return (
+    <tr className="border-b border-white/5 text-[13px]">
+      <td className="py-3">
+        <code className="rounded bg-accent-4 px-1.5 py-0.5 text-xs text-accent-11">
+          {endpoint.path ?? endpoint.path_pattern}
+        </code>
+      </td>
+      <td
+        className={`py-3 ${isLoading ? "text-gray-9" : getValueColor(analytics?.total_earned_usdc)}`}
+      >
+        {isLoading ? "..." : formatUSDC(analytics?.total_earned_usdc)}
+      </td>
+      <td
+        className={`py-3 ${isLoading ? "text-gray-9" : getValueColor(analytics?.current_month_earned_usdc)}`}
+      >
+        {isLoading ? "..." : formatUSDC(analytics?.current_month_earned_usdc)}
+      </td>
+      <td
+        className={`py-3 ${isLoading ? "text-gray-9" : getChangeColor(analytics?.percent_change)}`}
+      >
+        {isLoading ? "..." : formatChange(analytics?.percent_change)}
+      </td>
+      <td className="py-3 text-white">
+        {isLoading
+          ? "..."
+          : (analytics?.total_transactions ?? 0).toLocaleString()}
+      </td>
+    </tr>
+  );
+}
+
+function CatchAllEarningsRow({
+  tenantId,
+  orgId,
+}: {
+  tenantId: number;
+  orgId: number;
+}) {
+  const { data: analytics, isLoading } = useSWR(
+    `/api/organizations/${orgId}/tenants/${tenantId}/analytics`,
+    api.get<EarningsAnalytics>,
+  );
+
+  return (
+    <tr className="border-b border-white/5 bg-gray-3/50 text-[13px]">
+      <td className="py-3">
+        <code className="rounded bg-accent-4 px-1.5 py-0.5 text-xs text-accent-11">
+          /
+        </code>
+        <span className="ml-2 text-xs text-gray-11">(catch-all)</span>
+      </td>
+      <td
+        className={`py-3 ${isLoading ? "text-gray-9" : getValueColor(analytics?.total_earned_usdc)}`}
+      >
+        {isLoading ? "..." : formatUSDC(analytics?.total_earned_usdc)}
+      </td>
+      <td
+        className={`py-3 ${isLoading ? "text-gray-9" : getValueColor(analytics?.current_month_earned_usdc)}`}
+      >
+        {isLoading ? "..." : formatUSDC(analytics?.current_month_earned_usdc)}
+      </td>
+      <td
+        className={`py-3 ${isLoading ? "text-gray-9" : getChangeColor(analytics?.percent_change)}`}
+      >
+        {isLoading ? "..." : formatChange(analytics?.percent_change)}
+      </td>
+      <td className="py-3 text-white">
+        {isLoading
+          ? "..."
+          : (analytics?.total_transactions ?? 0).toLocaleString()}
       </td>
     </tr>
   );
