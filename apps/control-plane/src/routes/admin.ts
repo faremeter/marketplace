@@ -25,6 +25,7 @@ import {
 } from "../lib/corbits-dash.js";
 import { validateProxyName } from "../lib/proxy-name.js";
 import {
+  getPlatformEarnings,
   getOrganizationEarnings,
   getTenantEarnings,
   getEndpointEarnings,
@@ -43,6 +44,11 @@ const transactionCache = new Map<number, TransactionCacheEntry>();
 const TRANSACTIONS_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
 
 adminRoutes.use("*", requireAdmin);
+
+adminRoutes.get("/analytics", async (c) => {
+  const analytics = await getPlatformEarnings();
+  return c.json(analytics);
+});
 
 adminRoutes.get("/users", async (c) => {
   const users = await db

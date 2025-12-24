@@ -32,6 +32,46 @@ function calculatePercentChange(
   return ((current - previous) / previous) * 100;
 }
 
+export async function getPlatformEarnings(): Promise<EarningsAnalytics> {
+  const { currentMonthStart, previousMonthStart } = getMonthBoundaries();
+
+  const [totals, currentMonth, previousMonth] = await Promise.all([
+    db
+      .selectFrom("transactions")
+      .select([
+        sql<number>`COALESCE(SUM(amount_usdc), 0)`.as("total"),
+        sql<number>`COUNT(*)`.as("count"),
+      ])
+      .executeTakeFirst(),
+
+    db
+      .selectFrom("transactions")
+      .select(sql<number>`COALESCE(SUM(amount_usdc), 0)`.as("total"))
+      .where("created_at", ">=", currentMonthStart)
+      .executeTakeFirst(),
+
+    db
+      .selectFrom("transactions")
+      .select(sql<number>`COALESCE(SUM(amount_usdc), 0)`.as("total"))
+      .where("created_at", ">=", previousMonthStart)
+      .where("created_at", "<", currentMonthStart)
+      .executeTakeFirst(),
+  ]);
+
+  const totalEarned = Number(totals?.total ?? 0);
+  const totalTransactions = Number(totals?.count ?? 0);
+  const currentEarned = Number(currentMonth?.total ?? 0);
+  const previousEarned = Number(previousMonth?.total ?? 0);
+
+  return {
+    total_earned_usdc: totalEarned,
+    current_month_earned_usdc: currentEarned,
+    previous_month_earned_usdc: previousEarned,
+    percent_change: calculatePercentChange(currentEarned, previousEarned),
+    total_transactions: totalTransactions,
+  };
+}
+
 export async function getOrganizationEarnings(
   organizationId: number,
 ): Promise<EarningsAnalytics> {

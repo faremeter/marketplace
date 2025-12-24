@@ -2,6 +2,13 @@
 
 import useSWR from "swr";
 import { api } from "@/lib/api/client";
+import {
+  type EarningsAnalytics,
+  formatUSDC,
+  getValueColor,
+  getChangeColor,
+  formatChange,
+} from "@/lib/analytics";
 
 interface AdminStats {
   users: number;
@@ -13,12 +20,31 @@ interface AdminStats {
 
 export default function AdminDashboardPage() {
   const { data: stats } = useSWR("/api/admin/stats", api.get<AdminStats>);
+  const { data: analytics } = useSWR(
+    "/api/admin/analytics",
+    api.get<EarningsAnalytics>,
+  );
 
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-semibold text-gray-12">Admin Dashboard</h1>
         <p className="text-sm text-gray-11">System overview and management</p>
+      </div>
+
+      <div className="grid gap-4 sm:grid-cols-2">
+        <EarningsStatCard
+          title="Total Processed"
+          value={formatUSDC(analytics?.total_earned_usdc)}
+          valueColor={getValueColor(analytics?.total_earned_usdc)}
+        />
+        <EarningsStatCard
+          title="Processed This Month"
+          value={formatUSDC(analytics?.current_month_earned_usdc)}
+          valueColor={getValueColor(analytics?.current_month_earned_usdc)}
+          change={formatChange(analytics?.percent_change)}
+          changeColor={getChangeColor(analytics?.percent_change)}
+        />
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
@@ -55,6 +81,32 @@ export default function AdminDashboardPage() {
           </h2>
           <RecentTransactionsList />
         </div>
+      </div>
+    </div>
+  );
+}
+
+function EarningsStatCard({
+  title,
+  value,
+  valueColor,
+  change,
+  changeColor,
+}: {
+  title: string;
+  value: string;
+  valueColor: string;
+  change?: string;
+  changeColor?: string;
+}) {
+  return (
+    <div className="rounded-lg border border-gray-6 bg-gray-2 p-4">
+      <p className="text-sm text-gray-11">{title}</p>
+      <div className="mt-1 flex items-baseline gap-2">
+        <p className={`text-2xl font-medium ${valueColor}`}>{value}</p>
+        {change && change !== "-" && (
+          <span className={`text-sm font-medium ${changeColor}`}>{change}</span>
+        )}
       </div>
     </div>
   );
