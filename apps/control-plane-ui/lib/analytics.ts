@@ -8,7 +8,7 @@ export interface EarningsAnalytics {
 
 export function formatUSDC(amount?: number): string {
   if (amount === undefined || amount === null) return "$0.00";
-  return `$${amount.toFixed(2)}`;
+  return `$${(amount / 1_000_000).toFixed(2)}`;
 }
 
 export function getValueColor(amount?: number): string {

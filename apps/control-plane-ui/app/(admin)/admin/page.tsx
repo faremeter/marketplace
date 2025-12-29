@@ -184,7 +184,7 @@ function RecentTransactionsList() {
           className="flex items-center justify-between rounded border border-gray-6 bg-gray-3 px-3 py-2"
         >
           <span className="text-sm text-gray-12">
-            ${parseFloat(tx.amount_usdc).toFixed(6)} USDC
+            {formatUSDC(parseFloat(tx.amount_usdc))}
           </span>
           <span className="text-xs text-gray-9">
             {new Date(tx.created_at).toLocaleDateString()}
