@@ -225,6 +225,8 @@ step::40::setup-nginx() {
 
     local nginx_config="/etc/nginx/sites-available/api-node"
 
+    echo "$CONTROL_PLANE_ADDRS" > /etc/nginx/control-plane-addrs.conf
+
     cp ./access.lua /etc/nginx/.
     cp ./config-receiver.lua /etc/nginx/.
     cp ./init-config.lua /etc/nginx/.
@@ -281,15 +283,18 @@ EOF
 }
 
 step::50::pull-tenant-config() {
+    local addrs=(${CONTROL_PLANE_ADDRS//,/ })
     local max_retries=30
     local retry=0
 
     while [ $retry -lt $max_retries ]; do
-        if curl -sf "http://10.12.0.1:1337/api/nodes/${NODE_ID}/sync" -o /etc/nginx/tenant-config.json; then
-            echo "Pulled tenant config successfully"
-            systemctl reload nginx
-            return 0
-        fi
+        for addr in "${addrs[@]}"; do
+            if curl -sf "http://${addr}/api/nodes/${NODE_ID}/sync" -o /etc/nginx/tenant-config.json; then
+                echo "Pulled tenant config from $addr"
+                systemctl reload nginx
+                return 0
+            fi
+        done
         echo "Waiting for control-plane... (attempt $((retry + 1))/$max_retries)"
         sleep 2
         retry=$((retry + 1))

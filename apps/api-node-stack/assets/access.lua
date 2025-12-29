@@ -3,6 +3,57 @@ local cjson = require("cjson")
 
 local FACILITATOR_URL = "https://facilitator.corbits.dev"
 
+local function get_control_plane_addrs()
+    local cached = ngx.shared.tenants:get("_control_plane_addrs")
+    if cached then
+        local addrs = {}
+        for addr in cached:gmatch("[^,]+") do
+            table.insert(addrs, addr)
+        end
+        return addrs
+    end
+
+    local f = io.open("/etc/nginx/control-plane-addrs.conf", "r")
+    if not f then return {"10.12.0.1:1337"} end
+    local content = f:read("*a")
+    f:close()
+
+    local addrs = {}
+    local clean = {}
+    for addr in content:gmatch("[^,\n]+") do
+        local trimmed = addr:match("^%s*(.-)%s*$")
+        if trimmed and trimmed ~= "" then
+            table.insert(addrs, trimmed)
+            table.insert(clean, trimmed)
+        end
+    end
+
+    if #addrs == 0 then
+        return {"10.12.0.1:1337"}
+    end
+
+    ngx.shared.tenants:set("_control_plane_addrs", table.concat(clean, ","), 60)
+    return addrs
+end
+
+local function request_control_plane(path, opts)
+    local http = require("resty.http").new()
+    local addrs = get_control_plane_addrs()
+    local n = #addrs
+
+    local idx = (ngx.shared.tenants:get("_control_plane_idx") or 0) % n + 1
+    ngx.shared.tenants:set("_control_plane_idx", idx)
+
+    for attempt = 1, n do
+        local addr = addrs[((idx - 1 + attempt - 1) % n) + 1]
+        local url = "http://" .. addr .. path
+        local res, err = http:request_uri(url, opts)
+        if res then return res, nil end
+        ngx.log(ngx.WARN, "Control plane ", addr, " failed: ", err, " (attempt ", attempt, "/", n, ")")
+    end
+    return nil, "all control planes unreachable"
+end
+
 ngx.req.read_body()
 local req_body = ngx.req.get_body_data()
 local req_headers = ngx.req.get_headers()
@@ -316,7 +367,6 @@ if tx_hash then
     local tx_endpoint_id = matched_endpoint_id
     ngx.timer.at(0, function(premature)
         if premature then return end
-        local http = require("resty.http").new()
         local tx_body = cjson.encode({
             tx_hash = tx_hash,
             tenant_name = tx_tenant_name,
@@ -325,7 +375,7 @@ if tx_hash then
             network = tx_network,
             request_path = tx_request_path
         })
-        local tx_res, tx_err = http:request_uri("http://10.12.0.1:1337/internal/transactions", {
+        local tx_res, tx_err = request_control_plane("/internal/transactions", {
             method = "POST",
             headers = { ["Content-Type"] = "application/json" },
             body = tx_body,

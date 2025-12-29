@@ -7,6 +7,7 @@ const nodeName = config.require("nodeName");
 const nodeId = config.require("nodeId");
 
 const wgConfig = new pulumi.Config("wireguard");
+const cpConfig = new pulumi.Config("controlPlane");
 
 const allNodes = [];
 
@@ -31,6 +32,7 @@ new runner.SSHDeployer(
       WIREGUARD_WG1_ADDRESS: wgConfig.require("multiAddress"),
       WIREGUARD_DASHBOARD_PUBKEY: wgConfig.require("dashboardPublicKey"),
       WIREGUARD_DASHBOARD_ENDPOINT: wgConfig.require("dashboardEndpoint"),
+      CONTROL_PLANE_ADDRS: cpConfig.require("addresses"),
     },
     update: {
       payload: [
