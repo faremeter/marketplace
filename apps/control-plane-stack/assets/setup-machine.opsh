@@ -26,7 +26,7 @@ EOF
 }
 
 step::20::install-packages() {
-    apt-get install -y ca-certificates nginx-extras libnginx-mod-http-lua luarocks letsencrypt python3-certbot-nginx python3-certbot-dns-route53 wireguard wireguard-tools alloy postgresql postgresql-contrib rsync lua-cjson jq
+    apt-get install -y ca-certificates nginx-extras libnginx-mod-http-lua luarocks letsencrypt python3-certbot-nginx python3-certbot-dns-route53 wireguard wireguard-tools alloy postgresql postgresql-contrib rsync lua-cjson jq build-essential python3
     for i in lua-resty-http lua-resty-string; do luarocks install $i; done
     dpkg --purge nano
 }
@@ -72,6 +72,7 @@ step::22::setup-postgresql() {
 
 step::23::setup-control-plane-env() {
     mkdir -p /home/admin/control-plane
+    chown admin:admin /home/admin/control-plane
     cat <<EOF >/home/admin/control-plane/.env
 AWS_REGION=${AWS_REGION}
 DATABASE_HOST=${DATABASE_HOST}
@@ -79,6 +80,7 @@ DATABASE_PORT=${DATABASE_PORT}
 DATABASE_NAME=${DATABASE_NAME}
 DATABASE_USER=${DATABASE_USER}
 DATABASE_PASSWORD=${DATABASE_PASSWORD}
+DATABASE_SSL=true
 HTTP_PORT=${CONTROL_PLANE_PORT}
 WALLET_ENCRYPTION_KEY=${WALLET_ENCRYPTION_KEY}
 ROUTE53_ZONE_ID=${ROUTE53_ZONE_ID}
@@ -91,6 +93,7 @@ EOF
 
 step::24::setup-control-plane-ui-env() {
     mkdir -p /home/admin/control-plane-ui
+    chown admin:admin /home/admin/control-plane-ui
     cat <<EOF >/home/admin/control-plane-ui/.env
 NEXT_PUBLIC_CONTROL_PLANE_API_URL=http://localhost:${CONTROL_PLANE_PORT}
 PORT=${UI_PORT}
@@ -210,10 +213,6 @@ server {
     }
 
     include /etc/nginx/sites-available/control-plane.d/*.conf;
-
-    location / {
-        return 200 'ok';
-    }
 }
 EOF
 
@@ -223,7 +222,7 @@ EOF
 
 step::50::get-tls-certs() {
     certbot certonly --agree-tos -m ${LETSENCRYPT_EMAIL} --non-interactive --expand \
-        --webroot --webroot-path /var/www/html \
+        --dns-route53 \
         -d "api.corbits.dev" \
         -d "api.corbits.io"
 
@@ -252,10 +251,6 @@ server {
 
     include /etc/nginx/snippets/ssl-api.conf;
     include /etc/nginx/sites-available/control-plane.d/*.conf;
-
-    location / {
-        return 200 'ok';
-    }
 }
 EOF
 
