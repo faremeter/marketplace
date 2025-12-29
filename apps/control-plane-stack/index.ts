@@ -18,6 +18,7 @@ const dbConfig = new pulumi.Config("database");
 const walletConfig = new pulumi.Config("wallet");
 const controlPlaneConfig = new pulumi.Config("controlPlane");
 const uiConfig = new pulumi.Config("ui");
+const corbitsDashConfig = new pulumi.Config("corbitsDashboard");
 
 const vpcStack = new pulumi.StackReference(vpcConfig.require("stackRef"));
 const publicSubnetIds = vpcStack.getOutput("publicSubnetIds") as pulumi.Output<
@@ -79,6 +80,7 @@ new runner.SSHDeployer(
       ROUTE53_ZONE_ID: rootZone.zoneId,
       WIREGUARD_DASHBOARD_PUBKEY: wgConfig.require("dashboardPublicKey"),
       WIREGUARD_DASHBOARD_ENDPOINT: wgConfig.require("dashboardEndpoint"),
+      CORBITS_DASH_API_KEY: corbitsDashConfig.requireSecret("apiKey"),
     },
     update: {
       payload: [
