@@ -70,3 +70,53 @@ export function addRecord(
 
   return r;
 }
+
+export function createHealthCheck(
+  name: string,
+  ipAddress: pulumi.Input<string>,
+  port: number,
+  path: string,
+): aws.route53.HealthCheck {
+  return new aws.route53.HealthCheck(name, {
+    type: "HTTPS",
+    ipAddress,
+    port,
+    resourcePath: path,
+    requestInterval: 30,
+    failureThreshold: 3,
+    tags: {
+      Name: name,
+    },
+  });
+}
+
+export function addWeightedRecord(
+  zones: Zoneish[],
+  name: string,
+  nodeId: string,
+  ip: pulumi.Input<string>,
+  healthCheckId: pulumi.Input<string>,
+  weight = 100,
+) {
+  const r = zones.map(
+    (zone, i) =>
+      new aws.route53.Record(
+        `A-${name}-${nodeId}-${i}`,
+        {
+          zoneId: zone.zoneId,
+          name,
+          type: "A",
+          ttl: 60,
+          records: [ip],
+          setIdentifier: `${name}-${nodeId}`,
+          weightedRoutingPolicies: [{ weight }],
+          healthCheckId,
+        },
+        {
+          deleteBeforeReplace: true,
+        },
+      ),
+  );
+
+  return r;
+}

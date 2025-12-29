@@ -1,5 +1,10 @@
 import { EC2 } from "./aws";
-import { stackZones, addRecord, rootZone } from "./dns";
+import {
+  stackZones,
+  rootZone,
+  createHealthCheck,
+  addWeightedRecord,
+} from "./dns";
 import { runner } from "@svmkit/pulumi-runner";
 import * as pulumi from "@pulumi/pulumi";
 import * as aws from "@pulumi/aws";
@@ -7,18 +12,45 @@ import * as aws from "@pulumi/aws";
 const awsRegion = aws.getRegionOutput();
 
 const APP_NAME = "control-plane";
+const vpcConfig = new pulumi.Config("vpc");
 const wgConfig = new pulumi.Config("wireguard");
 const dbConfig = new pulumi.Config("database");
 const walletConfig = new pulumi.Config("wallet");
 const controlPlaneConfig = new pulumi.Config("controlPlane");
 const uiConfig = new pulumi.Config("ui");
 
+const vpcStack = new pulumi.StackReference(vpcConfig.require("stackRef"));
+const publicSubnetIds = vpcStack.getOutput("publicSubnetIds") as pulumi.Output<
+  string[]
+>;
+const controlPlaneSecurityGroupId = vpcStack.getOutput(
+  "controlPlaneSecurityGroupId",
+) as pulumi.Output<string>;
+
+const nodeId = controlPlaneConfig.require("nodeId");
+
 const allNodes = [];
 
-const node = new EC2(`${APP_NAME}-api`);
+const node = new EC2(`${APP_NAME}-api`, {
+  subnetId: publicSubnetIds.apply((ids) => {
+    const id = ids[0];
+    if (!id) {
+      throw new Error("No public subnet found");
+    }
+    return id;
+  }),
+  securityGroupId: controlPlaneSecurityGroupId,
+});
 allNodes.push(node);
 
-addRecord(stackZones, "api", "A", [node.publicIp]);
+const healthCheck = createHealthCheck(
+  `${APP_NAME}-health-${nodeId}`,
+  node.publicIp,
+  443,
+  "/health",
+);
+
+addWeightedRecord(stackZones, "api", nodeId, node.publicIp, healthCheck.id);
 
 export const nodes = allNodes.map((x) => ({
   name: x.name,
