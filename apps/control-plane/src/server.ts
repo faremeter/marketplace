@@ -1,4 +1,5 @@
 import "dotenv/config";
+import { exec } from "child_process";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { serve } from "@hono/node-server";
@@ -73,6 +74,14 @@ const dbConfig = {
 
 startQueue(dbConfig).catch((err) => {
   logger.error(`Failed to start queue: ${err}`);
+});
+
+exec("sudo systemctl start wg-peers", (err, _stdout, _stderr) => {
+  if (err) {
+    logger.warn(`Failed to sync WireGuard peers: ${err.message}`);
+  } else {
+    logger.info("WireGuard peers synced from database");
+  }
 });
 
 process.on("SIGTERM", async () => {
