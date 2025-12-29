@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import * as Dialog from "@radix-ui/react-dialog";
+import * as AlertDialog from "@radix-ui/react-alert-dialog";
 import * as Checkbox from "@radix-ui/react-checkbox";
 import * as Select from "@radix-ui/react-select";
 import {
@@ -78,7 +79,38 @@ export function CreateTenantDialog({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [nameAvailable, setNameAvailable] = useState<boolean | null>(null);
   const [isCheckingName, setIsCheckingName] = useState(false);
+  const [showDiscardConfirm, setShowDiscardConfirm] = useState(false);
   const checkTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  const isDirty = useCallback(() => {
+    return (
+      name.trim() !== "" ||
+      selectedNodeIds.length > 0 ||
+      backendUrl.trim() !== "" ||
+      authHeader.trim() !== "" ||
+      authValue.trim() !== "" ||
+      walletId !== null ||
+      defaultPrice !== "0.01" ||
+      defaultScheme !== "exact"
+    );
+  }, [
+    name,
+    selectedNodeIds,
+    backendUrl,
+    authHeader,
+    authValue,
+    walletId,
+    defaultPrice,
+    defaultScheme,
+  ]);
+
+  const attemptClose = useCallback(() => {
+    if (isDirty()) {
+      setShowDiscardConfirm(true);
+    } else {
+      onOpenChange(false);
+    }
+  }, [isDirty, onOpenChange]);
 
   useEffect(() => {
     if (!name.trim()) {
@@ -174,9 +206,16 @@ export function CreateTenantDialog({
 
   const handleOpenChange = (newOpen: boolean) => {
     if (!newOpen) {
-      resetForm();
+      attemptClose();
+      return;
     }
     onOpenChange(newOpen);
+  };
+
+  const confirmDiscard = () => {
+    setShowDiscardConfirm(false);
+    resetForm();
+    onOpenChange(false);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -211,7 +250,8 @@ export function CreateTenantDialog({
         ),
         default_scheme: defaultScheme,
       });
-      handleOpenChange(false);
+      resetForm();
+      onOpenChange(false);
       toast({
         title: "Tenant created",
         description: `${name.trim()} has been created successfully.`,
@@ -229,14 +269,32 @@ export function CreateTenantDialog({
     <Dialog.Root open={open} onOpenChange={handleOpenChange}>
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 bg-black/60 backdrop-blur-sm" />
-        <Dialog.Content className="fixed left-1/2 top-1/2 max-h-[85vh] w-full max-w-lg -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-lg border border-gray-6 bg-gray-1 p-6 shadow-xl">
+        <Dialog.Content
+          className="fixed left-1/2 top-1/2 max-h-[85vh] w-full max-w-lg -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-lg border border-gray-6 bg-gray-1 p-6 shadow-xl"
+          onInteractOutside={(e) => {
+            if (isDirty()) {
+              e.preventDefault();
+              setShowDiscardConfirm(true);
+            }
+          }}
+          onEscapeKeyDown={(e) => {
+            if (isDirty()) {
+              e.preventDefault();
+              setShowDiscardConfirm(true);
+            }
+          }}
+        >
           <div className="mb-6 flex items-center justify-between">
             <Dialog.Title className="text-lg font-semibold text-gray-12">
               New Tenant
             </Dialog.Title>
-            <Dialog.Close className="rounded p-1 text-gray-11 hover:bg-gray-4 hover:text-gray-12">
+            <button
+              type="button"
+              onClick={attemptClose}
+              className="rounded p-1 text-gray-11 hover:bg-gray-4 hover:text-gray-12"
+            >
               <Cross2Icon className="h-4 w-4" />
-            </Dialog.Close>
+            </button>
           </div>
 
           {/* URL Preview */}
@@ -602,7 +660,7 @@ export function CreateTenantDialog({
             <div className="flex justify-end gap-3 pt-2">
               <button
                 type="button"
-                onClick={() => handleOpenChange(false)}
+                onClick={attemptClose}
                 className="rounded-md border border-gray-6 px-4 py-2 text-sm text-gray-11 hover:bg-gray-3"
               >
                 Cancel
@@ -616,6 +674,39 @@ export function CreateTenantDialog({
               </button>
             </div>
           </form>
+
+          <AlertDialog.Root
+            open={showDiscardConfirm}
+            onOpenChange={setShowDiscardConfirm}
+          >
+            <AlertDialog.Portal>
+              <AlertDialog.Overlay className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50" />
+              <AlertDialog.Content className="fixed left-1/2 top-1/2 w-full max-w-sm -translate-x-1/2 -translate-y-1/2 rounded-lg border border-gray-6 bg-gray-2 p-6 shadow-xl z-50">
+                <AlertDialog.Title className="text-lg font-semibold text-gray-12">
+                  Discard changes?
+                </AlertDialog.Title>
+                <AlertDialog.Description className="mt-2 text-sm text-gray-11">
+                  You have unsaved changes. Are you sure you want to close this
+                  dialog? Your changes will be lost.
+                </AlertDialog.Description>
+                <div className="mt-6 flex justify-end gap-3">
+                  <AlertDialog.Cancel asChild>
+                    <button className="rounded-md border border-gray-6 px-4 py-2 text-sm text-gray-11 hover:bg-gray-3">
+                      Keep editing
+                    </button>
+                  </AlertDialog.Cancel>
+                  <AlertDialog.Action asChild>
+                    <button
+                      onClick={confirmDiscard}
+                      className="rounded-md bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700"
+                    >
+                      Discard
+                    </button>
+                  </AlertDialog.Action>
+                </div>
+              </AlertDialog.Content>
+            </AlertDialog.Portal>
+          </AlertDialog.Root>
         </Dialog.Content>
       </Dialog.Portal>
     </Dialog.Root>
