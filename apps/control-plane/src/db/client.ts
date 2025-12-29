@@ -9,6 +9,7 @@ export function createDatabase(config: {
   database: string;
   user: string;
   password: string;
+  ssl?: boolean;
 }): Kysely<Database> {
   const dialect = new PostgresDialect({
     pool: new Pool({
@@ -18,6 +19,7 @@ export function createDatabase(config: {
       user: config.user,
       password: config.password,
       max: 10,
+      ssl: config.ssl ? { rejectUnauthorized: false } : undefined,
     }),
   });
   return new Kysely<Database>({ dialect });

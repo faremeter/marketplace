@@ -26,6 +26,7 @@ async function runMigration() {
     database: dbName,
     user: dbUser,
     password: dbPassword,
+    ssl: process.env.DATABASE_SSL === "true",
   });
 
   const migrator = new Migrator({

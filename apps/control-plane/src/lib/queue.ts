@@ -109,6 +109,7 @@ export async function startQueue(config: {
   database: string;
   user: string;
   password: string;
+  ssl?: boolean;
 }): Promise<void> {
   boss = new PgBoss({
     host: config.host,
@@ -116,6 +117,7 @@ export async function startQueue(config: {
     database: config.database,
     user: config.user,
     password: config.password,
+    ssl: config.ssl ? { rejectUnauthorized: false } : undefined,
   });
 
   boss.on("error", (error) => {

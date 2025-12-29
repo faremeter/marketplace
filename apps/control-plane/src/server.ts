@@ -36,6 +36,7 @@ export const db = createDatabase({
   database: process.env.DATABASE_NAME || "control_plane",
   user: process.env.DATABASE_USER || "control_plane",
   password: process.env.DATABASE_PASSWORD,
+  ssl: process.env.DATABASE_SSL === "true",
 });
 
 app.use(
@@ -67,6 +68,7 @@ const dbConfig = {
   database: process.env.DATABASE_NAME || "control_plane",
   user: process.env.DATABASE_USER || "control_plane",
   password: process.env.DATABASE_PASSWORD,
+  ssl: process.env.DATABASE_SSL === "true",
 };
 
 startQueue(dbConfig).catch((err) => {
