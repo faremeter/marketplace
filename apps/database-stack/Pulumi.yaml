@@ -1,0 +1,11 @@
+description: PostgreSQL RDS database infrastructure
+name: database
+runtime:
+  name: nodejs
+  options:
+    packagemanager: pnpm
+    nodeargs: "--import tsx"
+config:
+  pulumi:tags:
+    value:
+      pulumi:template: aws-typescript
