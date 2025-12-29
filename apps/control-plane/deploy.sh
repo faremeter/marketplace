@@ -8,6 +8,13 @@ STACK_DIR="$SCRIPT_DIR/../control-plane-stack"
 REMOTE_DIR="/home/admin/control-plane"
 SERVER_INDEX=0
 
+CONTROL_PLANE_STACKS=("production-1" "production-2")
+
+log::warn "This script will deploy to stacks: $(printf '%s, ' "${CONTROL_PLANE_STACKS[@]}" | sed 's/, $//')"
+log::warn "Current stack will be restored after completion."
+read -rp "Continue? [y/N] " confirm
+[[ "$confirm" =~ ^[Yy]$ ]] || exit 0
+
 get_ssh_details() {
     local hostindex=$1
 
@@ -30,7 +37,46 @@ remote::exec() {
     ssh -o StrictHostKeyChecking=off -o UserKnownHostsFile=/dev/null -i "$PRIVKEY" "$SSH_USER@$SSH_HOST" "$@" </dev/null
 }
 
-step::00::verify-environment() {
+remote::sync() {
+    rsync -avz --delete \
+        --exclude='node_modules' \
+        --exclude='.git' \
+        --exclude='.env' \
+        --exclude='deploy.sh' \
+        --exclude='*.tar.gz' \
+        --exclude='.DS_Store' \
+        --exclude='.tap' \
+        --exclude='*.swp' \
+        --exclude='backups' \
+        -e "ssh -o StrictHostKeyChecking=off -o UserKnownHostsFile=/dev/null -i $PRIVKEY" \
+        "$SCRIPT_DIR/" "$SSH_USER@$SSH_HOST:$REMOTE_DIR/"
+}
+
+for_each_stack() {
+    local original_stack
+    original_stack=$(pulumi stack --show-name 2>/dev/null)
+    for stack in "${CONTROL_PLANE_STACKS[@]}"; do
+        log::info "[$stack] $1"
+        pulumi stack select "$stack" >/dev/null 2>&1
+        get_ssh_details $SERVER_INDEX
+        eval "$2"
+    done
+    pulumi stack select "$original_stack" >/dev/null 2>&1
+}
+
+# Run on first stack only (shared database)
+first_stack_only() {
+    local original_stack
+    original_stack=$(pulumi stack --show-name 2>/dev/null)
+    local stack="${CONTROL_PLANE_STACKS[0]}"
+    log::info "[$stack] $1"
+    pulumi stack select "$stack" >/dev/null 2>&1
+    get_ssh_details $SERVER_INDEX
+    eval "$2"
+    pulumi stack select "$original_stack" >/dev/null 2>&1
+}
+
+step::10::verify-environment() {
     log::info "verifying environment..."
 
     if [ ! -f "$SCRIPT_DIR/package.json" ]; then
@@ -40,50 +86,40 @@ step::00::verify-environment() {
     if [ ! -d "$STACK_DIR" ]; then
         log::fatal "Stack directory not found at $STACK_DIR"
     fi
-}
 
-step::10::get-connection() {
-    log::info "getting SSH connection details from Pulumi..."
     cd "$STACK_DIR" || log::fatal "failed to cd to $STACK_DIR"
-    get_ssh_details $SERVER_INDEX
-    log::info "connecting to $SSH_USER@$SSH_HOST"
 }
 
-step::20::sync-files() {
-    log::info "syncing files to server..."
+step::20::typecheck() {
+    log::info "typechecking locally..."
     cd "$SCRIPT_DIR" || log::fatal "failed to cd to $SCRIPT_DIR"
-
-    rsync -avz --delete \
-        --exclude='node_modules' \
-        --exclude='.git' \
-        --exclude='.env' \
-        --exclude='*.tar.gz' \
-        --exclude='.DS_Store' \
-        --exclude='.tap' \
-        --exclude='*.swp' \
-        --exclude='backups' \
-        -e "ssh -o StrictHostKeyChecking=off -o UserKnownHostsFile=/dev/null -i $PRIVKEY" \
-        ./ "$SSH_USER@$SSH_HOST:$REMOTE_DIR/"
+    npx tsc --noEmit
+    cd "$STACK_DIR" || log::fatal "failed to cd to $STACK_DIR"
 }
 
-step::30::install-dependencies() {
-    log::info "installing npm dependencies..."
-    remote::exec "cd $REMOTE_DIR && npm install"
+step::30::sync() {
+    for_each_stack "syncing files..." 'remote::sync'
 }
 
-step::40::run-migrations() {
-    log::info "running database migrations..."
-    remote::exec "cd $REMOTE_DIR && npm run migrate"
+step::40::install() {
+    # shellcheck disable=SC2016
+    for_each_stack "installing dependencies..." 'remote::exec "cd $REMOTE_DIR && npm install"'
 }
 
-step::50::restart-services() {
-    log::info "restarting services..."
-    remote::exec "sudo systemctl restart control-plane"
+step::50::migrate() {
+    # shellcheck disable=SC2016
+    # Only run on first stack - all stacks share the same database
+    first_stack_only "running migrations..." 'remote::exec "cd $REMOTE_DIR && npm run migrate"'
 }
 
-step::99::check-status() {
-    log::info "checking service status..."
-    remote::exec "sudo systemctl status control-plane --no-pager || true"
+step::60::deploy() {
+    # shellcheck disable=SC2016
+    # Restart each stack before moving to next (minimizes per-stack downtime)
+    for_each_stack "restarting service..." 'remote::exec "sudo systemctl restart control-plane"'
+}
+
+step::70::verify() {
+    for_each_stack "verifying service..." 'remote::exec "sudo systemctl status control-plane --no-pager || true"'
 }
 
 steps::run "step" "$@"

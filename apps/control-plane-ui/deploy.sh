@@ -8,6 +8,13 @@ STACK_DIR="$SCRIPT_DIR/../control-plane-stack"
 REMOTE_DIR="/home/admin/control-plane-ui"
 SERVER_INDEX=0
 
+CONTROL_PLANE_STACKS=("production-1" "production-2")
+
+log::warn "This script will deploy to stacks: $(printf '%s, ' "${CONTROL_PLANE_STACKS[@]}" | sed 's/, $//')"
+log::warn "Current stack will be restored after completion."
+read -rp "Continue? [y/N] " confirm
+[[ "$confirm" =~ ^[Yy]$ ]] || exit 0
+
 get_ssh_details() {
     local hostindex=$1
 
@@ -30,7 +37,33 @@ remote::exec() {
     ssh -o StrictHostKeyChecking=off -o UserKnownHostsFile=/dev/null -i "$PRIVKEY" "$SSH_USER@$SSH_HOST" "$@" </dev/null
 }
 
-step::00::verify-environment() {
+remote::sync() {
+    rsync -avz --delete \
+        --exclude='node_modules' \
+        --exclude='.next' \
+        --exclude='.git' \
+        --exclude='.env' \
+        --exclude='deploy.sh' \
+        --exclude='*.tar.gz' \
+        --exclude='.DS_Store' \
+        --exclude='*.swp' \
+        -e "ssh -o StrictHostKeyChecking=off -o UserKnownHostsFile=/dev/null -i $PRIVKEY" \
+        "$SCRIPT_DIR/" "$SSH_USER@$SSH_HOST:$REMOTE_DIR/"
+}
+
+for_each_stack() {
+    local original_stack
+    original_stack=$(pulumi stack --show-name 2>/dev/null)
+    for stack in "${CONTROL_PLANE_STACKS[@]}"; do
+        log::info "[$stack] $1"
+        pulumi stack select "$stack" >/dev/null 2>&1
+        get_ssh_details $SERVER_INDEX
+        eval "$2"
+    done
+    pulumi stack select "$original_stack" >/dev/null 2>&1
+}
+
+step::10::verify-environment() {
     log::info "verifying environment..."
 
     if [ ! -f "$SCRIPT_DIR/package.json" ]; then
@@ -40,59 +73,39 @@ step::00::verify-environment() {
     if [ ! -d "$STACK_DIR" ]; then
         log::fatal "Stack directory not found at $STACK_DIR"
     fi
-}
 
-step::10::get-connection() {
-    log::info "getting SSH connection details from Pulumi..."
     cd "$STACK_DIR" || log::fatal "failed to cd to $STACK_DIR"
-    get_ssh_details $SERVER_INDEX
-    log::info "connecting to $SSH_USER@$SSH_HOST"
 }
 
-step::15::build-locally() {
-    log::info "building Next.js app locally..."
+step::20::typecheck() {
+    log::info "typechecking locally..."
     cd "$SCRIPT_DIR" || log::fatal "failed to cd to $SCRIPT_DIR"
-    npm run build
+    npx tsc --noEmit
+    cd "$STACK_DIR" || log::fatal "failed to cd to $STACK_DIR"
 }
 
-step::20::sync-files() {
-    log::info "syncing files to server..."
-    cd "$SCRIPT_DIR" || log::fatal "failed to cd to $SCRIPT_DIR"
-
-    rsync -avz --delete \
-        --exclude='node_modules' \
-        --exclude='.git' \
-        --exclude='.env' \
-        --exclude='*.tar.gz' \
-        --exclude='.DS_Store' \
-        --exclude='*.swp' \
-        -e "ssh -o StrictHostKeyChecking=off -o UserKnownHostsFile=/dev/null -i $PRIVKEY" \
-        ./ "$SSH_USER@$SSH_HOST:$REMOTE_DIR/"
+step::30::sync() {
+    for_each_stack "syncing files..." 'remote::sync'
 }
 
-step::30::install-dependencies() {
-    log::info "installing npm dependencies..."
-    remote::exec "cd $REMOTE_DIR && npm install --production"
+step::40::install() {
+    # shellcheck disable=SC2016
+    for_each_stack "installing dependencies..." 'remote::exec "cd $REMOTE_DIR && npm install"'
 }
 
-step::40::setup-systemd() {
-    log::info "setting up systemd service..."
-    remote::exec "sudo cp $REMOTE_DIR/assets/control-plane-ui.service /etc/systemd/system/ && sudo systemctl daemon-reload && sudo systemctl enable control-plane-ui"
+step::50::setup() {
+    # shellcheck disable=SC2016
+    for_each_stack "setting up systemd and nginx..." 'remote::exec "sudo cp $REMOTE_DIR/assets/control-plane-ui.service /etc/systemd/system/ && sudo systemctl daemon-reload && sudo systemctl enable control-plane-ui && sudo cp $REMOTE_DIR/assets/60_control_plane_ui.conf /etc/nginx/sites-available/control-plane.d/ && sudo nginx -t && sudo systemctl reload nginx"'
 }
 
-step::45::setup-nginx() {
-    log::info "setting up nginx config..."
-    remote::exec "sudo cp $REMOTE_DIR/assets/60_control_plane_ui.conf /etc/nginx/sites-available/control-plane.d/ && sudo nginx -t && sudo systemctl reload nginx"
+step::60::deploy() {
+    # shellcheck disable=SC2016
+    # Stop, build, restart each stack before moving to next (minimizes per-stack downtime)
+    for_each_stack "building and deploying..." 'remote::exec "cd $REMOTE_DIR && sudo systemctl stop control-plane-ui && rm -rf .next/server .next/static .next/BUILD_ID && npm run build && sudo systemctl start control-plane-ui"'
 }
 
-step::50::restart-services() {
-    log::info "restarting services..."
-    remote::exec "sudo systemctl restart control-plane-ui"
-}
-
-step::99::check-status() {
-    log::info "checking service status..."
-    remote::exec "sudo systemctl status control-plane-ui --no-pager || true"
+step::70::verify() {
+    for_each_stack "verifying service..." 'remote::exec "sudo systemctl status control-plane-ui --no-pager || true"'
 }
 
 steps::run "step" "$@"
