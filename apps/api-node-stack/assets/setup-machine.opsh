@@ -291,7 +291,7 @@ step::50::pull-tenant-config() {
         for addr in "${addrs[@]}"; do
             if curl -sf "http://${addr}/api/nodes/${NODE_ID}/sync" -o /etc/nginx/tenant-config.json; then
                 echo "Pulled tenant config from $addr"
-                systemctl reload nginx
+                /usr/local/bin/regen-tenant-nginx
                 return 0
             fi
         done
