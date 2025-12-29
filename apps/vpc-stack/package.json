@@ -1,0 +1,14 @@
+{
+  "name": "vpc-infrastructure",
+  "main": "index.ts",
+  "type": "module",
+  "devDependencies": {
+    "@types/node": "catalog:",
+    "typescript": "catalog:"
+  },
+  "dependencies": {
+    "@pulumi/aws": "^7.0.0",
+    "@pulumi/pulumi": "^3.113.0",
+    "tsx": "catalog:"
+  }
+}

@@ -1,0 +1,11 @@
+description: Shared VPC infrastructure
+name: vpc
+runtime:
+  name: nodejs
+  options:
+    packagemanager: pnpm
+    nodeargs: "--import tsx"
+config:
+  pulumi:tags:
+    value:
+      pulumi:template: aws-typescript
