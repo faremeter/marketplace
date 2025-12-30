@@ -94,10 +94,20 @@ export async function checkAndUpdateTenantStatus(
     return;
   }
 
+  const certStatuses = tenantNodes.map((tn) => tn.cert_status);
   const allCertsProvisioned =
     tenantNodes.length === 0 ||
     tenantNodes.every((tn) => tn.cert_status === "provisioned");
   const anyCertFailed = tenantNodes.some((tn) => tn.cert_status === "failed");
+  const allCertsFinalized =
+    tenantNodes.length === 0 ||
+    tenantNodes.every(
+      (tn) => tn.cert_status === "provisioned" || tn.cert_status === "failed",
+    );
+
+  logger.debug(
+    `checkAndUpdateTenantStatus: tenant=${tenantId} walletFunded=${walletFunded} walletFailed=${walletFailed} certStatuses=${JSON.stringify(certStatuses)} allCertsProvisioned=${allCertsProvisioned} anyCertFailed=${anyCertFailed} allCertsFinalized=${allCertsFinalized}`,
+  );
 
   if (walletFunded && allCertsProvisioned) {
     await db
@@ -116,13 +126,16 @@ export async function checkAndUpdateTenantStatus(
     }
 
     logger.info(`Tenant ${tenantId} status updated to active`);
-  } else if (walletFailed || anyCertFailed) {
+  } else if (walletFailed || (allCertsFinalized && anyCertFailed)) {
+    // Only mark as failed if wallet failed, or ALL certs have reached final state and at least one failed
     await db
       .updateTable("tenants")
       .set({ status: "failed" })
       .where("id", "=", tenantId)
       .execute();
-    logger.info(`Tenant ${tenantId} status updated to failed`);
+    logger.info(
+      `Tenant ${tenantId} status updated to failed (walletFailed=${walletFailed}, anyCertFailed=${anyCertFailed}, allCertsFinalized=${allCertsFinalized}, certStatuses=${JSON.stringify(certStatuses)})`,
+    );
   }
 }
 
