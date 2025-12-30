@@ -84,7 +84,13 @@ if not ok then
     return ngx.exit(500)
 end
 
--- Parse backend URL and merge query strings
+if not tenant_config.backend_url then
+    ngx.status = 500
+    ngx.header["Content-Type"] = "application/json"
+    ngx.say(cjson.encode({error = "Tenant missing backend_url"}))
+    return ngx.exit(500)
+end
+
 local backend_url = tenant_config.backend_url:gsub("/$", "")
 local base_url, backend_query = string.match(backend_url, "^([^?]+)%??(.*)")
 ngx.var.backend_url = base_url or backend_url
@@ -108,6 +114,9 @@ local matched_endpoint_id = nil
 if tenant_config.endpoints then
     for _, endpoint in ipairs(tenant_config.endpoints) do
         local pattern = endpoint.path_pattern
+        if not pattern then
+            goto continue
+        end
         local matched = false
 
         if string.sub(pattern, 1, 1) == "^" then
@@ -133,6 +142,7 @@ if tenant_config.endpoints then
             end
             break
         end
+        ::continue::
     end
 end
 
@@ -144,6 +154,9 @@ end
 price = tostring(price)
 
 local wallet = tenant_config.wallet_config
+if type(wallet) ~= "table" then
+    wallet = {}
+end
 
 local accepts_body = {
     x402Version = 1,
