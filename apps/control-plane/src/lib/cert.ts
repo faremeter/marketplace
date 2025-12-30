@@ -156,3 +156,76 @@ export async function triggerCertProvisioning(
     return false;
   }
 }
+
+export async function deleteCertOnNode(
+  nodeId: number,
+  tenantName: string,
+): Promise<boolean> {
+  if (process.env.NODE_ENV === "development") {
+    logger.info(
+      `[DEV] skipped cert deletion for ${tenantName} on node ${nodeId}`,
+    );
+    return true;
+  }
+
+  const node = await db
+    .selectFrom("nodes")
+    .select(["internal_ip", "status"])
+    .where("id", "=", nodeId)
+    .executeTakeFirst();
+
+  if (!node || node.status !== "active") {
+    return false;
+  }
+
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 30000);
+
+    const response = await fetch(
+      `http://${node.internal_ip}:80/internal/delete-cert`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tenant_name: tenantName }),
+        signal: controller.signal,
+      },
+    );
+
+    clearTimeout(timeout);
+
+    if (!response.ok) {
+      const text = await response.text();
+      logger.error(
+        `Failed to delete cert on node ${nodeId}: ${response.status} - ${text}`,
+      );
+      return false;
+    }
+
+    logger.info(`Deleted cert for ${tenantName} on node ${nodeId}`);
+    return true;
+  } catch (err) {
+    logger.error(
+      `Error deleting cert on node ${nodeId} for ${tenantName}: ${err}`,
+    );
+    return false;
+  }
+}
+
+export function deleteLocalCert(tenantName: string): void {
+  if (process.env.NODE_ENV === "development") {
+    logger.info(`[DEV] skipped local cert deletion for ${tenantName}`);
+    return;
+  }
+
+  const domain = `${tenantName}.${BASE_DOMAIN}`;
+  try {
+    execSync(`sudo certbot delete --cert-name ${domain} --non-interactive`, {
+      stdio: "pipe",
+      timeout: 30000,
+    });
+    logger.info(`Deleted local cert for ${domain}`);
+  } catch (err) {
+    logger.warn(`Failed to delete local cert for ${domain}: ${err}`);
+  }
+}

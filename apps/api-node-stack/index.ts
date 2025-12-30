@@ -57,8 +57,18 @@ new runner.SSHDeployer(
           mode: 0o644,
         }),
         runner.localFile({
+          filename: "cert-deleter.lua",
+          localPath: "./assets/cert-deleter.lua",
+          mode: 0o644,
+        }),
+        runner.localFile({
           filename: "install-tenant-cert",
           localPath: "./assets/install-tenant-cert",
+          mode: 0o755,
+        }),
+        runner.localFile({
+          filename: "delete-tenant-cert",
+          localPath: "./assets/delete-tenant-cert",
           mode: 0o755,
         }),
         runner.localFile({

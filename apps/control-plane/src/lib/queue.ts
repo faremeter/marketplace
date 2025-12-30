@@ -1,5 +1,9 @@
 import PgBoss from "pg-boss";
-import { triggerCertProvisioning } from "./cert.js";
+import {
+  triggerCertProvisioning,
+  deleteCertOnNode,
+  deleteLocalCert,
+} from "./cert.js";
 import {
   createHealthCheck,
   deleteHealthCheck,
@@ -195,14 +199,28 @@ export async function startQueue(config: {
         );
 
         try {
-          // Get all tenant_nodes
           const tenantNodes = await db
             .selectFrom("tenant_nodes")
             .select(["node_id", "health_check_id"])
             .where("tenant_id", "=", tenantId)
             .execute();
 
-          // Remove from each node sequentially
+          await db
+            .updateTable("tenants")
+            .set({ is_active: false })
+            .where("id", "=", tenantId)
+            .execute();
+
+          await Promise.all(
+            tenantNodes.map(({ node_id }) =>
+              syncToNode(node_id).catch((err) =>
+                logger.error(
+                  `Failed to sync deactivation to node ${node_id}: ${err}`,
+                ),
+              ),
+            ),
+          );
+
           for (const { node_id, health_check_id } of tenantNodes) {
             if (health_check_id) {
               await deleteHealthCheck(health_check_id).catch((err) =>
@@ -212,17 +230,16 @@ export async function startQueue(config: {
             await deleteNodeDnsRecord(tenantName, node_id).catch((err) =>
               logger.error(`Failed to delete DNS record: ${err}`),
             );
+            await deleteCertOnNode(node_id, tenantName).catch((err) =>
+              logger.error(`Failed to delete cert on node ${node_id}: ${err}`),
+            );
             await db
               .deleteFrom("tenant_nodes")
               .where("tenant_id", "=", tenantId)
               .where("node_id", "=", node_id)
               .execute();
-            await syncToNode(node_id).catch((err) =>
-              logger.error(`Failed to sync to node: ${err}`),
-            );
           }
 
-          // Delete all tenant DNS records
           await deleteAllTenantDnsRecords(tenantName).catch((err) =>
             logger.error(
               `Failed to delete DNS for tenant ${tenantName}: ${err}`,
@@ -230,6 +247,7 @@ export async function startQueue(config: {
           );
 
           await cleanupAccount(tenantName);
+          deleteLocalCert(tenantName);
 
           await db.deleteFrom("tenants").where("id", "=", tenantId).execute();
 
@@ -237,10 +255,9 @@ export async function startQueue(config: {
         } catch (error) {
           logger.error(`Tenant deletion failed for ${tenantName}: ${error}`);
 
-          // Reset status to active so user can retry
           await db
             .updateTable("tenants")
-            .set({ status: "active" })
+            .set({ status: "active", is_active: true })
             .where("id", "=", tenantId)
             .execute();
 

@@ -161,6 +161,12 @@ server {
         content_by_lua_file /etc/nginx/cert-installer.lua;
     }
 
+    location = /internal/delete-cert {
+        allow 10.12.0.0/24;
+        deny all;
+        content_by_lua_file /etc/nginx/cert-deleter.lua;
+    }
+
     location / {
         return 301 https://$host$request_uri;
     }
@@ -208,13 +214,15 @@ GENSCRIPT
     mkdir -p /var/www/html/.well-known/acme-challenge
     chown -R www-data:www-data /var/www/html
 
-    # Copy cert install script (receives certs from control-plane)
     cp ./install-tenant-cert /usr/local/bin/install-tenant-cert
     chmod +x /usr/local/bin/install-tenant-cert
 
-    # Allow www-data (nginx) to run cert scripts as root
+    cp ./delete-tenant-cert /usr/local/bin/delete-tenant-cert
+    chmod +x /usr/local/bin/delete-tenant-cert
+
     cat <<EOF >/etc/sudoers.d/cert-provisioner
 www-data ALL=(ALL) NOPASSWD: /usr/local/bin/install-tenant-cert
+www-data ALL=(ALL) NOPASSWD: /usr/local/bin/delete-tenant-cert
 www-data ALL=(ALL) NOPASSWD: /usr/local/bin/regen-tenant-nginx
 EOF
     chmod 440 /etc/sudoers.d/cert-provisioner
@@ -231,6 +239,7 @@ step::40::setup-nginx() {
     cp ./config-receiver.lua /etc/nginx/.
     cp ./init-config.lua /etc/nginx/.
     cp ./cert-installer.lua /etc/nginx/.
+    cp ./cert-deleter.lua /etc/nginx/.
 
     rm -rf "${nginx_config}.d"
     mkdir -p "${nginx_config}.d"
@@ -275,11 +284,21 @@ server {
         content_by_lua_file /etc/nginx/cert-installer.lua;
     }
 
+    location = /internal/delete-cert {
+        allow 10.12.0.0/24;
+        deny all;
+        content_by_lua_file /etc/nginx/cert-deleter.lua;
+    }
+
     include ${nginx_config}.d/*.conf;
 }
 EOF
     (cd /etc/nginx/sites-enabled && rm -f api-node && ln -s "../sites-available/api-node" .)
     systemctl reload nginx
+
+    if [ -f /etc/nginx/tenant-config.json ]; then
+        /usr/local/bin/regen-tenant-nginx
+    fi
 }
 
 step::50::pull-tenant-config() {
