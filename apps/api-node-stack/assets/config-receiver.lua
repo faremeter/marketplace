@@ -55,6 +55,7 @@ local config_file = io.open("/etc/nginx/tenant-config.json", "w")
 if config_file then
     config_file:write(body)
     config_file:close()
+    os.execute("sudo /usr/local/bin/regen-tenant-nginx")
 end
 
 ngx.header["Content-Type"] = "application/json"
