@@ -1,4 +1,7 @@
 import { configure, getConsoleSink, getLogger } from "@logtape/logtape";
+import type { LogLevel } from "@logtape/logtape";
+
+const logLevel = (process.env.LOG_LEVEL as LogLevel) || "info";
 
 await configure({
   sinks: { console: getConsoleSink() },
@@ -8,7 +11,7 @@ await configure({
       lowestLevel: "warning",
       sinks: ["console"],
     },
-    { category: "control-plane", lowestLevel: "info", sinks: ["console"] },
+    { category: "control-plane", lowestLevel: logLevel, sinks: ["console"] },
   ],
 });
 
