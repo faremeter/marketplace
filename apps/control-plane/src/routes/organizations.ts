@@ -815,6 +815,8 @@ organizationsRoutes.post("/:id/tenants", async (c) => {
     throw err;
   }
 
+  const activeNodeIds: number[] = [];
+
   for (const [i, nodeId] of nodeIds.entries()) {
     const isPrimary = i === 0;
     const node = nodesWithCounts.find((n) => n.id === nodeId);
@@ -853,12 +855,16 @@ organizationsRoutes.post("/:id/tenants", async (c) => {
     }
 
     if (node.status === "active") {
-      enqueueCertProvisioning(nodeId, tenant.name).catch((err) =>
-        logger.error(`Failed to enqueue cert provisioning: ${err}`),
-      );
+      activeNodeIds.push(nodeId);
     }
 
     syncToNode(nodeId).catch((err) => logger.error(String(err)));
+  }
+
+  if (activeNodeIds.length > 0) {
+    enqueueCertProvisioning(activeNodeIds, tenant.name).catch((err) =>
+      logger.error(`Failed to enqueue cert provisioning: ${err}`),
+    );
   }
 
   const walletConfig = wallet.wallet_config as WalletConfig | null;

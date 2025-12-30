@@ -283,7 +283,7 @@ tenantsRoutes.post("/:id/nodes", async (c) => {
   );
 
   if (node.status === "active") {
-    enqueueCertProvisioning(nodeId, tenant.name).catch((err) =>
+    enqueueCertProvisioning([nodeId], tenant.name).catch((err) =>
       logger.error(
         `Failed to enqueue cert provisioning for tenant ${tenant.name} on node ${nodeId}: ${err}`,
       ),

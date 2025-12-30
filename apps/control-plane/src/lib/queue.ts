@@ -26,7 +26,7 @@ const BALANCE_CHECK_QUEUE = "balance-check";
 const TRANSACTION_RECORDING_QUEUE = "transaction-recording";
 
 interface CertProvisioningJob {
-  nodeId: number;
+  nodeIds: number[];
   tenantName: string;
 }
 
@@ -183,16 +183,16 @@ export async function startQueue(config: {
     { batchSize: 1 },
     async (jobs) => {
       for (const job of jobs) {
-        const { nodeId, tenantName } = job.data;
+        const { nodeIds, tenantName } = job.data;
         logger.info(
-          `Processing cert provisioning job ${job.id} for ${tenantName} on node ${nodeId}`,
+          `Processing cert provisioning job ${job.id} for ${tenantName} on nodes [${nodeIds.join(", ")}]`,
         );
 
-        const success = await triggerCertProvisioning(nodeId, tenantName);
+        const success = await triggerCertProvisioning(nodeIds, tenantName);
 
         if (!success) {
           throw new Error(
-            `Cert provisioning failed for ${tenantName} on node ${nodeId}`,
+            `Cert provisioning failed for ${tenantName} on nodes [${nodeIds.join(", ")}]`,
           );
         }
       }
@@ -362,20 +362,16 @@ export async function startQueue(config: {
             );
           }
 
-          const activeNodes = tenantNodes.filter(
-            (tn) => tn.status === "active",
-          );
-          let certsEnqueued = 0;
-          let certsFailed = 0;
+          const activeNodeIds = tenantNodes
+            .filter((tn) => tn.status === "active")
+            .map((tn) => tn.node_id);
 
-          for (const tn of activeNodes) {
+          if (activeNodeIds.length > 0) {
             try {
-              await enqueueCertProvisioning(tn.node_id, newName);
-              certsEnqueued++;
+              await enqueueCertProvisioning(activeNodeIds, newName);
             } catch (err) {
-              certsFailed++;
               logger.error(
-                `Failed to enqueue cert provisioning for node ${tn.node_id}: ${err}`,
+                `Failed to enqueue cert provisioning for nodes [${activeNodeIds.join(", ")}]: ${err}`,
               );
             }
           }
@@ -398,7 +394,7 @@ export async function startQueue(config: {
             ),
           );
 
-          if (activeNodes.length === 0) {
+          if (activeNodeIds.length === 0) {
             await db
               .updateTable("tenants")
               .set({ status: "active", is_active: true })
@@ -412,19 +408,9 @@ export async function startQueue(config: {
             logger.info(
               `Tenant renamed from ${oldName} to ${newName} (no certs needed)`,
             );
-          } else if (certsFailed > 0) {
-            await db
-              .updateTable("tenants")
-              .set({ status: "failed" })
-              .where("id", "=", tenantId)
-              .execute();
-
-            logger.error(
-              `Tenant ${tenantId} renamed but ${certsFailed}/${activeNodes.length} cert enqueue(s) failed`,
-            );
           } else {
             logger.info(
-              `Tenant renamed from ${oldName} to ${newName}, awaiting ${certsEnqueued} cert(s)`,
+              `Tenant renamed from ${oldName} to ${newName}, awaiting cert provisioning for ${activeNodeIds.length} node(s)`,
             );
           }
         } catch (error) {
@@ -587,11 +573,16 @@ export async function stopQueue(): Promise<void> {
 }
 
 export async function enqueueCertProvisioning(
-  nodeId: number,
+  nodeIds: number[],
   tenantName: string,
 ): Promise<void> {
   if (!boss) {
     throw new Error("Queue not initialized");
+  }
+
+  if (nodeIds.length === 0) {
+    logger.warn(`enqueueCertProvisioning: No nodes provided for ${tenantName}`);
+    return;
   }
 
   const tenant = await db
@@ -605,13 +596,13 @@ export async function enqueueCertProvisioning(
       .updateTable("tenant_nodes")
       .set({ cert_status: "pending" })
       .where("tenant_id", "=", tenant.id)
-      .where("node_id", "=", nodeId)
+      .where("node_id", "in", nodeIds)
       .execute();
   }
 
   const jobId = await boss.send(
     CERT_PROVISIONING_QUEUE,
-    { nodeId, tenantName },
+    { nodeIds, tenantName },
     {
       retryLimit: 3,
       retryDelay: 60,
@@ -622,12 +613,12 @@ export async function enqueueCertProvisioning(
 
   if (!jobId) {
     throw new Error(
-      `Failed to enqueue cert provisioning for ${tenantName} on node ${nodeId}`,
+      `Failed to enqueue cert provisioning for ${tenantName} on nodes [${nodeIds.join(", ")}]`,
     );
   }
 
   logger.info(
-    `Enqueued cert provisioning job ${jobId} for ${tenantName} on node ${nodeId}`,
+    `Enqueued cert provisioning job ${jobId} for ${tenantName} on nodes [${nodeIds.join(", ")}]`,
   );
 }
 

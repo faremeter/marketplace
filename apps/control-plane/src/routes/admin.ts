@@ -355,6 +355,8 @@ adminRoutes.post("/tenants", async (c) => {
     .returningAll()
     .executeTakeFirstOrThrow();
 
+  const activeNodeIds: number[] = [];
+
   for (const [i, nodeId] of nodeIds.entries()) {
     const isPrimary = i === 0;
 
@@ -401,12 +403,16 @@ adminRoutes.post("/tenants", async (c) => {
     }
 
     if (node.status === "active") {
-      enqueueCertProvisioning(nodeId, tenant.name).catch((err) =>
-        logger.error(`Failed to enqueue cert provisioning: ${err}`),
-      );
+      activeNodeIds.push(nodeId);
     }
 
     syncToNode(nodeId).catch((err) => logger.error(String(err)));
+  }
+
+  if (activeNodeIds.length > 0) {
+    enqueueCertProvisioning(activeNodeIds, tenant.name).catch((err) =>
+      logger.error(`Failed to enqueue cert provisioning: ${err}`),
+    );
   }
 
   // Check if tenant can immediately transition to active
@@ -693,7 +699,7 @@ adminRoutes.post("/tenants/:id/nodes", async (c) => {
   }
 
   if (node.status === "active") {
-    enqueueCertProvisioning(nodeId, tenant.name).catch((err) =>
+    enqueueCertProvisioning([nodeId], tenant.name).catch((err) =>
       logger.error(`Failed to enqueue cert provisioning: ${err}`),
     );
   }

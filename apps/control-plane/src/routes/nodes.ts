@@ -185,7 +185,7 @@ nodesRoutes.put("/:id", async (c) => {
       .execute();
 
     for (const { name } of assignedTenants) {
-      enqueueCertProvisioning(id, name).catch((err) =>
+      enqueueCertProvisioning([id], name).catch((err) =>
         logger.error(`Failed to enqueue cert provisioning: ${err}`),
       );
     }

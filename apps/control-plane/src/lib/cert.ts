@@ -32,19 +32,12 @@ async function setCertStatus(
   }
 }
 
-export async function triggerCertProvisioning(
+async function pushCertToNode(
   nodeId: number,
   tenantName: string,
+  fullchain: string,
+  privkey: string,
 ): Promise<boolean> {
-  if (process.env.NODE_ENV === "development") {
-    logger.info(`[DEV] skipped cert provisioning for ${tenantName}`);
-    await setCertStatus(tenantName, nodeId, "provisioned");
-    return true;
-  }
-
-  const domain = `${tenantName}.${BASE_DOMAIN}`;
-  const certDir = `/etc/letsencrypt/live/${domain}`;
-
   const node = await db
     .selectFrom("nodes")
     .select(["internal_ip", "status"])
@@ -52,55 +45,13 @@ export async function triggerCertProvisioning(
     .executeTakeFirst();
 
   if (!node) {
-    logger.error(`triggerCertProvisioning: Node ${nodeId} not found`);
+    logger.error(`pushCertToNode: Node ${nodeId} not found`);
     await setCertStatus(tenantName, nodeId, "failed");
     return false;
   }
 
   if (node.status !== "active") {
-    logger.warn(
-      `triggerCertProvisioning: Node ${nodeId} is not active, skipping`,
-    );
-    return false;
-  }
-
-  const { stdout: certCheckResult } = await execAsync(
-    `sudo test -f ${certDir}/fullchain.pem && echo yes || echo no`,
-  );
-  const certExists = certCheckResult.trim() === "yes";
-
-  if (!certExists) {
-    try {
-      logger.info(`Running certbot for ${domain}`);
-      await execAsync(
-        `sudo certbot certonly --dns-route53 -d ${domain} ` +
-          `--agree-tos -m ${process.env.LETSENCRYPT_EMAIL} --non-interactive`,
-        { timeout: 180000 },
-      );
-      logger.info(`Certbot completed for ${domain}`);
-    } catch (err) {
-      logger.error(`Certbot failed for ${domain}: ${err}`);
-      await setCertStatus(tenantName, nodeId, "failed");
-      return false;
-    }
-  } else {
-    logger.info(`Cert already exists for ${domain}, pushing to node`);
-  }
-
-  let fullchain: string;
-  let privkey: string;
-  try {
-    const { stdout: fullchainOut } = await execAsync(
-      `sudo /usr/local/bin/read-tenant-cert ${domain} fullchain.pem`,
-    );
-    fullchain = fullchainOut;
-    const { stdout: privkeyOut } = await execAsync(
-      `sudo /usr/local/bin/read-tenant-cert ${domain} privkey.pem`,
-    );
-    privkey = privkeyOut;
-  } catch (err) {
-    logger.error(`Failed to read cert files for ${domain}: ${err}`);
-    await setCertStatus(tenantName, nodeId, "failed");
+    logger.warn(`pushCertToNode: Node ${nodeId} is not active, skipping`);
     return false;
   }
 
@@ -158,6 +109,86 @@ export async function triggerCertProvisioning(
     await setCertStatus(tenantName, nodeId, "failed");
     return false;
   }
+}
+
+export async function triggerCertProvisioning(
+  nodeIds: number[],
+  tenantName: string,
+): Promise<boolean> {
+  if (nodeIds.length === 0) {
+    logger.warn(`triggerCertProvisioning: No nodes provided for ${tenantName}`);
+    return true;
+  }
+
+  if (process.env.NODE_ENV === "development") {
+    logger.info(`[DEV] skipped cert provisioning for ${tenantName}`);
+    for (const nodeId of nodeIds) {
+      await setCertStatus(tenantName, nodeId, "provisioned");
+    }
+    return true;
+  }
+
+  const domain = `${tenantName}.${BASE_DOMAIN}`;
+  const certDir = `/etc/letsencrypt/live/${domain}`;
+
+  const { stdout: certCheckResult } = await execAsync(
+    `sudo test -f ${certDir}/fullchain.pem && echo yes || echo no`,
+  );
+  const certExists = certCheckResult.trim() === "yes";
+
+  if (!certExists) {
+    try {
+      logger.info(`Running certbot for ${domain}`);
+      await execAsync(
+        `sudo certbot certonly --dns-route53 -d ${domain} ` +
+          `--agree-tos -m ${process.env.LETSENCRYPT_EMAIL} --non-interactive`,
+        { timeout: 180000 },
+      );
+      logger.info(`Certbot completed for ${domain}`);
+    } catch (err) {
+      logger.error(`Certbot failed for ${domain}: ${err}`);
+      for (const nodeId of nodeIds) {
+        await setCertStatus(tenantName, nodeId, "failed");
+      }
+      return false;
+    }
+  } else {
+    logger.info(`Cert already exists for ${domain}, pushing to nodes`);
+  }
+
+  let fullchain: string;
+  let privkey: string;
+  try {
+    const { stdout: fullchainOut } = await execAsync(
+      `sudo /usr/local/bin/read-tenant-cert ${domain} fullchain.pem`,
+    );
+    fullchain = fullchainOut;
+    const { stdout: privkeyOut } = await execAsync(
+      `sudo /usr/local/bin/read-tenant-cert ${domain} privkey.pem`,
+    );
+    privkey = privkeyOut;
+  } catch (err) {
+    logger.error(`Failed to read cert files for ${domain}: ${err}`);
+    for (const nodeId of nodeIds) {
+      await setCertStatus(tenantName, nodeId, "failed");
+    }
+    return false;
+  }
+
+  let allSucceeded = true;
+  for (const nodeId of nodeIds) {
+    const success = await pushCertToNode(
+      nodeId,
+      tenantName,
+      fullchain,
+      privkey,
+    );
+    if (!success) {
+      allSucceeded = false;
+    }
+  }
+
+  return allSucceeded;
 }
 
 export async function deleteCertOnNode(
