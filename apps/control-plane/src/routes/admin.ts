@@ -14,6 +14,7 @@ import {
 import {
   enqueueCertProvisioning,
   enqueueTenantDeletion,
+  enqueueTenantRename,
   checkAndUpdateTenantStatus,
 } from "../lib/queue.js";
 import {
@@ -287,16 +288,22 @@ adminRoutes.get("/tenants", async (c) => {
 
 adminRoutes.get("/tenants/check-name", async (c) => {
   const name = c.req.query("name");
+  const excludeId = c.req.query("excludeId");
 
   if (!name?.trim()) {
     return c.json({ available: false });
   }
 
-  const existing = await db
+  let query = db
     .selectFrom("tenants")
     .select("id")
-    .where("name", "=", name.trim())
-    .executeTakeFirst();
+    .where("name", "=", name.trim());
+
+  if (excludeId) {
+    query = query.where("id", "!=", parseInt(excludeId));
+  }
+
+  const existing = await query.executeTakeFirst();
 
   return c.json({ available: !existing });
 });
@@ -441,7 +448,7 @@ adminRoutes.put("/tenants/:id", async (c) => {
 
   const tenant = await db
     .selectFrom("tenants")
-    .select(["id", "name"])
+    .select(["id", "name", "status"])
     .where("id", "=", id)
     .executeTakeFirst();
 
@@ -449,8 +456,58 @@ adminRoutes.put("/tenants/:id", async (c) => {
     return c.json({ error: "Tenant not found" }, 404);
   }
 
+  if (body.name !== undefined) {
+    const nameValidation = validateProxyName(body.name);
+    if (!nameValidation.valid) {
+      return c.json({ error: nameValidation.error }, 400);
+    }
+
+    if (nameValidation.sanitized !== tenant.name) {
+      if (tenant.status !== "active") {
+        return c.json(
+          {
+            error:
+              "Cannot rename tenant while another operation is in progress",
+          },
+          400,
+        );
+      }
+
+      const existing = await db
+        .selectFrom("tenants")
+        .select("id")
+        .where("name", "=", nameValidation.sanitized)
+        .where("id", "!=", id)
+        .executeTakeFirst();
+
+      if (existing) {
+        return c.json({ error: "Name already taken" }, 400);
+      }
+
+      await db
+        .updateTable("tenants")
+        .set({ status: "pending" })
+        .where("id", "=", id)
+        .execute();
+
+      await enqueueTenantRename(id, tenant.name, nameValidation.sanitized);
+
+      return c.json({
+        id: tenant.id,
+        name: nameValidation.sanitized,
+        status: "pending",
+      });
+    }
+  }
+
+  if (tenant.status !== "active") {
+    return c.json(
+      { error: "Cannot modify tenant while another operation is in progress" },
+      400,
+    );
+  }
+
   const updateData: Record<string, unknown> = {};
-  if (body.name !== undefined) updateData.name = body.name;
   if (body.backend_url !== undefined) updateData.backend_url = body.backend_url;
   if (body.organization_id !== undefined)
     updateData.organization_id = body.organization_id;

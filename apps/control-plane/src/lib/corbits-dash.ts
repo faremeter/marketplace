@@ -319,6 +319,28 @@ export async function updateAccountAddresses(
   logger.info(`Corbits dash addresses updated for tenant: ${tenantName}`);
 }
 
+export async function renameAccount(
+  oldName: string,
+  newName: string,
+): Promise<void> {
+  logger.info(`Renaming corbits dash account: ${oldName} -> ${newName}`);
+  try {
+    const account = await findAccountByName(oldName);
+    if (account) {
+      await apiRequest<ApiResponse<Account>>("PUT", `/accounts/${account.id}`, {
+        name: newName,
+      });
+      logger.info(`Corbits dash account renamed: ${oldName} -> ${newName}`);
+    } else {
+      logger.info(`No corbits dash account found for tenant: ${oldName}`);
+    }
+  } catch (err) {
+    logger.error(
+      `Failed to rename corbits dash account ${oldName} -> ${newName}: ${err}`,
+    );
+  }
+}
+
 export async function cleanupAccount(tenantName: string): Promise<void> {
   logger.info(`Cleaning up corbits dash account for tenant: ${tenantName}`);
   try {

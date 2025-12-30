@@ -453,12 +453,19 @@ organizationsRoutes.put("/:id/tenants/:tenantId", async (c) => {
 
   const tenant = await db
     .selectFrom("tenants")
-    .select(["id", "name", "node_id", "organization_id"])
+    .select(["id", "name", "node_id", "organization_id", "status"])
     .where("id", "=", tenantId)
     .executeTakeFirst();
 
   if (!tenant || tenant.organization_id !== orgId) {
     return c.json({ error: "Tenant not found" }, 404);
+  }
+
+  if (tenant.status !== "active") {
+    return c.json(
+      { error: "Cannot modify tenant while another operation is in progress" },
+      400,
+    );
   }
 
   const updateData: Record<string, unknown> = {};

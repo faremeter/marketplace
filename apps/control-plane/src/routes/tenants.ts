@@ -72,6 +72,23 @@ tenantsRoutes.put("/:id", async (c) => {
   const id = parseInt(c.req.param("id"));
   const body = await c.req.json();
 
+  const tenant = await db
+    .selectFrom("tenants")
+    .select(["id", "status"])
+    .where("id", "=", id)
+    .executeTakeFirst();
+
+  if (!tenant) {
+    return c.json({ error: "Tenant not found" }, 404);
+  }
+
+  if (tenant.status !== "active") {
+    return c.json(
+      { error: "Cannot modify tenant while another operation is in progress" },
+      400,
+    );
+  }
+
   const updateData: Record<string, unknown> = {};
   if (body.name !== undefined) updateData.name = body.name;
   if (body.backend_url !== undefined) updateData.backend_url = body.backend_url;

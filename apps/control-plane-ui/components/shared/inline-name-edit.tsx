@@ -1,10 +1,17 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import * as Popover from "@radix-ui/react-popover";
-import { Pencil1Icon, CheckIcon, Cross2Icon } from "@radix-ui/react-icons";
+import {
+  Pencil1Icon,
+  CheckIcon,
+  Cross2Icon,
+  CheckCircledIcon,
+  CrossCircledIcon,
+} from "@radix-ui/react-icons";
 import { api } from "@/lib/api/client";
 import { useToast } from "@/components/ui/toast";
+import { sanitizeProxyName } from "@/lib/proxy-name";
 
 interface InlineNameEditProps {
   name: string;
@@ -12,6 +19,8 @@ interface InlineNameEditProps {
   apiEndpoint: string;
   fieldName?: string;
   label?: string;
+  checkAvailabilityEndpoint?: string;
+  excludeId?: number;
 }
 
 export function InlineNameEdit({
@@ -20,15 +29,81 @@ export function InlineNameEdit({
   apiEndpoint,
   fieldName = "name",
   label = "Name",
+  checkAvailabilityEndpoint,
+  excludeId,
 }: InlineNameEditProps) {
   const { toast } = useToast();
   const [isOpen, setIsOpen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [value, setValue] = useState(name);
+  const [nameAvailable, setNameAvailable] = useState<boolean | null>(null);
+  const [isCheckingName, setIsCheckingName] = useState(false);
+  const checkTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const lastCheckedRef = useRef<string>("");
+
+  useEffect(() => {
+    if (!checkAvailabilityEndpoint || !isOpen) {
+      return;
+    }
+
+    const sanitized = sanitizeProxyName(value.trim());
+
+    if (!sanitized || sanitized === name) {
+      setNameAvailable(null);
+      setIsCheckingName(false);
+      return;
+    }
+
+    setIsCheckingName(true);
+    setNameAvailable(null);
+
+    if (checkTimeoutRef.current) {
+      clearTimeout(checkTimeoutRef.current);
+    }
+
+    checkTimeoutRef.current = setTimeout(async () => {
+      lastCheckedRef.current = sanitized;
+
+      try {
+        let url = `${checkAvailabilityEndpoint}?name=${encodeURIComponent(sanitized)}`;
+        if (excludeId !== undefined) {
+          url += `&excludeId=${excludeId}`;
+        }
+
+        const result = await api.get<{ available: boolean }>(url);
+
+        if (lastCheckedRef.current === sanitized) {
+          setNameAvailable(result.available);
+        }
+      } catch {
+        if (lastCheckedRef.current === sanitized) {
+          setNameAvailable(null);
+        }
+      } finally {
+        if (lastCheckedRef.current === sanitized) {
+          setIsCheckingName(false);
+        }
+      }
+    }, 500);
+
+    return () => {
+      if (checkTimeoutRef.current) {
+        clearTimeout(checkTimeoutRef.current);
+      }
+    };
+  }, [value, name, checkAvailabilityEndpoint, excludeId, isOpen]);
 
   const handleSave = async () => {
-    if (!value.trim() || value === name) {
+    const sanitized = sanitizeProxyName(value.trim());
+    if (!sanitized || sanitized === name) {
       setIsOpen(false);
+      return;
+    }
+
+    if (
+      checkAvailabilityEndpoint &&
+      (nameAvailable === false || isCheckingName)
+    ) {
       return;
     }
 
@@ -58,6 +133,8 @@ export function InlineNameEdit({
   const handleOpen = (open: boolean) => {
     if (open) {
       setValue(name);
+      setNameAvailable(null);
+      setIsCheckingName(false);
     }
     setIsOpen(open);
   };
@@ -69,6 +146,14 @@ export function InlineNameEdit({
       setIsOpen(false);
     }
   };
+
+  const sanitizedValue = sanitizeProxyName(value.trim());
+  const isNameChanged = sanitizedValue && sanitizedValue !== name;
+
+  const canSave =
+    isNameChanged &&
+    !isSaving &&
+    (!checkAvailabilityEndpoint || (nameAvailable === true && !isCheckingName));
 
   return (
     <Popover.Root open={isOpen} onOpenChange={handleOpen}>
@@ -89,14 +174,34 @@ export function InlineNameEdit({
               <label className="block text-xs font-medium text-gray-11 mb-1">
                 {label}
               </label>
-              <input
-                type="text"
-                value={value}
-                onChange={(e) => setValue(e.target.value)}
-                onKeyDown={handleKeyDown}
-                autoFocus
-                className="w-full rounded border border-gray-6 bg-gray-3 px-2 py-1.5 text-sm text-gray-12 placeholder:text-gray-8 focus:border-accent-8 focus:outline-none"
-              />
+              <div className="relative">
+                <input
+                  type="text"
+                  value={value}
+                  onChange={(e) => setValue(e.target.value)}
+                  onKeyDown={handleKeyDown}
+                  autoFocus
+                  className="w-full rounded border border-gray-6 bg-gray-3 px-2 py-1.5 pr-7 text-sm text-gray-12 placeholder:text-gray-8 focus:border-accent-8 focus:outline-none"
+                />
+                {checkAvailabilityEndpoint && isNameChanged && (
+                  <div className="absolute right-2 top-1/2 -translate-y-1/2">
+                    {isCheckingName ? (
+                      <div className="h-4 w-4 animate-spin rounded-full border-2 border-gray-6 border-t-gray-11" />
+                    ) : nameAvailable === true ? (
+                      <CheckCircledIcon className="h-4 w-4 text-green-500" />
+                    ) : nameAvailable === false ? (
+                      <CrossCircledIcon className="h-4 w-4 text-red-500" />
+                    ) : null}
+                  </div>
+                )}
+              </div>
+              {checkAvailabilityEndpoint &&
+                nameAvailable === false &&
+                !isCheckingName && (
+                  <p className="mt-1 text-xs text-red-400">
+                    This name is already taken
+                  </p>
+                )}
             </div>
             <div className="flex justify-end gap-2">
               <button
@@ -108,7 +213,7 @@ export function InlineNameEdit({
               </button>
               <button
                 onClick={handleSave}
-                disabled={isSaving || !value.trim()}
+                disabled={!canSave}
                 className="inline-flex items-center gap-1 rounded bg-accent-9 px-2 py-1 text-xs text-white hover:bg-accent-10 disabled:opacity-50"
               >
                 <CheckIcon className="h-3 w-3" />

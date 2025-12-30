@@ -16,6 +16,7 @@ import { InlineOrgSelect } from "@/components/admin/inline-org-select";
 import { InlineWalletSelect } from "@/components/admin/inline-wallet-select";
 import { InlineActiveToggle } from "@/components/shared/inline-active-toggle";
 import { InlineAuthEdit } from "@/components/shared/inline-auth-edit";
+import { InlineNameEdit } from "@/components/shared/inline-name-edit";
 import { InlineUrlEdit } from "@/components/shared/inline-url-edit";
 import { InlineNodeSelect } from "@/components/admin/inline-node-select";
 import { useToast } from "@/components/ui/toast";
@@ -168,8 +169,15 @@ export default function AdminTenantsPage() {
                   <td className="px-4 py-3 text-sm text-gray-11">
                     {tenant.id}
                   </td>
-                  <td className="px-4 py-3 text-sm font-medium text-gray-12">
-                    {tenant.name}
+                  <td className="px-4 py-3">
+                    <InlineNameEdit
+                      name={tenant.name}
+                      onUpdate={() => mutate()}
+                      apiEndpoint={`/api/admin/tenants/${tenant.id}`}
+                      label="Tenant Name"
+                      checkAvailabilityEndpoint="/api/admin/tenants/check-name"
+                      excludeId={tenant.id}
+                    />
                   </td>
                   <td className="px-4 py-3">
                     <InlineNodeSelect
