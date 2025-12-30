@@ -124,9 +124,9 @@ export default function AdminTenantsPage() {
           <div className="h-8 w-8 animate-spin rounded-full border-2 border-gray-6 border-t-accent-9" />
         </div>
       ) : tenants?.length ? (
-        <div className="overflow-x-auto rounded-lg border border-gray-6">
+        <div className="max-h-[calc(100vh-200px)] overflow-auto rounded-lg border border-gray-6">
           <table className="w-full min-w-[1200px]">
-            <thead className="bg-gray-3">
+            <thead className="sticky top-0 z-10 bg-gray-3">
               <tr>
                 <th className="px-4 py-3 text-left text-sm font-medium text-gray-11">
                   ID
@@ -400,8 +400,8 @@ export default function AdminTenantsPage() {
 
       <Dialog.Root open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
         <Dialog.Portal>
-          <Dialog.Overlay className="fixed inset-0 bg-black/50" />
-          <Dialog.Content className="fixed left-1/2 top-1/2 w-full max-w-md -translate-x-1/2 -translate-y-1/2 rounded-lg border border-gray-6 bg-gray-2 p-6 shadow-lg">
+          <Dialog.Overlay className="fixed inset-0 z-50 bg-black/50" />
+          <Dialog.Content className="fixed left-1/2 top-1/2 z-50 w-full max-w-md -translate-x-1/2 -translate-y-1/2 rounded-lg border border-gray-6 bg-gray-2 p-6 shadow-lg">
             <div className="flex items-center justify-between">
               <Dialog.Title className="text-lg font-semibold text-gray-12">
                 Delete Tenant
