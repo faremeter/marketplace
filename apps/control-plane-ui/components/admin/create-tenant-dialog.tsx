@@ -13,12 +13,22 @@ import {
   MinusIcon,
   CheckCircledIcon,
   CrossCircledIcon,
+  EyeOpenIcon,
+  EyeClosedIcon,
 } from "@radix-ui/react-icons";
 import useSWR from "swr";
 import { api } from "@/lib/api/client";
 import { SCHEME_OPTIONS } from "@/lib/types/api";
 import { useToast } from "@/components/ui/toast";
 import { sanitizeProxyName } from "@/lib/proxy-name";
+import {
+  type HeaderType,
+  type ValueFormat,
+  isBlockedHeader,
+  composeFinalHeader,
+  composeFinalValue,
+  maskToken,
+} from "@/lib/auth-header";
 
 interface Node {
   id: number;
@@ -69,8 +79,11 @@ export function CreateTenantDialog({
   const [name, setName] = useState("");
   const [selectedNodeIds, setSelectedNodeIds] = useState<number[]>([]);
   const [backendUrl, setBackendUrl] = useState("");
-  const [authHeader, setAuthHeader] = useState("");
-  const [authValue, setAuthValue] = useState("");
+  const [headerType, setHeaderType] = useState<HeaderType>("Authorization");
+  const [customHeader, setCustomHeader] = useState("");
+  const [valueFormat, setValueFormat] = useState<ValueFormat>("bearer");
+  const [customPrefix, setCustomPrefix] = useState("");
+  const [authToken, setAuthToken] = useState("");
   const [organizationId, setOrganizationId] = useState("");
   const [walletId, setWalletId] = useState<number | null>(null);
   const [defaultPrice, setDefaultPrice] = useState("0.01");
@@ -80,15 +93,27 @@ export function CreateTenantDialog({
   const [nameAvailable, setNameAvailable] = useState<boolean | null>(null);
   const [isCheckingName, setIsCheckingName] = useState(false);
   const [showDiscardConfirm, setShowDiscardConfirm] = useState(false);
+  const [showAuthValue, setShowAuthValue] = useState(false);
   const checkTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  const getFinalAuthHeader = () => {
+    if (!authToken.trim()) return null;
+    return composeFinalHeader(headerType, customHeader);
+  };
+
+  const getFinalAuthValue = () => {
+    if (!authToken.trim()) return null;
+    return composeFinalValue(valueFormat, customPrefix, authToken);
+  };
 
   const isDirty = useCallback(() => {
     return (
       name.trim() !== "" ||
       selectedNodeIds.length > 0 ||
       backendUrl.trim() !== "" ||
-      authHeader.trim() !== "" ||
-      authValue.trim() !== "" ||
+      authToken.trim() !== "" ||
+      customHeader.trim() !== "" ||
+      customPrefix.trim() !== "" ||
       walletId !== null ||
       defaultPrice !== "0.01" ||
       defaultScheme !== "exact"
@@ -97,8 +122,9 @@ export function CreateTenantDialog({
     name,
     selectedNodeIds,
     backendUrl,
-    authHeader,
-    authValue,
+    authToken,
+    customHeader,
+    customPrefix,
     walletId,
     defaultPrice,
     defaultScheme,
@@ -192,8 +218,11 @@ export function CreateTenantDialog({
     setName("");
     setSelectedNodeIds([]);
     setBackendUrl("");
-    setAuthHeader("");
-    setAuthValue("");
+    setHeaderType("Authorization");
+    setCustomHeader("");
+    setValueFormat("bearer");
+    setCustomPrefix("");
+    setAuthToken("");
     setOrganizationId("");
     setWalletId(null);
     setDefaultPrice("0.01");
@@ -222,6 +251,9 @@ export function CreateTenantDialog({
     e.preventDefault();
     setError("");
 
+    const finalHeader = getFinalAuthHeader();
+    const finalValue = getFinalAuthValue();
+
     if (!name.trim()) {
       setError("Name is required");
       return;
@@ -234,6 +266,16 @@ export function CreateTenantDialog({
       setError("Backend URL is required");
       return;
     }
+    if (headerType === "custom" && customHeader.trim()) {
+      if (isBlockedHeader(customHeader.trim())) {
+        setError(`Header "${customHeader}" is not allowed`);
+        return;
+      }
+      if (customHeader.trim().toLowerCase().startsWith("proxy-")) {
+        setError("Proxy-* headers are not allowed");
+        return;
+      }
+    }
 
     setIsSubmitting(true);
     try {
@@ -241,8 +283,8 @@ export function CreateTenantDialog({
         name: name.trim(),
         node_ids: selectedNodeIds,
         backend_url: backendUrl.trim(),
-        upstream_auth_header: authHeader.trim() || null,
-        upstream_auth_value: authValue.trim() || null,
+        upstream_auth_header: finalHeader,
+        upstream_auth_value: finalValue,
         organization_id: organizationId ? parseInt(organizationId) : null,
         wallet_id: walletId,
         default_price_usdc: Math.round(
@@ -446,30 +488,175 @@ export function CreateTenantDialog({
                     className="w-full rounded-md border border-gray-6 bg-gray-2 px-3 py-2 text-sm text-gray-12 placeholder-gray-9 focus:border-accent-8 focus:outline-none focus:ring-1 focus:ring-accent-8"
                   />
                 </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="mb-1.5 block text-sm text-gray-11">
-                      Auth Header
-                    </label>
-                    <input
-                      type="text"
-                      value={authHeader}
-                      onChange={(e) => setAuthHeader(e.target.value)}
-                      placeholder="Authorization"
-                      className="w-full rounded-md border border-gray-6 bg-gray-2 px-3 py-2 text-sm text-gray-12 placeholder-gray-9 focus:border-accent-8 focus:outline-none focus:ring-1 focus:ring-accent-8"
-                    />
+                <div className="space-y-3">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="mb-1.5 block text-sm text-gray-11">
+                        Auth Header
+                      </label>
+                      <Select.Root
+                        value={headerType}
+                        onValueChange={(value) =>
+                          setHeaderType(value as typeof headerType)
+                        }
+                      >
+                        <Select.Trigger className="flex w-full items-center justify-between rounded-md border border-gray-6 bg-gray-2 px-3 py-2 text-sm text-gray-12 focus:border-accent-8 focus:outline-none focus:ring-1 focus:ring-accent-8">
+                          <Select.Value />
+                          <Select.Icon>
+                            <ChevronDownIcon className="h-4 w-4 text-gray-11" />
+                          </Select.Icon>
+                        </Select.Trigger>
+                        <Select.Portal>
+                          <Select.Content
+                            className="overflow-hidden rounded-md border border-gray-6 bg-gray-2 shadow-lg"
+                            position="popper"
+                            sideOffset={4}
+                          >
+                            <Select.Viewport className="p-1">
+                              {[
+                                "Authorization",
+                                "X-API-Key",
+                                "X-Auth-Token",
+                                "Api-Key",
+                                "custom",
+                              ].map((opt) => (
+                                <Select.Item
+                                  key={opt}
+                                  value={opt}
+                                  className="relative flex cursor-pointer select-none items-center rounded px-8 py-2 text-sm outline-none hover:bg-gray-4 data-[highlighted]:bg-gray-4"
+                                >
+                                  <Select.ItemIndicator className="absolute left-2 inline-flex items-center">
+                                    <CheckIcon className="h-4 w-4 text-accent-11" />
+                                  </Select.ItemIndicator>
+                                  <Select.ItemText>
+                                    {opt === "custom" ? "Custom" : opt}
+                                  </Select.ItemText>
+                                </Select.Item>
+                              ))}
+                            </Select.Viewport>
+                          </Select.Content>
+                        </Select.Portal>
+                      </Select.Root>
+                    </div>
+                    <div>
+                      <label className="mb-1.5 block text-sm text-gray-11">
+                        Value Format
+                      </label>
+                      <Select.Root
+                        value={valueFormat}
+                        onValueChange={(value) =>
+                          setValueFormat(value as typeof valueFormat)
+                        }
+                      >
+                        <Select.Trigger className="flex w-full items-center justify-between rounded-md border border-gray-6 bg-gray-2 px-3 py-2 text-sm text-gray-12 focus:border-accent-8 focus:outline-none focus:ring-1 focus:ring-accent-8">
+                          <Select.Value>
+                            {valueFormat === "bearer"
+                              ? "Bearer"
+                              : valueFormat === "basic"
+                                ? "Basic"
+                                : valueFormat === "none"
+                                  ? "None (raw)"
+                                  : "Custom"}
+                          </Select.Value>
+                          <Select.Icon>
+                            <ChevronDownIcon className="h-4 w-4 text-gray-11" />
+                          </Select.Icon>
+                        </Select.Trigger>
+                        <Select.Portal>
+                          <Select.Content
+                            className="overflow-hidden rounded-md border border-gray-6 bg-gray-2 shadow-lg"
+                            position="popper"
+                            sideOffset={4}
+                          >
+                            <Select.Viewport className="p-1">
+                              {[
+                                { value: "bearer", label: "Bearer" },
+                                { value: "basic", label: "Basic" },
+                                { value: "none", label: "None (raw)" },
+                                { value: "custom", label: "Custom" },
+                              ].map((opt) => (
+                                <Select.Item
+                                  key={opt.value}
+                                  value={opt.value}
+                                  className="relative flex cursor-pointer select-none items-center rounded px-8 py-2 text-sm outline-none hover:bg-gray-4 data-[highlighted]:bg-gray-4"
+                                >
+                                  <Select.ItemIndicator className="absolute left-2 inline-flex items-center">
+                                    <CheckIcon className="h-4 w-4 text-accent-11" />
+                                  </Select.ItemIndicator>
+                                  <Select.ItemText>{opt.label}</Select.ItemText>
+                                </Select.Item>
+                              ))}
+                            </Select.Viewport>
+                          </Select.Content>
+                        </Select.Portal>
+                      </Select.Root>
+                    </div>
                   </div>
+                  {headerType === "custom" && (
+                    <div>
+                      <label className="mb-1.5 block text-sm text-gray-11">
+                        Custom Header Name
+                      </label>
+                      <input
+                        type="text"
+                        value={customHeader}
+                        onChange={(e) => setCustomHeader(e.target.value)}
+                        placeholder="X-Custom-Auth"
+                        className="w-full rounded-md border border-gray-6 bg-gray-2 px-3 py-2 text-sm text-gray-12 placeholder-gray-9 focus:border-accent-8 focus:outline-none focus:ring-1 focus:ring-accent-8"
+                      />
+                    </div>
+                  )}
+                  {valueFormat === "custom" && (
+                    <div>
+                      <label className="mb-1.5 block text-sm text-gray-11">
+                        Custom Prefix
+                      </label>
+                      <input
+                        type="text"
+                        value={customPrefix}
+                        onChange={(e) => setCustomPrefix(e.target.value)}
+                        placeholder="Token"
+                        className="w-full rounded-md border border-gray-6 bg-gray-2 px-3 py-2 text-sm text-gray-12 placeholder-gray-9 focus:border-accent-8 focus:outline-none focus:ring-1 focus:ring-accent-8"
+                      />
+                    </div>
+                  )}
                   <div>
                     <label className="mb-1.5 block text-sm text-gray-11">
-                      Auth Value
+                      Token / API Key
                     </label>
-                    <input
-                      type="password"
-                      value={authValue}
-                      onChange={(e) => setAuthValue(e.target.value)}
-                      placeholder="Bearer token..."
-                      className="w-full rounded-md border border-gray-6 bg-gray-2 px-3 py-2 text-sm text-gray-12 placeholder-gray-9 focus:border-accent-8 focus:outline-none focus:ring-1 focus:ring-accent-8"
-                    />
+                    <div className="relative">
+                      <input
+                        type={showAuthValue ? "text" : "password"}
+                        value={authToken}
+                        onChange={(e) => setAuthToken(e.target.value)}
+                        placeholder="Your secret token or API key"
+                        className="w-full rounded-md border border-gray-6 bg-gray-2 px-3 py-2 pr-9 text-sm text-gray-12 placeholder-gray-9 focus:border-accent-8 focus:outline-none focus:ring-1 focus:ring-accent-8"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowAuthValue(!showAuthValue)}
+                        className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-gray-11 hover:text-gray-12"
+                      >
+                        {showAuthValue ? (
+                          <EyeOpenIcon className="h-4 w-4" />
+                        ) : (
+                          <EyeClosedIcon className="h-4 w-4" />
+                        )}
+                      </button>
+                    </div>
+                    {getFinalAuthHeader() && (
+                      <p className="mt-1.5 text-xs text-gray-9">
+                        Final header:{" "}
+                        <code className="text-gray-11">
+                          {getFinalAuthHeader()}:{" "}
+                          {composeFinalValue(
+                            valueFormat,
+                            customPrefix,
+                            maskToken(authToken),
+                          )}
+                        </code>
+                      </p>
+                    )}
                   </div>
                 </div>
               </div>
