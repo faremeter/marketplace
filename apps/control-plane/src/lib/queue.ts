@@ -247,7 +247,7 @@ export async function startQueue(config: {
           );
 
           await cleanupAccount(tenantName);
-          deleteLocalCert(tenantName);
+          await deleteLocalCert(tenantName);
 
           await db.deleteFrom("tenants").where("id", "=", tenantId).execute();
 

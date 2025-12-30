@@ -1,7 +1,10 @@
-import { execSync } from "child_process";
+import { exec } from "child_process";
+import { promisify } from "util";
 import { db } from "../server.js";
 import { logger } from "../logger.js";
 import { checkAndUpdateTenantStatus } from "./queue.js";
+
+const execAsync = promisify(exec);
 
 const BASE_DOMAIN = "test.api.corbits.dev";
 
@@ -61,18 +64,18 @@ export async function triggerCertProvisioning(
     return false;
   }
 
-  const certExists =
-    execSync(`sudo test -f ${certDir}/fullchain.pem && echo yes || echo no`, {
-      encoding: "utf-8",
-    }).trim() === "yes";
+  const { stdout: certCheckResult } = await execAsync(
+    `sudo test -f ${certDir}/fullchain.pem && echo yes || echo no`,
+  );
+  const certExists = certCheckResult.trim() === "yes";
 
   if (!certExists) {
     try {
       logger.info(`Running certbot for ${domain}`);
-      execSync(
+      await execAsync(
         `sudo certbot certonly --dns-route53 -d ${domain} ` +
           `--agree-tos -m ${process.env.LETSENCRYPT_EMAIL} --non-interactive`,
-        { stdio: "pipe", timeout: 180000 },
+        { timeout: 180000 },
       );
       logger.info(`Certbot completed for ${domain}`);
     } catch (err) {
@@ -87,14 +90,14 @@ export async function triggerCertProvisioning(
   let fullchain: string;
   let privkey: string;
   try {
-    fullchain = execSync(
+    const { stdout: fullchainOut } = await execAsync(
       `sudo /usr/local/bin/read-tenant-cert ${domain} fullchain.pem`,
-      { encoding: "utf-8" },
     );
-    privkey = execSync(
+    fullchain = fullchainOut;
+    const { stdout: privkeyOut } = await execAsync(
       `sudo /usr/local/bin/read-tenant-cert ${domain} privkey.pem`,
-      { encoding: "utf-8" },
     );
+    privkey = privkeyOut;
   } catch (err) {
     logger.error(`Failed to read cert files for ${domain}: ${err}`);
     await setCertStatus(tenantName, nodeId, "failed");
@@ -212,7 +215,7 @@ export async function deleteCertOnNode(
   }
 }
 
-export function deleteLocalCert(tenantName: string): void {
+export async function deleteLocalCert(tenantName: string): Promise<void> {
   if (process.env.NODE_ENV === "development") {
     logger.info(`[DEV] skipped local cert deletion for ${tenantName}`);
     return;
@@ -220,10 +223,10 @@ export function deleteLocalCert(tenantName: string): void {
 
   const domain = `${tenantName}.${BASE_DOMAIN}`;
   try {
-    execSync(`sudo certbot delete --cert-name ${domain} --non-interactive`, {
-      stdio: "pipe",
-      timeout: 30000,
-    });
+    await execAsync(
+      `sudo certbot delete --cert-name ${domain} --non-interactive`,
+      { timeout: 30000 },
+    );
     logger.info(`Deleted local cert for ${domain}`);
   } catch (err) {
     logger.warn(`Failed to delete local cert for ${domain}: ${err}`);
