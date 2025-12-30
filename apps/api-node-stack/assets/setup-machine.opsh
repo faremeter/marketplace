@@ -129,6 +129,7 @@ CONF_DIR="/etc/nginx/sites-available/api-node.d"
 cat <<'BASE' > "$OUTPUT_FILE"
 lua_package_path '/etc/nginx/sites-available/api-node.d/?.lua;;';
 lua_shared_dict tenants 10m;
+lua_shared_dict word_dict 10m;
 lua_ssl_trusted_certificate /etc/ssl/certs/ca-certificates.crt;
 lua_ssl_verify_depth 2;
 
@@ -249,6 +250,7 @@ step::40::setup-nginx() {
     cat <<EOF >"$nginx_config"
 lua_package_path '${nginx_config}.d/?.lua;;';
 lua_shared_dict tenants 10m;
+lua_shared_dict word_dict 10m;
 lua_ssl_trusted_certificate /etc/ssl/certs/ca-certificates.crt;
 lua_ssl_verify_depth 2;
 

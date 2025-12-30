@@ -33,22 +33,17 @@ step::10::install-dictionary() {
         'run "dpkg -s wamerican >/dev/null 2>&1 || sudo apt-get install -y wamerican"'
 }
 
-step::20::add-shared-dict() {
-    for_each_stack "adding lua_shared_dict word_dict to api-node config..." \
-        'run "grep -q '\''lua_shared_dict word_dict'\'' /etc/nginx/sites-available/api-node || sudo sed -i '\''/lua_shared_dict tenants/a lua_shared_dict word_dict 10m;'\'' /etc/nginx/sites-available/api-node"'
-}
-
-step::30::upload-config() {
+step::20::upload-config() {
     for_each_stack "uploading perftest nginx config..." \
         'copy perftest.conf "sudo tee /etc/nginx/sites-available/perftest > /dev/null"'
 }
 
-step::40::enable-site() {
+step::30::enable-site() {
     for_each_stack "enabling perftest site..." \
         'run "sudo ln -sf /etc/nginx/sites-available/perftest /etc/nginx/sites-enabled/perftest && sudo nginx -t && sudo systemctl reload nginx"'
 }
 
-step::50::update-tenant() {
+step::40::update-tenant() {
     log::info "updating perftest tenant backend_url..."
     # shellcheck disable=SC2016
     run 'curl -sf http://10.12.0.1:1337/api/tenants \
