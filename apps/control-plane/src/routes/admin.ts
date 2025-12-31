@@ -506,11 +506,30 @@ adminRoutes.put("/tenants/:id", async (c) => {
     }
   }
 
-  if (tenant.status !== "active") {
+  if (tenant.status !== "active" && tenant.status !== "pending") {
     return c.json(
       { error: "Cannot modify tenant while another operation is in progress" },
       400,
     );
+  }
+
+  if (tenant.status === "pending") {
+    const allowedPendingFields = ["wallet_id"];
+    const requestedFields = Object.keys(body).filter(
+      (k) => body[k as keyof typeof body] !== undefined,
+    );
+    const hasDisallowedFields = requestedFields.some(
+      (f) => !allowedPendingFields.includes(f),
+    );
+    if (hasDisallowedFields) {
+      return c.json(
+        {
+          error:
+            "Cannot modify tenant while initializing. Only wallet assignment is allowed.",
+        },
+        400,
+      );
+    }
   }
 
   const updateData: Record<string, unknown> = {};
@@ -572,6 +591,10 @@ adminRoutes.put("/tenants/:id", async (c) => {
         `Failed to update corbits dash addresses for ${tenant.name}: ${err}`,
       ),
     );
+  }
+
+  if (body.wallet_id !== undefined && body.wallet_id !== null) {
+    await checkAndUpdateTenantStatus(id);
   }
 
   return c.json(result);
