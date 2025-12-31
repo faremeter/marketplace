@@ -240,11 +240,13 @@ export default function AdminTenantsPage() {
                         label,
                         tooltip,
                         color,
+                        pulse = false,
                         children,
                       }: {
                         label: string;
                         tooltip: string;
                         color: "yellow" | "red" | "green" | "gray";
+                        pulse?: boolean;
                         children?: React.ReactNode;
                       }) => (
                         <Tooltip.Provider delayDuration={0}>
@@ -260,7 +262,7 @@ export default function AdminTenantsPage() {
                                         : color === "green"
                                           ? "border-green-800 bg-green-900/50 text-green-400"
                                           : "border-gray-700 bg-gray-800/50 text-gray-400"
-                                  }`}
+                                  } ${pulse ? "animate-pulse" : ""}`}
                                 >
                                   {label}
                                 </span>
@@ -286,6 +288,7 @@ export default function AdminTenantsPage() {
                             label="Deleting"
                             tooltip="Tenant is being removed"
                             color="red"
+                            pulse
                           />
                         );
                       }
@@ -307,26 +310,17 @@ export default function AdminTenantsPage() {
                         );
                       }
 
-                      if (tenant.status === "pending") {
-                        const hasCertPending = tenant.nodes.some(
-                          (n) => n.cert_status === "pending",
-                        );
+                      const hasCertPending = tenant.nodes.some(
+                        (n) => n.cert_status === "pending",
+                      );
 
-                        if (hasCertPending) {
-                          return (
-                            <StatusBadge
-                              label="Provisioning"
-                              tooltip="TLS certificate is being provisioned"
-                              color="yellow"
-                            />
-                          );
-                        }
-
+                      if (hasCertPending) {
                         return (
                           <StatusBadge
-                            label="Initializing"
-                            tooltip="Tenant is being set up"
+                            label="Provisioning"
+                            tooltip="TLS certificate is being provisioned"
                             color="yellow"
+                            pulse
                           />
                         );
                       }

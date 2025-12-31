@@ -43,11 +43,13 @@ interface Tenant {
 function getStatus(tenant: Tenant): {
   label: string;
   color: string;
+  pulse: boolean;
 } {
   if (tenant.status === "deleting") {
     return {
       label: "Deleting",
       color: "bg-red-900/50 text-red-400 border-red-800",
+      pulse: true,
     };
   }
 
@@ -55,24 +57,17 @@ function getStatus(tenant: Tenant): {
     return {
       label: "Pending",
       color: "bg-yellow-900/50 text-yellow-400 border-yellow-800",
+      pulse: true,
     };
   }
 
-  if (tenant.status === "pending") {
-    const hasPendingCert = tenant.nodes.some(
-      (n) => n.cert_status === "pending",
-    );
+  const hasCertPending = tenant.nodes.some((n) => n.cert_status === "pending");
 
-    if (hasPendingCert) {
-      return {
-        label: "Provisioning",
-        color: "bg-yellow-900/50 text-yellow-400 border-yellow-800",
-      };
-    }
-
+  if (hasCertPending) {
     return {
-      label: "Initializing",
+      label: "Provisioning",
       color: "bg-yellow-900/50 text-yellow-400 border-yellow-800",
+      pulse: true,
     };
   }
 
@@ -80,6 +75,7 @@ function getStatus(tenant: Tenant): {
     return {
       label: "No Wallet",
       color: "bg-red-900/50 text-red-400 border-red-800",
+      pulse: false,
     };
   }
 
@@ -87,6 +83,7 @@ function getStatus(tenant: Tenant): {
     return {
       label: "Unfunded",
       color: "bg-yellow-900/50 text-yellow-400 border-yellow-800",
+      pulse: false,
     };
   }
 
@@ -94,12 +91,14 @@ function getStatus(tenant: Tenant): {
     return {
       label: "Inactive",
       color: "bg-gray-800/50 text-gray-400 border-gray-700",
+      pulse: false,
     };
   }
 
   return {
     label: "Ready",
     color: "bg-green-900/50 text-green-400 border-green-800",
+    pulse: false,
   };
 }
 
@@ -336,7 +335,7 @@ export default function TenantsPage() {
                     </td>
                     <td className="px-4 py-3">
                       <span
-                        className={`inline-flex rounded-full border px-2 py-0.5 text-xs ${status.color}`}
+                        className={`inline-flex rounded-full border px-2 py-0.5 text-xs ${status.color} ${status.pulse ? "animate-pulse" : ""}`}
                       >
                         {status.label}
                       </span>
