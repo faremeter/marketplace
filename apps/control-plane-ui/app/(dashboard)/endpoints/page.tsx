@@ -256,7 +256,7 @@ function CatchAllRow({
   onUpdate: () => void;
 }) {
   const { data: analytics, isLoading } = useSWR(
-    `/api/organizations/${orgId}/tenants/${tenant.id}/analytics`,
+    `/api/organizations/${orgId}/tenants/${tenant.id}/catch-all/analytics`,
     api.get<EarningsAnalytics>,
   );
 

@@ -417,7 +417,7 @@ function DefaultRow({
   onUpdate: () => void;
 }) {
   const { data: analytics, isLoading } = useSWR(
-    `/api/admin/tenants/${tenantId}/analytics`,
+    `/api/admin/tenants/${tenantId}/catch-all/analytics`,
     api.get<EarningsAnalytics>,
   );
 

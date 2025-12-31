@@ -30,6 +30,7 @@ import {
   getOrganizationEarnings,
   getTenantEarnings,
   getEndpointEarnings,
+  getCatchAllEarnings,
   getEarningsByPeriod,
   type Granularity,
 } from "../lib/analytics.js";
@@ -1406,6 +1407,21 @@ adminRoutes.get(
     }
   },
 );
+
+adminRoutes.get("/tenants/:tenantId/catch-all/analytics", async (c) => {
+  const tenantId = parseInt(c.req.param("tenantId"));
+  if (isNaN(tenantId)) {
+    return c.json({ error: "Invalid tenant ID" }, 400);
+  }
+
+  try {
+    const earnings = await getCatchAllEarnings(tenantId);
+    return c.json(earnings);
+  } catch (error) {
+    logger.error(`Failed to get catch-all analytics: ${error}`);
+    return c.json({ error: "Failed to get analytics" }, 500);
+  }
+});
 
 adminRoutes.get("/analytics/earnings", async (c) => {
   const level = c.req.query("level") as "organization" | "tenant" | "endpoint";

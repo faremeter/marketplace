@@ -274,7 +274,7 @@ function EndpointEarningsDialog({
               <div className="flex items-center justify-center py-8">
                 <div className="h-6 w-6 animate-spin rounded-full border-2 border-gray-6 border-t-accent-9" />
               </div>
-            ) : endpoints && endpoints.length > 0 ? (
+            ) : (
               <table className="w-full">
                 <thead>
                   <tr className="border-b border-white/10 text-left text-[12px] text-gray-9">
@@ -286,7 +286,7 @@ function EndpointEarningsDialog({
                   </tr>
                 </thead>
                 <tbody>
-                  {endpoints.map((endpoint) => (
+                  {endpoints?.map((endpoint) => (
                     <EndpointEarningsRow
                       key={endpoint.id}
                       endpoint={endpoint}
@@ -297,10 +297,6 @@ function EndpointEarningsDialog({
                   <CatchAllEarningsRow tenantId={tenant.id} orgId={orgId} />
                 </tbody>
               </table>
-            ) : (
-              <p className="py-4 text-center text-[13px] text-gray-9">
-                No endpoints configured.
-              </p>
             )}
           </div>
         </Dialog.Content>
@@ -362,7 +358,7 @@ function CatchAllEarningsRow({
   orgId: number;
 }) {
   const { data: analytics, isLoading } = useSWR(
-    `/api/organizations/${orgId}/tenants/${tenantId}/analytics`,
+    `/api/organizations/${orgId}/tenants/${tenantId}/catch-all/analytics`,
     api.get<EarningsAnalytics>,
   );
 

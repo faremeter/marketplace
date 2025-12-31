@@ -26,6 +26,7 @@ import {
   getOrganizationEarnings,
   getTenantEarnings,
   getEndpointEarnings,
+  getCatchAllEarnings,
   getEarningsByPeriod,
   type Granularity,
 } from "../lib/analytics.js";
@@ -1294,6 +1295,45 @@ organizationsRoutes.get(
       return c.json(earnings);
     } catch (error) {
       logger.error(`Failed to get endpoint analytics: ${error}`);
+      return c.json({ error: "Failed to get analytics" }, 500);
+    }
+  },
+);
+
+organizationsRoutes.get(
+  "/:id/tenants/:tenantId/catch-all/analytics",
+  async (c) => {
+    const user = c.get("user");
+    const orgId = parseInt(c.req.param("id"));
+    const tenantId = parseInt(c.req.param("tenantId"));
+
+    const membership = await db
+      .selectFrom("user_organizations")
+      .select("role")
+      .where("user_id", "=", user.id)
+      .where("organization_id", "=", orgId)
+      .executeTakeFirst();
+
+    if (!membership && !user.is_admin) {
+      return c.json({ error: "Organization not found" }, 404);
+    }
+
+    const tenant = await db
+      .selectFrom("tenants")
+      .select("id")
+      .where("id", "=", tenantId)
+      .where("organization_id", "=", orgId)
+      .executeTakeFirst();
+
+    if (!tenant) {
+      return c.json({ error: "Tenant not found" }, 404);
+    }
+
+    try {
+      const earnings = await getCatchAllEarnings(tenantId);
+      return c.json(earnings);
+    } catch (error) {
+      logger.error(`Failed to get catch-all analytics: ${error}`);
       return c.json({ error: "Failed to get analytics" }, 500);
     }
   },
