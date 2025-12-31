@@ -15,7 +15,7 @@ export async function buildNodeConfig(nodeId: number) {
   const tenants = await db
     .selectFrom("tenants")
     .innerJoin("tenant_nodes", "tenant_nodes.tenant_id", "tenants.id")
-    .leftJoin("wallets", "wallets.id", "tenants.wallet_id")
+    .innerJoin("wallets", "wallets.id", "tenants.wallet_id")
     .select([
       "tenants.id",
       "tenants.name",
@@ -30,6 +30,8 @@ export async function buildNodeConfig(nodeId: number) {
     ])
     .where("tenant_nodes.node_id", "=", nodeId)
     .where("tenants.is_active", "=", true)
+    .where("tenants.status", "=", "active")
+    .where("wallets.funding_status", "=", "funded")
     .execute();
 
   const config: Record<string, unknown> = {};

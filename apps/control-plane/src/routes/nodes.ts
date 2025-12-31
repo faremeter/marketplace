@@ -93,7 +93,7 @@ nodesRoutes.get("/:id/sync", async (c) => {
   const tenants = await db
     .selectFrom("tenants")
     .innerJoin("tenant_nodes", "tenant_nodes.tenant_id", "tenants.id")
-    .leftJoin("wallets", "wallets.id", "tenants.wallet_id")
+    .innerJoin("wallets", "wallets.id", "tenants.wallet_id")
     .select([
       "tenants.id",
       "tenants.name",
@@ -106,6 +106,8 @@ nodesRoutes.get("/:id/sync", async (c) => {
     ])
     .where("tenant_nodes.node_id", "=", id)
     .where("tenants.is_active", "=", true)
+    .where("tenants.status", "=", "active")
+    .where("wallets.funding_status", "=", "funded")
     .execute();
 
   const config: Record<string, unknown> = {};

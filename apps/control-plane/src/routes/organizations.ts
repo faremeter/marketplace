@@ -16,6 +16,7 @@ import { createHealthCheck, upsertNodeDnsRecord } from "../lib/dns.js";
 import {
   enqueueCertProvisioning,
   enqueueTenantDeletion,
+  checkAndUpdateTenantStatus,
 } from "../lib/queue.js";
 import {
   setupAccountWithAddresses,
@@ -536,6 +537,10 @@ organizationsRoutes.put("/:id/tenants/:tenantId", async (c) => {
     );
   }
 
+  if (body.wallet_id !== undefined && body.wallet_id !== null) {
+    await checkAndUpdateTenantStatus(tenantId);
+  }
+
   return c.json(result);
 });
 
@@ -885,6 +890,8 @@ organizationsRoutes.post("/:id/tenants", async (c) => {
         ),
     );
   }
+
+  await checkAndUpdateTenantStatus(tenant.id);
 
   return c.json(tenant, 201);
 });
