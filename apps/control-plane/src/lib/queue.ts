@@ -47,12 +47,13 @@ interface BalanceCheckJob {
 }
 
 export interface TransactionRecordingJob {
-  tx_hash: string;
+  ngx_request_id: string;
+  tx_hash: string | null;
   tenant_id: number;
   organization_id: number | null;
   endpoint_id: number | null;
   amount_usdc: number;
-  network: string;
+  network: string | null;
   request_path: string;
 }
 
@@ -527,6 +528,7 @@ export async function startQueue(config: {
     async (jobs) => {
       for (const job of jobs) {
         const {
+          ngx_request_id,
           tx_hash,
           tenant_id,
           organization_id,
@@ -540,6 +542,7 @@ export async function startQueue(config: {
           await db
             .insertInto("transactions")
             .values({
+              ngx_request_id,
               tx_hash,
               tenant_id,
               organization_id,
@@ -548,14 +551,16 @@ export async function startQueue(config: {
               network,
               request_path,
             })
-            .onConflict((oc) => oc.column("tx_hash").doNothing())
+            .onConflict((oc) => oc.column("ngx_request_id").doNothing())
             .execute();
 
           logger.info(
-            `Recorded transaction ${tx_hash} for tenant ${tenant_id}`,
+            `Recorded transaction ${ngx_request_id} for tenant ${tenant_id}`,
           );
         } catch (error) {
-          logger.error(`Failed to record transaction ${tx_hash}: ${error}`);
+          logger.error(
+            `Failed to record transaction ${ngx_request_id}: ${error}`,
+          );
           throw error;
         }
       }

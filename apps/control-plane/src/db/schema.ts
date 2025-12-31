@@ -119,8 +119,9 @@ export interface TransactionsTable {
   tenant_id: number;
   organization_id: number | null;
   amount_usdc: number;
-  tx_hash: string;
-  network: string;
+  ngx_request_id: string;
+  tx_hash: string | null;
+  network: string | null;
   request_path: string;
   created_at: ColumnType<Date, never, never>;
 }

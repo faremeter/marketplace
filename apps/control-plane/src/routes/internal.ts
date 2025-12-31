@@ -6,11 +6,12 @@ import { logger } from "../logger.js";
 export const internalRoutes = new Hono();
 
 interface TransactionPayload {
-  tx_hash: string;
+  ngx_request_id: string;
+  tx_hash: string | null;
   tenant_name: string;
   endpoint_id: number | null;
   amount_usdc: number;
-  network: string;
+  network: string | null;
   request_path: string;
 }
 
@@ -22,12 +23,19 @@ internalRoutes.post("/transactions", async (c) => {
     return c.json({ error: "Invalid JSON" }, 400);
   }
 
-  if (!body.tx_hash || !body.tenant_name || !body.network) {
+  if (!body.ngx_request_id || !body.tenant_name) {
     return c.json({ error: "Missing required fields" }, 400);
   }
 
   if (typeof body.amount_usdc !== "number" || body.amount_usdc < 0) {
     return c.json({ error: "Invalid amount_usdc" }, 400);
+  }
+
+  if (body.amount_usdc > 0 && (!body.tx_hash || !body.network)) {
+    return c.json(
+      { error: "Paid transactions require tx_hash and network" },
+      400,
+    );
   }
 
   if (!body.request_path) {
@@ -47,12 +55,13 @@ internalRoutes.post("/transactions", async (c) => {
 
   try {
     await enqueueTransactionRecording({
-      tx_hash: body.tx_hash,
+      ngx_request_id: body.ngx_request_id,
+      tx_hash: body.tx_hash ?? null,
       tenant_id: tenant.id,
       organization_id: tenant.organization_id,
       endpoint_id: body.endpoint_id ?? null,
       amount_usdc: body.amount_usdc,
-      network: body.network,
+      network: body.network ?? null,
       request_path: body.request_path,
     });
 

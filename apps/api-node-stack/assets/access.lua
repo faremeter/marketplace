@@ -148,6 +148,33 @@ end
 
 if scheme == "free" or price == 0 then
     ngx.log(ngx.INFO, "Free endpoint: ", tenant_name, " ", ngx.var.uri)
+    local free_ngx_request_id = ngx.var.request_id
+    local free_request_path = ngx.var.uri
+    local free_tenant_name = tenant_name
+    local free_endpoint_id = matched_endpoint_id
+    ngx.timer.at(0, function(premature)
+        if premature then return end
+        local free_body = cjson.encode({
+            ngx_request_id = free_ngx_request_id,
+            tx_hash = cjson.null,
+            tenant_name = free_tenant_name,
+            endpoint_id = free_endpoint_id or cjson.null,
+            amount_usdc = 0,
+            network = cjson.null,
+            request_path = free_request_path
+        })
+        local free_res, free_err = request_control_plane("/internal/transactions", {
+            method = "POST",
+            headers = { ["Content-Type"] = "application/json" },
+            body = free_body,
+            timeout = 5000
+        })
+        if not free_res then
+            ngx.log(ngx.ERR, "Failed to record free transaction: ", free_err)
+        elseif free_res.status ~= 200 then
+            ngx.log(ngx.WARN, "Free transaction recording returned status: ", free_res.status)
+        end
+    end)
     return
 end
 
@@ -373,6 +400,7 @@ ngx.log(ngx.INFO, "Tenant: ", tenant_name, " Request: ", ngx.req.get_method(), "
 -- Record transaction asynchronously (only if we have a tx_hash)
 local tx_hash = settle_response.txHash
 if tx_hash then
+    local tx_ngx_request_id = ngx.var.request_id
     local tx_network = matching_req.network
     local tx_amount = tonumber(price) or 0
     local tx_request_path = ngx.var.uri
@@ -381,6 +409,7 @@ if tx_hash then
     ngx.timer.at(0, function(premature)
         if premature then return end
         local tx_body = cjson.encode({
+            ngx_request_id = tx_ngx_request_id,
             tx_hash = tx_hash,
             tenant_name = tx_tenant_name,
             endpoint_id = tx_endpoint_id or cjson.null,
