@@ -1,7 +1,10 @@
 import { Hono } from "hono";
 import { db } from "../server.js";
+import { requireTenantAccess } from "../middleware/auth.js";
 
 export const transactionsRoutes = new Hono();
+
+transactionsRoutes.use("*", requireTenantAccess);
 
 transactionsRoutes.get("/", async (c) => {
   const tenantId = parseInt(c.req.param("tenantId") ?? "");

@@ -2,8 +2,11 @@ import { Hono } from "hono";
 import { db } from "../server.js";
 import { syncToNode } from "../lib/sync.js";
 import { logger } from "../logger.js";
+import { requireTenantAccess } from "../middleware/auth.js";
 
 export const openapiRoutes = new Hono();
+
+openapiRoutes.use("*", requireTenantAccess);
 
 interface OpenApiSpec {
   openapi?: string;

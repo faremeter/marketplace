@@ -111,3 +111,60 @@ export async function optionalAuth(c: Context, next: Next) {
 
   await next();
 }
+
+export async function requireTenantAccess(c: Context, next: Next) {
+  const token = getCookie(c, "auth_token");
+
+  if (!token) {
+    return c.json({ error: "Authentication required" }, 401);
+  }
+
+  const payload = verifyToken(token);
+  if (!payload) {
+    return c.json({ error: "Invalid or expired token" }, 401);
+  }
+
+  const user = await db
+    .selectFrom("users")
+    .select(["id", "email", "is_admin"])
+    .where("id", "=", payload.userId)
+    .executeTakeFirst();
+
+  if (!user) {
+    return c.json({ error: "User not found" }, 401);
+  }
+
+  if (user.is_admin) {
+    c.set("user", user);
+    return next();
+  }
+
+  const tenantId = parseInt(c.req.param("tenantId") ?? "");
+  if (!tenantId) {
+    return c.json({ error: "Tenant ID required" }, 400);
+  }
+
+  const tenant = await db
+    .selectFrom("tenants")
+    .select("organization_id")
+    .where("id", "=", tenantId)
+    .executeTakeFirst();
+
+  if (!tenant) {
+    return c.json({ error: "Tenant not found" }, 404);
+  }
+
+  const membership = await db
+    .selectFrom("user_organizations")
+    .select("role")
+    .where("user_id", "=", user.id)
+    .where("organization_id", "=", tenant.organization_id)
+    .executeTakeFirst();
+
+  if (!membership) {
+    return c.json({ error: "Access denied" }, 403);
+  }
+
+  c.set("user", user);
+  await next();
+}

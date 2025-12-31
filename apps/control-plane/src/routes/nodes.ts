@@ -4,8 +4,11 @@ import { regenWireguardConfig } from "../lib/wireguard.js";
 import { deleteNodeDnsRecord, deleteHealthCheck } from "../lib/dns.js";
 import { logger } from "../logger.js";
 import { enqueueCertProvisioning } from "../lib/queue.js";
+import { requireAdmin } from "../middleware/auth.js";
 
 export const nodesRoutes = new Hono();
+
+nodesRoutes.use("*", requireAdmin);
 
 nodesRoutes.get("/", async (c) => {
   const nodes = await db

@@ -11,8 +11,11 @@ import {
 } from "../lib/dns.js";
 import { enqueueCertProvisioning } from "../lib/queue.js";
 import { validateProxyName } from "../lib/proxy-name.js";
+import { requireAdmin } from "../middleware/auth.js";
 
 export const tenantsRoutes = new Hono();
+
+tenantsRoutes.use("*", requireAdmin);
 
 tenantsRoutes.get("/", async (c) => {
   const tenants = await db

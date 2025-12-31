@@ -3,6 +3,7 @@ import { db } from "../server.js";
 import { sql } from "kysely";
 import { syncToNode } from "../lib/sync.js";
 import { logger } from "../logger.js";
+import { requireTenantAccess } from "../middleware/auth.js";
 
 function processPathPattern(input: string): {
   path: string;
@@ -36,6 +37,8 @@ async function syncTenantNode(tenantId: number) {
 }
 
 export const endpointsRoutes = new Hono();
+
+endpointsRoutes.use("*", requireTenantAccess);
 
 endpointsRoutes.get("/", async (c) => {
   const tenantId = parseInt(c.req.param("tenantId") ?? "");
