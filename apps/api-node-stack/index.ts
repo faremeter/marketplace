@@ -33,6 +33,7 @@ new runner.SSHDeployer(
       WIREGUARD_DASHBOARD_PUBKEY: wgConfig.require("dashboardPublicKey"),
       WIREGUARD_DASHBOARD_ENDPOINT: wgConfig.require("dashboardEndpoint"),
       CONTROL_PLANE_ADDRS: cpConfig.require("addresses"),
+      CONTROL_PLANE_WG_PEERS: cpConfig.require("wgPeers"),
     },
     update: {
       payload: [

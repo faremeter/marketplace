@@ -118,14 +118,16 @@ EOF
     sudo systemctl enable --now wg-quick@wg0
 
     # Peers are managed dynamically from DB via wg-peers service
-    touch /etc/wireguard/wg1.conf
-    chmod 600 /etc/wireguard/wg1.conf
-    cat <<EOF >/etc/wireguard/wg1.conf
+    if [[ ! -f /etc/wireguard/wg1.conf ]]; then
+        touch /etc/wireguard/wg1.conf
+        chmod 600 /etc/wireguard/wg1.conf
+        cat <<EOF >/etc/wireguard/wg1.conf
 [Interface]
 Address = ${WIREGUARD_WG1_ADDRESS}/24
 ListenPort = 51821
 PrivateKey = ${WIREGUARD_PRIVATE_KEY}
 EOF
+    fi
     sudo systemctl enable --now wg-quick@wg1
 
     # Install wg-peers service for dynamic peer management

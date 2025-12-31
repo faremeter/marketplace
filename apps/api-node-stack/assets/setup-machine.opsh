@@ -48,21 +48,28 @@ Endpoint = dashboard.ops.corbits.dev:51820
 EOF
     sudo systemctl enable --now wg-quick@wg0
 
-    # wg1: Connect to control-plane for config API (spoke)
+    # wg1: Connect to control-plane instances for config API (spoke)
     touch /etc/wireguard/wg1.conf
     chmod 600 /etc/wireguard/wg1.conf
     cat <<EOF >/etc/wireguard/wg1.conf
 [Interface]
 Address = ${WIREGUARD_WG1_ADDRESS}/24
 PrivateKey = ${WIREGUARD_PRIVATE_KEY}
+EOF
+    IFS=',' read -ra PEERS <<< "$CONTROL_PLANE_WG_PEERS"
+    for peer in "${PEERS[@]}"; do
+        IFS=':' read -r pubkey ip endpoint <<< "$peer"
+        cat <<EOF >>/etc/wireguard/wg1.conf
 
 [Peer]
-PublicKey = heo6hRHHhpFuW92u5GmHgZFZxYfsL6cM6gbmaJbK72k=
-AllowedIPs = 10.12.0.0/24
-Endpoint = api.corbits.dev:51821
+PublicKey = ${pubkey}
+AllowedIPs = ${ip}/32
+Endpoint = ${endpoint}:51821
 PersistentKeepalive = 25
 EOF
-    sudo systemctl enable --now wg-quick@wg1
+    done
+    sudo systemctl enable wg-quick@wg1
+    sudo systemctl restart wg-quick@wg1
 }
 
 step::30::setup-alloy() {
