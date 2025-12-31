@@ -3,7 +3,11 @@ import { getCookie } from "hono/cookie";
 import jwt from "jsonwebtoken";
 import { db } from "../server.js";
 
-const JWT_SECRET = process.env.JWT_SECRET || "dev-secret-change-in-production";
+if (!process.env.JWT_SECRET) {
+  throw new Error("JWT_SECRET environment variable is required");
+}
+
+const JWT_SECRET = process.env.JWT_SECRET;
 
 export interface JwtPayload {
   userId: number;
