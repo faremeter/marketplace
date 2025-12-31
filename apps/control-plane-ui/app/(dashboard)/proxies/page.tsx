@@ -18,12 +18,11 @@ import { InlineAuthEdit } from "@/components/shared/inline-auth-edit";
 import { InlineActiveToggle } from "@/components/shared/inline-active-toggle";
 import { InlineWalletSelect } from "@/components/shared/inline-wallet-select";
 import { CreateUserTenantDialog } from "@/components/tenants/create-user-tenant-dialog";
-
-interface TenantNode {
-  id: number;
-  cert_status: string | null;
-  is_primary: boolean;
-}
+import {
+  type TenantNode,
+  getTenantStatus,
+  isDeleteDisabled,
+} from "@/lib/tenant-status";
 
 interface Tenant {
   id: number;
@@ -38,68 +37,6 @@ interface Tenant {
   upstream_auth_value: string | null;
   nodes: TenantNode[];
   created_at: string;
-}
-
-function getStatus(tenant: Tenant): {
-  label: string;
-  color: string;
-  pulse: boolean;
-} {
-  if (tenant.status === "deleting") {
-    return {
-      label: "Deleting",
-      color: "bg-red-900/50 text-red-400 border-red-800",
-      pulse: true,
-    };
-  }
-
-  if (tenant.status === "failed") {
-    return {
-      label: "Pending",
-      color: "bg-yellow-900/50 text-yellow-400 border-yellow-800",
-      pulse: true,
-    };
-  }
-
-  const hasCertPending = tenant.nodes.some((n) => n.cert_status === "pending");
-
-  if (hasCertPending) {
-    return {
-      label: "Provisioning",
-      color: "bg-yellow-900/50 text-yellow-400 border-yellow-800",
-      pulse: true,
-    };
-  }
-
-  if (!tenant.wallet_id) {
-    return {
-      label: "No Wallet",
-      color: "bg-red-900/50 text-red-400 border-red-800",
-      pulse: false,
-    };
-  }
-
-  if (tenant.wallet_funding_status !== "funded") {
-    return {
-      label: "Unfunded",
-      color: "bg-yellow-900/50 text-yellow-400 border-yellow-800",
-      pulse: false,
-    };
-  }
-
-  if (!tenant.is_active) {
-    return {
-      label: "Inactive",
-      color: "bg-gray-800/50 text-gray-400 border-gray-700",
-      pulse: false,
-    };
-  }
-
-  return {
-    label: "Ready",
-    color: "bg-green-900/50 text-green-400 border-green-800",
-    pulse: false,
-  };
 }
 
 export default function TenantsPage() {
@@ -280,7 +217,7 @@ export default function TenantsPage() {
             </thead>
             <tbody className="divide-y divide-gray-6 bg-gray-2">
               {tenants.map((tenant) => {
-                const status = getStatus(tenant);
+                const status = getTenantStatus(tenant);
                 const apiEndpoint = `/api/organizations/${currentOrg.id}/tenants/${tenant.id}`;
                 return (
                   <tr key={tenant.id} className="hover:bg-gray-3">
@@ -354,11 +291,10 @@ export default function TenantsPage() {
                         </Link>
                         <button
                           onClick={() => handleDeleteClick(tenant)}
-                          disabled={
-                            deletingId === tenant.id ||
-                            tenant.status === "pending" ||
-                            tenant.status === "deleting"
-                          }
+                          disabled={isDeleteDisabled(
+                            tenant,
+                            deletingId === tenant.id,
+                          )}
                           className="rounded p-1.5 text-gray-11 hover:bg-red-900/30 hover:text-red-400 disabled:opacity-50"
                           title="Delete proxy"
                         >

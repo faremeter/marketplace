@@ -621,16 +621,25 @@ adminRoutes.delete("/tenants/:id", async (c) => {
     return c.json({ error: "Tenant not found" }, 404);
   }
 
-  // Check tenant status
-  if (tenant.status === "pending") {
-    return c.json(
-      { error: "Cannot delete tenant while initialization is in progress" },
-      400,
-    );
-  }
-
   if (tenant.status === "deleting") {
     return c.json({ error: "Tenant is already being deleted" }, 400);
+  }
+
+  const tenantNodes = await db
+    .selectFrom("tenant_nodes")
+    .select(["cert_status"])
+    .where("tenant_id", "=", id)
+    .execute();
+
+  const hasCertInFlight = tenantNodes.some(
+    (n) => n.cert_status === "pending" || n.cert_status === "deleting",
+  );
+
+  if (hasCertInFlight) {
+    return c.json(
+      { error: "Cannot delete while certificate operations are in progress" },
+      400,
+    );
   }
 
   // Set status to deleting

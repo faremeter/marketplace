@@ -578,15 +578,25 @@ organizationsRoutes.delete("/:id/tenants/:tenantId", async (c) => {
     return c.json({ error: "Proxy not found" }, 404);
   }
 
-  if (tenant.status === "pending") {
-    return c.json(
-      { error: "Cannot delete proxy while initialization is in progress" },
-      400,
-    );
-  }
-
   if (tenant.status === "deleting") {
     return c.json({ error: "Proxy is already being deleted" }, 400);
+  }
+
+  const tenantNodes = await db
+    .selectFrom("tenant_nodes")
+    .select(["cert_status"])
+    .where("tenant_id", "=", tenantId)
+    .execute();
+
+  const hasCertInFlight = tenantNodes.some(
+    (n) => n.cert_status === "pending" || n.cert_status === "deleting",
+  );
+
+  if (hasCertInFlight) {
+    return c.json(
+      { error: "Cannot delete while certificate operations are in progress" },
+      400,
+    );
   }
 
   await db
