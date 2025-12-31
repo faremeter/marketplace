@@ -192,7 +192,8 @@ if [ -f "$CONFIG_FILE" ] && [ -s "$CONFIG_FILE" ]; then
 
 # TLS server block for tenant: ${tenant}
 server {
-    listen 443 ssl http2;
+    listen 443 ssl;
+    http2 on;
     server_name ${tenant}.test.api.corbits.dev ${tenant}.test.api.corbits.io ${tenant}.api.corbits.dev ${tenant}.api.corbits.io;
 
     ssl_certificate ${CERT_PATH}/fullchain.pem;
