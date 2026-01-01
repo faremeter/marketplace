@@ -5,6 +5,8 @@ import { deleteNodeDnsRecord, deleteHealthCheck } from "../lib/dns.js";
 import { logger } from "../logger.js";
 import { enqueueCertProvisioning } from "../lib/queue.js";
 import { requireAdmin } from "../middleware/auth.js";
+import { arktypeValidator } from "@hono/arktype-validator";
+import { CreateNodeSchema, UpdateNodeSchema } from "../lib/schemas.js";
 
 export const nodesRoutes = new Hono();
 
@@ -33,8 +35,8 @@ nodesRoutes.get("/:id", async (c) => {
   return c.json(node);
 });
 
-nodesRoutes.post("/", async (c) => {
-  const body = await c.req.json();
+nodesRoutes.post("/", arktypeValidator("json", CreateNodeSchema), async (c) => {
+  const body = c.req.valid("json");
 
   const result = await db
     .insertInto("nodes")
@@ -148,56 +150,61 @@ nodesRoutes.get("/:id/sync", async (c) => {
   });
 });
 
-nodesRoutes.put("/:id", async (c) => {
-  const id = parseInt(c.req.param("id"));
-  const body = await c.req.json();
+nodesRoutes.put(
+  "/:id",
+  arktypeValidator("json", UpdateNodeSchema),
+  async (c) => {
+    const id = parseInt(c.req.param("id"));
+    const body = c.req.valid("json");
 
-  const updateData: Record<string, unknown> = {};
-  if (body.name !== undefined) updateData.name = body.name;
-  if (body.internal_ip !== undefined) updateData.internal_ip = body.internal_ip;
-  if (body.public_ip !== undefined) updateData.public_ip = body.public_ip;
-  if (body.status !== undefined) updateData.status = body.status;
-  if (body.wireguard_public_key !== undefined)
-    updateData.wireguard_public_key = body.wireguard_public_key;
-  if (body.wireguard_address !== undefined)
-    updateData.wireguard_address = body.wireguard_address;
+    const updateData: Record<string, unknown> = {};
+    if (body.name !== undefined) updateData.name = body.name;
+    if (body.internal_ip !== undefined)
+      updateData.internal_ip = body.internal_ip;
+    if (body.public_ip !== undefined) updateData.public_ip = body.public_ip;
+    if (body.status !== undefined) updateData.status = body.status;
+    if (body.wireguard_public_key !== undefined)
+      updateData.wireguard_public_key = body.wireguard_public_key;
+    if (body.wireguard_address !== undefined)
+      updateData.wireguard_address = body.wireguard_address;
 
-  const result = await db
-    .updateTable("nodes")
-    .set(updateData)
-    .where("id", "=", id)
-    .returningAll()
-    .executeTakeFirst();
+    const result = await db
+      .updateTable("nodes")
+      .set(updateData)
+      .where("id", "=", id)
+      .returningAll()
+      .executeTakeFirst();
 
-  if (!result) {
-    return c.json({ error: "Node not found" }, 404);
-  }
-
-  if (
-    body.wireguard_public_key !== undefined ||
-    body.wireguard_address !== undefined ||
-    body.status !== undefined
-  ) {
-    await regenWireguardConfig();
-  }
-
-  if (body.status === "active") {
-    const assignedTenants = await db
-      .selectFrom("tenant_nodes")
-      .innerJoin("tenants", "tenants.id", "tenant_nodes.tenant_id")
-      .select(["tenants.name"])
-      .where("tenant_nodes.node_id", "=", id)
-      .execute();
-
-    for (const { name } of assignedTenants) {
-      enqueueCertProvisioning([id], name).catch((err) =>
-        logger.error(`Failed to enqueue cert provisioning: ${err}`),
-      );
+    if (!result) {
+      return c.json({ error: "Node not found" }, 404);
     }
-  }
 
-  return c.json(result);
-});
+    if (
+      body.wireguard_public_key !== undefined ||
+      body.wireguard_address !== undefined ||
+      body.status !== undefined
+    ) {
+      await regenWireguardConfig();
+    }
+
+    if (body.status === "active") {
+      const assignedTenants = await db
+        .selectFrom("tenant_nodes")
+        .innerJoin("tenants", "tenants.id", "tenant_nodes.tenant_id")
+        .select(["tenants.name"])
+        .where("tenant_nodes.node_id", "=", id)
+        .execute();
+
+      for (const { name } of assignedTenants) {
+        enqueueCertProvisioning([id], name).catch((err) =>
+          logger.error(`Failed to enqueue cert provisioning: ${err}`),
+        );
+      }
+    }
+
+    return c.json(result);
+  },
+);
 
 nodesRoutes.delete("/:id", async (c) => {
   const id = parseInt(c.req.param("id"));

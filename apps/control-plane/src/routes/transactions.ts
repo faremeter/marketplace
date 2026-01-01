@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import { db } from "../server.js";
 import { requireTenantAccess } from "../middleware/auth.js";
+import { parsePagination } from "../lib/validation.js";
 
 export const transactionsRoutes = new Hono();
 
@@ -8,8 +9,10 @@ transactionsRoutes.use("*", requireTenantAccess);
 
 transactionsRoutes.get("/", async (c) => {
   const tenantId = parseInt(c.req.param("tenantId") ?? "");
-  const limit = parseInt(c.req.query("limit") ?? "50");
-  const offset = parseInt(c.req.query("offset") ?? "0");
+  const { limit, offset } = parsePagination(
+    c.req.query("limit"),
+    c.req.query("offset"),
+  );
   const from = c.req.query("from");
   const to = c.req.query("to");
 

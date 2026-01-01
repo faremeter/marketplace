@@ -9,6 +9,8 @@ import {
 } from "../lib/balances.js";
 import { enqueueBalanceCheck } from "../lib/queue.js";
 import { logger } from "../logger.js";
+import { arktypeValidator } from "@hono/arktype-validator";
+import { CreateWalletSchema, UpdateWalletSchema } from "../lib/schemas.js";
 
 export const walletsRoutes = new Hono();
 
@@ -181,141 +183,141 @@ walletsRoutes.get("/:id/balances", async (c) => {
 });
 
 // Create wallet for an organization
-walletsRoutes.post("/organization/:orgId", async (c) => {
-  const user = c.get("user");
-  const orgId = parseInt(c.req.param("orgId"));
-  const body = await c.req.json();
+walletsRoutes.post(
+  "/organization/:orgId",
+  arktypeValidator("json", CreateWalletSchema),
+  async (c) => {
+    const user = c.get("user");
+    const orgId = parseInt(c.req.param("orgId"));
+    const body = c.req.valid("json");
 
-  // Check membership and owner role
-  if (!user.is_admin) {
-    const membership = await db
-      .selectFrom("user_organizations")
-      .select("role")
-      .where("user_id", "=", user.id)
-      .where("organization_id", "=", orgId)
-      .executeTakeFirst();
+    // Check membership and owner role
+    if (!user.is_admin) {
+      const membership = await db
+        .selectFrom("user_organizations")
+        .select("role")
+        .where("user_id", "=", user.id)
+        .where("organization_id", "=", orgId)
+        .executeTakeFirst();
 
-    if (!membership) {
-      return c.json({ error: "Organization not found" }, 404);
+      if (!membership) {
+        return c.json({ error: "Organization not found" }, 404);
+      }
+
+      if (membership.role !== "owner") {
+        return c.json(
+          { error: "Only organization owners can create wallets" },
+          403,
+        );
+      }
     }
 
-    if (membership.role !== "owner") {
-      return c.json(
-        { error: "Only organization owners can create wallets" },
-        403,
-      );
+    const walletConfig = body.wallet_config as WalletConfig;
+    const addresses = extractAddresses(walletConfig);
+
+    if (!addresses.solana && !addresses.evm) {
+      return c.json({ error: "At least one wallet address is required" }, 400);
     }
-  }
 
-  if (!body.name?.trim()) {
-    return c.json({ error: "Wallet name is required" }, 400);
-  }
+    const wallet = await db
+      .insertInto("wallets")
+      .values({
+        organization_id: orgId,
+        name: body.name,
+        wallet_config: JSON.stringify(body.wallet_config),
+        funding_status: "pending",
+      })
+      .returningAll()
+      .executeTakeFirstOrThrow();
 
-  if (!body.wallet_config) {
-    return c.json({ error: "Wallet config is required" }, 400);
-  }
-
-  const walletConfig = body.wallet_config as WalletConfig;
-  const addresses = extractAddresses(walletConfig);
-
-  if (!addresses.solana && !addresses.evm) {
-    return c.json({ error: "At least one wallet address is required" }, 400);
-  }
-
-  const wallet = await db
-    .insertInto("wallets")
-    .values({
-      organization_id: orgId,
-      name: body.name.trim(),
-      wallet_config: JSON.stringify(body.wallet_config),
-      funding_status: "pending",
-    })
-    .returningAll()
-    .executeTakeFirstOrThrow();
-
-  // Enqueue balance check
-  if (addresses.solana) {
-    enqueueBalanceCheck(wallet.id, addresses.solana).catch((err) => {
-      logger.error(
-        `Failed to enqueue balance check for wallet ${wallet.id}: ${err}`,
-      );
-    });
-  }
-
-  return c.json(wallet, 201);
-});
-
-// Update wallet
-walletsRoutes.put("/:id", async (c) => {
-  const user = c.get("user");
-  const id = parseInt(c.req.param("id"));
-  const body = await c.req.json();
-
-  const wallet = await db
-    .selectFrom("wallets")
-    .selectAll()
-    .where("id", "=", id)
-    .executeTakeFirst();
-
-  if (!wallet) {
-    return c.json({ error: "Wallet not found" }, 404);
-  }
-
-  // Check access
-  if (!user.is_admin && wallet.organization_id) {
-    const membership = await db
-      .selectFrom("user_organizations")
-      .select("role")
-      .where("user_id", "=", user.id)
-      .where("organization_id", "=", wallet.organization_id)
-      .executeTakeFirst();
-
-    if (!membership || membership.role !== "owner") {
-      return c.json(
-        { error: "Only organization owners can update wallets" },
-        403,
-      );
-    }
-  }
-
-  if (!user.is_admin && wallet.organization_id === null) {
-    return c.json({ error: "Wallet not found" }, 404);
-  }
-
-  const updateData: Record<string, unknown> = {};
-  if (body.name !== undefined) updateData.name = body.name;
-  if (body.wallet_config !== undefined) {
-    updateData.wallet_config = JSON.stringify(body.wallet_config);
-    updateData.funding_status = "pending"; // Reset funding status on config change
-    updateData.cached_balances = null; // Clear balance cache
-    updateData.balances_cached_at = null;
-  }
-
-  if (Object.keys(updateData).length === 0) {
-    return c.json(wallet);
-  }
-
-  const updated = await db
-    .updateTable("wallets")
-    .set(updateData)
-    .where("id", "=", id)
-    .returningAll()
-    .executeTakeFirstOrThrow();
-
-  // Re-enqueue balance check if config changed
-  if (body.wallet_config) {
-    const addresses = extractAddresses(body.wallet_config as WalletConfig);
+    // Enqueue balance check
     if (addresses.solana) {
-      enqueueBalanceCheck(updated.id, addresses.solana).catch((err) => {
+      enqueueBalanceCheck(wallet.id, addresses.solana).catch((err) => {
         logger.error(
-          `Failed to enqueue balance check for wallet ${updated.id}: ${err}`,
+          `Failed to enqueue balance check for wallet ${wallet.id}: ${err}`,
         );
       });
     }
-  }
 
-  return c.json(updated);
-});
+    return c.json(wallet, 201);
+  },
+);
+
+// Update wallet
+walletsRoutes.put(
+  "/:id",
+  arktypeValidator("json", UpdateWalletSchema),
+  async (c) => {
+    const user = c.get("user");
+    const id = parseInt(c.req.param("id"));
+    const body = c.req.valid("json");
+
+    const wallet = await db
+      .selectFrom("wallets")
+      .selectAll()
+      .where("id", "=", id)
+      .executeTakeFirst();
+
+    if (!wallet) {
+      return c.json({ error: "Wallet not found" }, 404);
+    }
+
+    // Check access
+    if (!user.is_admin && wallet.organization_id) {
+      const membership = await db
+        .selectFrom("user_organizations")
+        .select("role")
+        .where("user_id", "=", user.id)
+        .where("organization_id", "=", wallet.organization_id)
+        .executeTakeFirst();
+
+      if (!membership || membership.role !== "owner") {
+        return c.json(
+          { error: "Only organization owners can update wallets" },
+          403,
+        );
+      }
+    }
+
+    if (!user.is_admin && wallet.organization_id === null) {
+      return c.json({ error: "Wallet not found" }, 404);
+    }
+
+    const updateData: Record<string, unknown> = {};
+    if (body.name !== undefined) updateData.name = body.name;
+    if (body.wallet_config !== undefined) {
+      updateData.wallet_config = JSON.stringify(body.wallet_config);
+      updateData.funding_status = "pending"; // Reset funding status on config change
+      updateData.cached_balances = null; // Clear balance cache
+      updateData.balances_cached_at = null;
+    }
+
+    if (Object.keys(updateData).length === 0) {
+      return c.json(wallet);
+    }
+
+    const updated = await db
+      .updateTable("wallets")
+      .set(updateData)
+      .where("id", "=", id)
+      .returningAll()
+      .executeTakeFirstOrThrow();
+
+    // Re-enqueue balance check if config changed
+    if (body.wallet_config) {
+      const addresses = extractAddresses(body.wallet_config as WalletConfig);
+      if (addresses.solana) {
+        enqueueBalanceCheck(updated.id, addresses.solana).catch((err) => {
+          logger.error(
+            `Failed to enqueue balance check for wallet ${updated.id}: ${err}`,
+          );
+        });
+      }
+    }
+
+    return c.json(updated);
+  },
+);
 
 // Delete wallet
 walletsRoutes.delete("/:id", async (c) => {
@@ -384,27 +386,24 @@ walletsRoutes.get("/admin/master", requireAdmin, async (c) => {
   return c.json(masterWallets);
 });
 
-walletsRoutes.post("/admin/master", requireAdmin, async (c) => {
-  const body = await c.req.json();
+walletsRoutes.post(
+  "/admin/master",
+  requireAdmin,
+  arktypeValidator("json", CreateWalletSchema),
+  async (c) => {
+    const body = c.req.valid("json");
 
-  if (!body.name?.trim()) {
-    return c.json({ error: "Wallet name is required" }, 400);
-  }
+    const wallet = await db
+      .insertInto("wallets")
+      .values({
+        organization_id: null,
+        name: body.name,
+        wallet_config: JSON.stringify(body.wallet_config),
+        funding_status: "funded",
+      })
+      .returningAll()
+      .executeTakeFirstOrThrow();
 
-  if (!body.wallet_config) {
-    return c.json({ error: "Wallet config is required" }, 400);
-  }
-
-  const wallet = await db
-    .insertInto("wallets")
-    .values({
-      organization_id: null,
-      name: body.name.trim(),
-      wallet_config: JSON.stringify(body.wallet_config),
-      funding_status: "funded",
-    })
-    .returningAll()
-    .executeTakeFirstOrThrow();
-
-  return c.json(wallet, 201);
-});
+    return c.json(wallet, 201);
+  },
+);

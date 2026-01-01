@@ -14,10 +14,12 @@
   "dependencies": {
     "@aws-sdk/client-route-53": "^3.948.0",
     "@faremeter/info": "^0.15.0",
+    "@hono/arktype-validator": "^2.0.1",
     "@hono/node-server": "^1.19.5",
     "@logtape/logtape": "^1.2.2",
     "@solana/spl-token": "^0.4.14",
     "@solana/web3.js": "^1.98.4",
+    "arktype": "^2.1.29",
     "bcrypt": "^5.1.1",
     "bs58": "^6.0.0",
     "dotenv": "^17.2.1",
@@ -26,6 +28,7 @@
     "kysely": "^0.27.4",
     "pg": "^8.13.1",
     "pg-boss": "^10.1.5",
+    "safe-regex2": "^5.0.0",
     "viem": "^2.41.2"
   },
   "devDependencies": {

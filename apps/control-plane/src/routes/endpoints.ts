@@ -1,6 +1,10 @@
 import { Hono } from "hono";
 import { db } from "../server.js";
 import { sql } from "kysely";
+import safe from "safe-regex2";
+import { arktypeValidator } from "@hono/arktype-validator";
+import { parsePagination } from "../lib/validation.js";
+import { CreateEndpointSchema, UpdateEndpointSchema } from "../lib/schemas.js";
 import { syncToNode } from "../lib/sync.js";
 import { logger } from "../logger.js";
 import { requireTenantAccess } from "../middleware/auth.js";
@@ -8,9 +12,17 @@ import { requireTenantAccess } from "../middleware/auth.js";
 function processPathPattern(input: string): {
   path: string;
   path_pattern: string;
+  error?: string;
 } {
   // Already regex (starts with ^)
   if (input.startsWith("^")) {
+    if (!safe(input)) {
+      return {
+        path: input,
+        path_pattern: input,
+        error: "Regex pattern may cause performance issues",
+      };
+    }
     return { path: input, path_pattern: input };
   }
 
@@ -76,81 +88,96 @@ endpointsRoutes.get("/:id", async (c) => {
   return c.json(endpoint);
 });
 
-endpointsRoutes.post("/", async (c) => {
-  const tenantId = parseInt(c.req.param("tenantId") ?? "");
-  const body = await c.req.json();
+endpointsRoutes.post(
+  "/",
+  arktypeValidator("json", CreateEndpointSchema),
+  async (c) => {
+    const tenantId = parseInt(c.req.param("tenantId") ?? "");
+    const body = c.req.valid("json");
 
-  const inputPath = body.path ?? body.path_pattern;
+    const inputPath = body.path ?? body.path_pattern;
 
-  const catchAllPatterns = ["/", "/*", "^/$", "^/.*$"];
-  if (catchAllPatterns.includes(inputPath)) {
-    return c.json(
-      {
-        error:
-          "Cannot create catch-all endpoint. Use the default pricing instead.",
-      },
-      400,
-    );
-  }
+    const catchAllPatterns = ["/", "/*", "^/$", "^/.*$"];
+    if (catchAllPatterns.includes(inputPath)) {
+      return c.json(
+        {
+          error:
+            "Cannot create catch-all endpoint. Use the default pricing instead.",
+        },
+        400,
+      );
+    }
 
-  const processed = processPathPattern(inputPath);
+    const processed = processPathPattern(inputPath);
+    if (processed.error) {
+      return c.json({ error: processed.error }, 400);
+    }
 
-  const result = await db
-    .insertInto("endpoints")
-    .values({
-      tenant_id: tenantId,
-      path: processed.path,
-      path_pattern: processed.path_pattern,
-      price_usdc: body.price_usdc ?? null,
-      scheme: body.scheme ?? null,
-      description: body.description ?? null,
-      priority: body.priority ?? 100,
-      is_active: true,
-      openapi_source_paths: body.openapi_source_paths ?? null,
-    })
-    .returningAll()
-    .executeTakeFirstOrThrow();
+    const result = await db
+      .insertInto("endpoints")
+      .values({
+        tenant_id: tenantId,
+        path: processed.path,
+        path_pattern: processed.path_pattern,
+        price_usdc: body.price_usdc ?? null,
+        scheme: body.scheme ?? null,
+        description: body.description ?? null,
+        priority: body.priority ?? 100,
+        is_active: true,
+        openapi_source_paths: body.openapi_source_paths,
+      })
+      .returningAll()
+      .executeTakeFirstOrThrow();
 
-  syncTenantNode(tenantId);
+    syncTenantNode(tenantId);
 
-  return c.json(result, 201);
-});
+    return c.json(result, 201);
+  },
+);
 
-endpointsRoutes.put("/:id", async (c) => {
-  const tenantId = parseInt(c.req.param("tenantId") ?? "");
-  const id = parseInt(c.req.param("id"));
-  const body = await c.req.json();
+endpointsRoutes.put(
+  "/:id",
+  arktypeValidator("json", UpdateEndpointSchema),
+  async (c) => {
+    const tenantId = parseInt(c.req.param("tenantId") ?? "");
+    const id = parseInt(c.req.param("id"));
+    const body = c.req.valid("json");
 
-  const updateData: Record<string, unknown> = {};
-  if (body.path !== undefined) {
-    const processed = processPathPattern(body.path);
-    updateData.path = processed.path;
-    updateData.path_pattern = processed.path_pattern;
-  }
-  if (body.openapi_source_paths !== undefined)
-    updateData.openapi_source_paths = body.openapi_source_paths;
-  if (body.price_usdc !== undefined) updateData.price_usdc = body.price_usdc;
-  if (body.scheme !== undefined) updateData.scheme = body.scheme;
-  if (body.description !== undefined) updateData.description = body.description;
-  if (body.priority !== undefined) updateData.priority = body.priority;
-  if (body.is_active !== undefined) updateData.is_active = body.is_active;
+    const updateData: Record<string, unknown> = {};
+    if (body.path !== undefined) {
+      const processed = processPathPattern(body.path);
+      if (processed.error) {
+        return c.json({ error: processed.error }, 400);
+      }
+      updateData.path = processed.path;
+      updateData.path_pattern = processed.path_pattern;
+    }
+    if (body.openapi_source_paths !== undefined)
+      updateData.openapi_source_paths = body.openapi_source_paths;
+    if (body.price_usdc !== undefined) updateData.price_usdc = body.price_usdc;
+    if (body.scheme !== undefined) updateData.scheme = body.scheme;
+    if (body.description !== undefined)
+      updateData.description = body.description;
+    if (body.priority !== undefined) updateData.priority = body.priority;
+    if (body.is_active !== undefined) updateData.is_active = body.is_active;
 
-  const result = await db
-    .updateTable("endpoints")
-    .set(updateData)
-    .where("id", "=", id)
-    .where("tenant_id", "=", tenantId)
-    .returningAll()
-    .executeTakeFirst();
+    const result = await db
+      .updateTable("endpoints")
+      .set(updateData)
+      .where("id", "=", id)
+      .where("tenant_id", "=", tenantId)
+      .returningAll()
+      .executeTakeFirst();
 
-  if (!result) {
-    return c.json({ error: "Endpoint not found" }, 404);
-  }
+    if (!result) {
+      return c.json({ error: "Endpoint not found" }, 404);
+    }
 
-  syncTenantNode(tenantId);
+    syncTenantNode(tenantId);
 
-  return c.json(result);
-});
+    return c.json(result);
+  },
+);
 
 endpointsRoutes.delete("/:id", async (c) => {
   const tenantId = parseInt(c.req.param("tenantId") ?? "");
@@ -223,8 +250,10 @@ endpointsRoutes.get("/:id/stats", async (c) => {
 endpointsRoutes.get("/:id/transactions", async (c) => {
   const tenantId = parseInt(c.req.param("tenantId") ?? "");
   const id = parseInt(c.req.param("id"));
-  const limit = parseInt(c.req.query("limit") ?? "50");
-  const offset = parseInt(c.req.query("offset") ?? "0");
+  const { limit, offset } = parsePagination(
+    c.req.query("limit"),
+    c.req.query("offset"),
+  );
 
   const endpoint = await db
     .selectFrom("endpoints")

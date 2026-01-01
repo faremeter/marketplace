@@ -31,6 +31,14 @@ import {
   getEarningsByPeriod,
   type Granularity,
 } from "../lib/analytics.js";
+import { arktypeValidator } from "@hono/arktype-validator";
+import {
+  OrgCreateTenantSchema,
+  OrgUpdateTenantSchema,
+  AddMemberSchema,
+  CreateOrganizationSchema,
+  UpdateOrganizationSchema,
+} from "../lib/schemas.js";
 
 export const organizationsRoutes = new Hono();
 
@@ -69,61 +77,63 @@ organizationsRoutes.get("/", async (c) => {
 
 const MAX_ORGS_PER_USER = 5;
 
-organizationsRoutes.post("/", async (c) => {
-  const user = c.get("user");
-  const body = await c.req.json();
+organizationsRoutes.post(
+  "/",
+  arktypeValidator("json", CreateOrganizationSchema),
+  async (c) => {
+    const user = c.get("user");
+    const body = c.req.valid("json");
 
-  if (!body.name) {
-    return c.json({ error: "Organization name is required" }, 400);
-  }
+    // Check org limit
+    const orgCount = await db
+      .selectFrom("user_organizations")
+      .select((eb) => eb.fn.count<number>("id").as("count"))
+      .where("user_id", "=", user.id)
+      .where("role", "=", "owner")
+      .executeTakeFirstOrThrow();
 
-  // Check org limit
-  const orgCount = await db
-    .selectFrom("user_organizations")
-    .select((eb) => eb.fn.count<number>("id").as("count"))
-    .where("user_id", "=", user.id)
-    .where("role", "=", "owner")
-    .executeTakeFirstOrThrow();
+    if (orgCount.count >= MAX_ORGS_PER_USER) {
+      return c.json(
+        {
+          error: `You can only create up to ${MAX_ORGS_PER_USER} organizations`,
+        },
+        400,
+      );
+    }
 
-  if (orgCount.count >= MAX_ORGS_PER_USER) {
-    return c.json(
-      { error: `You can only create up to ${MAX_ORGS_PER_USER} organizations` },
-      400,
-    );
-  }
+    let slug = body.slug || slugify(body.name);
 
-  let slug = body.slug || slugify(body.name);
+    const existingSlug = await db
+      .selectFrom("organizations")
+      .select("id")
+      .where("slug", "=", slug)
+      .executeTakeFirst();
 
-  const existingSlug = await db
-    .selectFrom("organizations")
-    .select("id")
-    .where("slug", "=", slug)
-    .executeTakeFirst();
+    if (existingSlug) {
+      slug = `${slug}-${Date.now()}`;
+    }
 
-  if (existingSlug) {
-    slug = `${slug}-${Date.now()}`;
-  }
+    const org = await db
+      .insertInto("organizations")
+      .values({
+        name: body.name,
+        slug,
+      })
+      .returningAll()
+      .executeTakeFirstOrThrow();
 
-  const org = await db
-    .insertInto("organizations")
-    .values({
-      name: body.name,
-      slug,
-    })
-    .returningAll()
-    .executeTakeFirstOrThrow();
+    await db
+      .insertInto("user_organizations")
+      .values({
+        user_id: user.id,
+        organization_id: org.id,
+        role: "owner",
+      })
+      .execute();
 
-  await db
-    .insertInto("user_organizations")
-    .values({
-      user_id: user.id,
-      organization_id: org.id,
-      role: "owner",
-    })
-    .execute();
-
-  return c.json({ ...org, role: "owner" }, 201);
-});
+    return c.json({ ...org, role: "owner" }, 201);
+  },
+);
 
 organizationsRoutes.get("/:id", async (c) => {
   const user = c.get("user");
@@ -153,55 +163,61 @@ organizationsRoutes.get("/:id", async (c) => {
   return c.json({ ...org, role: membership?.role || "admin" });
 });
 
-organizationsRoutes.put("/:id", async (c) => {
-  const user = c.get("user");
-  const id = parseInt(c.req.param("id"));
-  const body = await c.req.json();
+organizationsRoutes.put(
+  "/:id",
+  arktypeValidator("json", UpdateOrganizationSchema),
+  async (c) => {
+    const user = c.get("user");
+    const id = parseInt(c.req.param("id"));
+    const body = c.req.valid("json");
 
-  const membership = await db
-    .selectFrom("user_organizations")
-    .select("role")
-    .where("user_id", "=", user.id)
-    .where("organization_id", "=", id)
-    .executeTakeFirst();
-
-  if (!membership && !user.is_admin) {
-    return c.json({ error: "Organization not found" }, 404);
-  }
-
-  if (membership && membership.role !== "owner" && !user.is_admin) {
-    return c.json({ error: "Only owners can update the organization" }, 403);
-  }
-
-  const updateData: Record<string, unknown> = {};
-  if (body.name !== undefined) updateData.name = body.name;
-  if (body.slug !== undefined) {
-    const existingSlug = await db
-      .selectFrom("organizations")
-      .select("id")
-      .where("slug", "=", body.slug)
-      .where("id", "!=", id)
+    const membership = await db
+      .selectFrom("user_organizations")
+      .select("role")
+      .where("user_id", "=", user.id)
+      .where("organization_id", "=", id)
       .executeTakeFirst();
 
-    if (existingSlug) {
-      return c.json({ error: "Slug already in use" }, 409);
+    if (!membership && !user.is_admin) {
+      return c.json({ error: "Organization not found" }, 404);
     }
-    updateData.slug = body.slug;
-  }
 
-  const org = await db
-    .updateTable("organizations")
-    .set(updateData)
-    .where("id", "=", id)
-    .returningAll()
-    .executeTakeFirst();
+    if (membership && membership.role !== "owner" && !user.is_admin) {
+      return c.json({ error: "Only owners can update the organization" }, 403);
+    }
 
-  if (!org) {
-    return c.json({ error: "Organization not found" }, 404);
-  }
+    const updateData: Record<string, unknown> = {};
+    if (body.name !== undefined) {
+      updateData.name = body.name.trim();
+    }
+    if (body.slug !== undefined) {
+      const existingSlug = await db
+        .selectFrom("organizations")
+        .select("id")
+        .where("slug", "=", body.slug)
+        .where("id", "!=", id)
+        .executeTakeFirst();
 
-  return c.json(org);
-});
+      if (existingSlug) {
+        return c.json({ error: "Slug already in use" }, 409);
+      }
+      updateData.slug = body.slug;
+    }
+
+    const org = await db
+      .updateTable("organizations")
+      .set(updateData)
+      .where("id", "=", id)
+      .returningAll()
+      .executeTakeFirst();
+
+    if (!org) {
+      return c.json({ error: "Organization not found" }, 404);
+    }
+
+    return c.json(org);
+  },
+);
 
 organizationsRoutes.delete("/:id", async (c) => {
   const user = c.get("user");
@@ -258,66 +274,68 @@ organizationsRoutes.get("/:id/members", async (c) => {
   return c.json(members);
 });
 
-organizationsRoutes.post("/:id/members", async (c) => {
-  const user = c.get("user");
-  const id = parseInt(c.req.param("id"));
-  const body = await c.req.json();
+organizationsRoutes.post(
+  "/:id/members",
+  arktypeValidator("json", AddMemberSchema),
+  async (c) => {
+    const user = c.get("user");
+    const id = parseInt(c.req.param("id"));
+    const body = c.req.valid("json");
 
-  const membership = await db
-    .selectFrom("user_organizations")
-    .select("role")
-    .where("user_id", "=", user.id)
-    .where("organization_id", "=", id)
-    .executeTakeFirst();
+    const membership = await db
+      .selectFrom("user_organizations")
+      .select("role")
+      .where("user_id", "=", user.id)
+      .where("organization_id", "=", id)
+      .executeTakeFirst();
 
-  if (!membership && !user.is_admin) {
-    return c.json({ error: "Organization not found" }, 404);
-  }
+    if (!membership && !user.is_admin) {
+      return c.json({ error: "Organization not found" }, 404);
+    }
 
-  if (
-    membership &&
-    !["owner", "admin"].includes(membership.role) &&
-    !user.is_admin
-  ) {
-    return c.json({ error: "Insufficient permissions" }, 403);
-  }
+    if (
+      membership &&
+      !["owner", "admin"].includes(membership.role) &&
+      !user.is_admin
+    ) {
+      return c.json({ error: "Insufficient permissions" }, 403);
+    }
 
-  if (!body.email) {
-    return c.json({ error: "Email is required" }, 400);
-  }
+    const targetUser = await db
+      .selectFrom("users")
+      .select("id")
+      .where("email", "=", body.email.toLowerCase().trim())
+      .executeTakeFirst();
 
-  const targetUser = await db
-    .selectFrom("users")
-    .select("id")
-    .where("email", "=", body.email.toLowerCase().trim())
-    .executeTakeFirst();
+    if (!targetUser) {
+      return c.json({ error: "User not found" }, 404);
+    }
 
-  if (!targetUser) {
-    return c.json({ error: "User not found" }, 404);
-  }
+    const existingMembership = await db
+      .selectFrom("user_organizations")
+      .select("id")
+      .where("user_id", "=", targetUser.id)
+      .where("organization_id", "=", id)
+      .executeTakeFirst();
 
-  const existingMembership = await db
-    .selectFrom("user_organizations")
-    .select("id")
-    .where("user_id", "=", targetUser.id)
-    .where("organization_id", "=", id)
-    .executeTakeFirst();
+    if (existingMembership) {
+      return c.json({ error: "User is already a member" }, 409);
+    }
 
-  if (existingMembership) {
-    return c.json({ error: "User is already a member" }, 409);
-  }
+    const role = body.role || "member";
 
-  await db
-    .insertInto("user_organizations")
-    .values({
-      user_id: targetUser.id,
-      organization_id: id,
-      role: body.role || "member",
-    })
-    .execute();
+    await db
+      .insertInto("user_organizations")
+      .values({
+        user_id: targetUser.id,
+        organization_id: id,
+        role,
+      })
+      .execute();
 
-  return c.json({ success: true }, 201);
-});
+    return c.json({ success: true }, 201);
+  },
+);
 
 organizationsRoutes.delete("/:id/members/:userId", async (c) => {
   const user = c.get("user");
@@ -436,113 +454,125 @@ organizationsRoutes.get("/:id/tenants", async (c) => {
   return c.json(result);
 });
 
-organizationsRoutes.put("/:id/tenants/:tenantId", async (c) => {
-  const user = c.get("user");
-  const orgId = parseInt(c.req.param("id"));
-  const tenantId = parseInt(c.req.param("tenantId"));
-  const body = await c.req.json();
+organizationsRoutes.put(
+  "/:id/tenants/:tenantId",
+  arktypeValidator("json", OrgUpdateTenantSchema),
+  async (c) => {
+    const user = c.get("user");
+    const orgId = parseInt(c.req.param("id"));
+    const tenantId = parseInt(c.req.param("tenantId"));
+    const body = c.req.valid("json");
 
-  const membership = await db
-    .selectFrom("user_organizations")
-    .select("role")
-    .where("user_id", "=", user.id)
-    .where("organization_id", "=", orgId)
-    .executeTakeFirst();
+    const membership = await db
+      .selectFrom("user_organizations")
+      .select("role")
+      .where("user_id", "=", user.id)
+      .where("organization_id", "=", orgId)
+      .executeTakeFirst();
 
-  if (!membership && !user.is_admin) {
-    return c.json({ error: "Organization not found" }, 404);
-  }
-
-  const tenant = await db
-    .selectFrom("tenants")
-    .select(["id", "name", "node_id", "organization_id", "status"])
-    .where("id", "=", tenantId)
-    .executeTakeFirst();
-
-  if (!tenant || tenant.organization_id !== orgId) {
-    return c.json({ error: "Tenant not found" }, 404);
-  }
-
-  if (tenant.status !== "active") {
-    return c.json(
-      { error: "Cannot modify tenant while another operation is in progress" },
-      400,
-    );
-  }
-
-  const updateData: Record<string, unknown> = {};
-  if (body.backend_url !== undefined) updateData.backend_url = body.backend_url;
-  if (body.is_active !== undefined) updateData.is_active = body.is_active;
-  if (body.upstream_auth_header !== undefined)
-    updateData.upstream_auth_header = body.upstream_auth_header;
-  if (body.upstream_auth_value !== undefined)
-    updateData.upstream_auth_value = body.upstream_auth_value;
-  if (body.default_price_usdc !== undefined)
-    updateData.default_price_usdc = body.default_price_usdc;
-  if (body.default_scheme !== undefined)
-    updateData.default_scheme = body.default_scheme;
-
-  let newWalletConfig: WalletConfig | null = null;
-  if (body.wallet_id !== undefined) {
-    // Validate wallet belongs to this org
-    if (body.wallet_id !== null) {
-      const wallet = await db
-        .selectFrom("wallets")
-        .select(["id", "organization_id", "wallet_config"])
-        .where("id", "=", body.wallet_id)
-        .executeTakeFirst();
-
-      if (!wallet || wallet.organization_id !== orgId) {
-        return c.json({ error: "Wallet not found" }, 404);
-      }
-      newWalletConfig = wallet.wallet_config as WalletConfig | null;
+    if (!membership && !user.is_admin) {
+      return c.json({ error: "Organization not found" }, 404);
     }
-    updateData.wallet_id = body.wallet_id;
-  }
 
-  const result = await db
-    .updateTable("tenants")
-    .set(updateData)
-    .where("id", "=", tenantId)
-    .returningAll()
-    .executeTakeFirst();
+    const tenant = await db
+      .selectFrom("tenants")
+      .select(["id", "name", "node_id", "organization_id", "status"])
+      .where("id", "=", tenantId)
+      .executeTakeFirst();
 
-  if (!result) {
-    return c.json({ error: "Tenant not found" }, 404);
-  }
+    if (!tenant || tenant.organization_id !== orgId) {
+      return c.json({ error: "Tenant not found" }, 404);
+    }
 
-  // Sync to all nodes the tenant is on
-  const tenantNodes = await db
-    .selectFrom("tenant_nodes")
-    .select("node_id")
-    .where("tenant_id", "=", tenantId)
-    .execute();
+    if (tenant.status !== "active") {
+      return c.json(
+        {
+          error: "Cannot modify tenant while another operation is in progress",
+        },
+        400,
+      );
+    }
 
-  for (const tn of tenantNodes) {
-    syncToNode(tn.node_id).catch((err) => logger.error(String(err)));
-  }
+    const updateData: Record<string, unknown> = {};
+    if (body.backend_url !== undefined) {
+      updateData.backend_url = body.backend_url;
+    }
+    if (body.is_active !== undefined) updateData.is_active = body.is_active;
+    if (body.upstream_auth_header !== undefined) {
+      updateData.upstream_auth_header = body.upstream_auth_header || null;
+    }
+    if (body.upstream_auth_value !== undefined) {
+      updateData.upstream_auth_value = body.upstream_auth_value || null;
+    }
+    if (body.default_price_usdc !== undefined) {
+      updateData.default_price_usdc = body.default_price_usdc;
+    }
+    if (body.default_scheme !== undefined) {
+      updateData.default_scheme = body.default_scheme;
+    }
 
-  if (newWalletConfig) {
-    const addresses = {
-      solana: newWalletConfig.solana?.["mainnet-beta"]?.address,
-      base: newWalletConfig.evm?.base?.address,
-      polygon: newWalletConfig.evm?.polygon?.address,
-      monad: newWalletConfig.evm?.monad?.address,
-    };
+    let newWalletConfig: WalletConfig | null = null;
+    if (body.wallet_id !== undefined) {
+      // Validate wallet belongs to this org
+      if (body.wallet_id !== null) {
+        const wallet = await db
+          .selectFrom("wallets")
+          .select(["id", "organization_id", "wallet_config"])
+          .where("id", "=", body.wallet_id)
+          .executeTakeFirst();
 
-    updateAccountAddresses(tenant.name, addresses).catch((err) =>
-      logger.error(
-        `Failed to update corbits dash addresses for ${tenant.name}: ${err}`,
-      ),
-    );
-  }
+        if (!wallet || wallet.organization_id !== orgId) {
+          return c.json({ error: "Wallet not found" }, 404);
+        }
+        newWalletConfig = wallet.wallet_config as WalletConfig | null;
+      }
+      updateData.wallet_id = body.wallet_id;
+    }
 
-  if (body.wallet_id !== undefined && body.wallet_id !== null) {
-    await checkAndUpdateTenantStatus(tenantId);
-  }
+    const result = await db
+      .updateTable("tenants")
+      .set(updateData)
+      .where("id", "=", tenantId)
+      .returningAll()
+      .executeTakeFirst();
 
-  return c.json(result);
-});
+    if (!result) {
+      return c.json({ error: "Tenant not found" }, 404);
+    }
+
+    // Sync to all nodes the tenant is on
+    const tenantNodes = await db
+      .selectFrom("tenant_nodes")
+      .select("node_id")
+      .where("tenant_id", "=", tenantId)
+      .execute();
+
+    for (const tn of tenantNodes) {
+      syncToNode(tn.node_id).catch((err) => logger.error(String(err)));
+    }
+
+    if (newWalletConfig) {
+      const addresses = {
+        solana: newWalletConfig.solana?.["mainnet-beta"]?.address,
+        base: newWalletConfig.evm?.base?.address,
+        polygon: newWalletConfig.evm?.polygon?.address,
+        monad: newWalletConfig.evm?.monad?.address,
+      };
+
+      updateAccountAddresses(tenant.name, addresses).catch((err) =>
+        logger.error(
+          `Failed to update corbits dash addresses for ${tenant.name}: ${err}`,
+        ),
+      );
+    }
+
+    if (body.wallet_id !== undefined && body.wallet_id !== null) {
+      await checkAndUpdateTenantStatus(tenantId);
+    }
+
+    return c.json(result);
+  },
+);
 
 organizationsRoutes.delete("/:id/tenants/:tenantId", async (c) => {
   const user = c.get("user");
@@ -734,177 +764,171 @@ organizationsRoutes.get("/:id/can-create-proxy", async (c) => {
   });
 });
 
-organizationsRoutes.post("/:id/tenants", async (c) => {
-  const user = c.get("user");
-  const orgId = parseInt(c.req.param("id"));
-  const body = await c.req.json();
+organizationsRoutes.post(
+  "/:id/tenants",
+  arktypeValidator("json", OrgCreateTenantSchema),
+  async (c) => {
+    const user = c.get("user");
+    const orgId = parseInt(c.req.param("id"));
+    const body = c.req.valid("json");
 
-  const membership = await db
-    .selectFrom("user_organizations")
-    .select("role")
-    .where("user_id", "=", user.id)
-    .where("organization_id", "=", orgId)
-    .executeTakeFirst();
+    const membership = await db
+      .selectFrom("user_organizations")
+      .select("role")
+      .where("user_id", "=", user.id)
+      .where("organization_id", "=", orgId)
+      .executeTakeFirst();
 
-  if (!membership && !user.is_admin) {
-    return c.json({ error: "Organization not found" }, 404);
-  }
-
-  if (!body.name?.trim()) {
-    return c.json({ error: "Proxy name is required" }, 400);
-  }
-
-  const nameValidation = validateProxyName(body.name);
-  if (!nameValidation.valid) {
-    return c.json({ error: nameValidation.error }, 400);
-  }
-  const sanitizedName = nameValidation.sanitized;
-
-  if (!body.backend_url?.trim()) {
-    return c.json({ error: "Backend URL is required" }, 400);
-  }
-
-  if (!body.wallet_id) {
-    return c.json({ error: "Wallet ID is required" }, 400);
-  }
-
-  // Validate wallet belongs to this org
-  const wallet = await db
-    .selectFrom("wallets")
-    .selectAll()
-    .where("id", "=", body.wallet_id)
-    .where("organization_id", "=", orgId)
-    .executeTakeFirst();
-
-  if (!wallet) {
-    return c.json(
-      { error: "Wallet not found or does not belong to this organization" },
-      400,
-    );
-  }
-
-  // Find 2 active nodes with least tenant count
-  const nodesWithCounts = await db
-    .selectFrom("nodes")
-    .leftJoin("tenant_nodes", "tenant_nodes.node_id", "nodes.id")
-    .select(["nodes.id", "nodes.public_ip", "nodes.status"])
-    .select((eb) => [eb.fn.count<number>("tenant_nodes.id").as("tenant_count")])
-    .where("nodes.status", "=", "active")
-    .where("nodes.public_ip", "is not", null)
-    .groupBy("nodes.id")
-    .orderBy("tenant_count", "asc")
-    .limit(2)
-    .execute();
-
-  if (nodesWithCounts.length < 2) {
-    return c.json({ error: "Not enough active nodes available" }, 400);
-  }
-
-  const nodeIds = nodesWithCounts.map((n) => n.id);
-
-  let tenant;
-  try {
-    tenant = await db
-      .insertInto("tenants")
-      .values({
-        name: sanitizedName,
-        backend_url: body.backend_url.trim(),
-        node_id: nodeIds[0],
-        organization_id: orgId,
-        wallet_id: body.wallet_id,
-        default_price_usdc: body.default_price_usdc ?? 0,
-        default_scheme: body.default_scheme ?? "exact",
-        upstream_auth_header: body.upstream_auth_header?.trim() || null,
-        upstream_auth_value: body.upstream_auth_value?.trim() || null,
-      })
-      .returningAll()
-      .executeTakeFirstOrThrow();
-  } catch (err: unknown) {
-    if (
-      err &&
-      typeof err === "object" &&
-      "code" in err &&
-      err.code === "23505"
-    ) {
-      return c.json({ error: "A proxy with this name already exists" }, 409);
+    if (!membership && !user.is_admin) {
+      return c.json({ error: "Organization not found" }, 404);
     }
-    throw err;
-  }
 
-  const activeNodeIds: number[] = [];
+    const nameValidation = validateProxyName(body.name);
+    if (!nameValidation.valid) {
+      return c.json({ error: nameValidation.error }, 400);
+    }
+    const sanitizedName = nameValidation.sanitized;
 
-  for (const [i, nodeId] of nodeIds.entries()) {
-    const isPrimary = i === 0;
-    const node = nodesWithCounts.find((n) => n.id === nodeId);
+    // Validate wallet belongs to this org
+    const wallet = await db
+      .selectFrom("wallets")
+      .selectAll()
+      .where("id", "=", body.wallet_id)
+      .where("organization_id", "=", orgId)
+      .executeTakeFirst();
 
-    if (!node) continue;
-
-    const result = await db
-      .insertInto("tenant_nodes")
-      .values({
-        tenant_id: tenant.id,
-        node_id: nodeId,
-        is_primary: isPrimary,
-      })
-      .returningAll()
-      .executeTakeFirstOrThrow();
-
-    if (node.public_ip) {
-      const healthCheckId = await createHealthCheck(
-        tenant.name,
-        node.public_ip,
+    if (!wallet) {
+      return c.json(
+        { error: "Wallet not found or does not belong to this organization" },
+        400,
       );
-      if (healthCheckId) {
-        await db
-          .updateTable("tenant_nodes")
-          .set({ health_check_id: healthCheckId })
-          .where("id", "=", result.id)
-          .execute();
+    }
+
+    // Find 2 active nodes with least tenant count
+    const nodesWithCounts = await db
+      .selectFrom("nodes")
+      .leftJoin("tenant_nodes", "tenant_nodes.node_id", "nodes.id")
+      .select(["nodes.id", "nodes.public_ip", "nodes.status"])
+      .select((eb) => [
+        eb.fn.count<number>("tenant_nodes.id").as("tenant_count"),
+      ])
+      .where("nodes.status", "=", "active")
+      .where("nodes.public_ip", "is not", null)
+      .groupBy("nodes.id")
+      .orderBy("tenant_count", "asc")
+      .limit(2)
+      .execute();
+
+    if (nodesWithCounts.length < 2) {
+      return c.json({ error: "Not enough active nodes available" }, 400);
+    }
+
+    const nodeIds = nodesWithCounts.map((n) => n.id);
+
+    let tenant;
+    try {
+      tenant = await db
+        .insertInto("tenants")
+        .values({
+          name: sanitizedName,
+          backend_url: body.backend_url,
+          node_id: nodeIds[0],
+          organization_id: orgId,
+          wallet_id: body.wallet_id,
+          default_price_usdc: body.default_price_usdc ?? 0,
+          default_scheme: body.default_scheme ?? "exact",
+          upstream_auth_header: body.upstream_auth_header ?? null,
+          upstream_auth_value: body.upstream_auth_value ?? null,
+        })
+        .returningAll()
+        .executeTakeFirstOrThrow();
+    } catch (err: unknown) {
+      if (
+        err &&
+        typeof err === "object" &&
+        "code" in err &&
+        err.code === "23505"
+      ) {
+        return c.json({ error: "A proxy with this name already exists" }, 409);
+      }
+      throw err;
+    }
+
+    const activeNodeIds: number[] = [];
+
+    for (const [i, nodeId] of nodeIds.entries()) {
+      const isPrimary = i === 0;
+      const node = nodesWithCounts.find((n) => n.id === nodeId);
+
+      if (!node) continue;
+
+      const result = await db
+        .insertInto("tenant_nodes")
+        .values({
+          tenant_id: tenant.id,
+          node_id: nodeId,
+          is_primary: isPrimary,
+        })
+        .returningAll()
+        .executeTakeFirstOrThrow();
+
+      if (node.public_ip) {
+        const healthCheckId = await createHealthCheck(
+          tenant.name,
+          node.public_ip,
+        );
+        if (healthCheckId) {
+          await db
+            .updateTable("tenant_nodes")
+            .set({ health_check_id: healthCheckId })
+            .where("id", "=", result.id)
+            .execute();
+        }
+
+        upsertNodeDnsRecord(
+          tenant.name,
+          nodeId,
+          node.public_ip,
+          healthCheckId,
+        ).catch((err) => logger.error(`Failed to create DNS record: ${err}`));
       }
 
-      upsertNodeDnsRecord(
-        tenant.name,
-        nodeId,
-        node.public_ip,
-        healthCheckId,
-      ).catch((err) => logger.error(`Failed to create DNS record: ${err}`));
+      if (node.status === "active") {
+        activeNodeIds.push(nodeId);
+      }
+
+      syncToNode(nodeId).catch((err) => logger.error(String(err)));
     }
 
-    if (node.status === "active") {
-      activeNodeIds.push(nodeId);
+    if (activeNodeIds.length > 0) {
+      enqueueCertProvisioning(activeNodeIds, tenant.name).catch((err) =>
+        logger.error(`Failed to enqueue cert provisioning: ${err}`),
+      );
     }
 
-    syncToNode(nodeId).catch((err) => logger.error(String(err)));
-  }
+    const walletConfig = wallet.wallet_config as WalletConfig | null;
+    if (walletConfig) {
+      const accessToken = Math.random().toString(36).substring(2, 7);
+      const addresses = {
+        solana: walletConfig.solana?.["mainnet-beta"]?.address,
+        base: walletConfig.evm?.base?.address,
+        polygon: walletConfig.evm?.polygon?.address,
+        monad: walletConfig.evm?.monad?.address,
+      };
 
-  if (activeNodeIds.length > 0) {
-    enqueueCertProvisioning(activeNodeIds, tenant.name).catch((err) =>
-      logger.error(`Failed to enqueue cert provisioning: ${err}`),
-    );
-  }
+      setupAccountWithAddresses(tenant.name, accessToken, addresses).catch(
+        (err) =>
+          logger.error(
+            `Failed to setup corbits dash account for ${tenant.name}: ${err}`,
+          ),
+      );
+    }
 
-  const walletConfig = wallet.wallet_config as WalletConfig | null;
-  if (walletConfig) {
-    const accessToken = Math.random().toString(36).substring(2, 7);
-    const addresses = {
-      solana: walletConfig.solana?.["mainnet-beta"]?.address,
-      base: walletConfig.evm?.base?.address,
-      polygon: walletConfig.evm?.polygon?.address,
-      monad: walletConfig.evm?.monad?.address,
-    };
+    await checkAndUpdateTenantStatus(tenant.id);
 
-    setupAccountWithAddresses(tenant.name, accessToken, addresses).catch(
-      (err) =>
-        logger.error(
-          `Failed to setup corbits dash account for ${tenant.name}: ${err}`,
-        ),
-    );
-  }
-
-  await checkAndUpdateTenantStatus(tenant.id);
-
-  return c.json(tenant, 201);
-});
+    return c.json(tenant, 201);
+  },
+);
 
 // Invitation routes
 
@@ -944,91 +968,93 @@ organizationsRoutes.get("/:id/invitations", async (c) => {
   return c.json(invitations);
 });
 
-organizationsRoutes.post("/:id/invitations", async (c) => {
-  const user = c.get("user");
-  const orgId = parseInt(c.req.param("id"));
-  const body = await c.req.json();
+organizationsRoutes.post(
+  "/:id/invitations",
+  arktypeValidator("json", AddMemberSchema),
+  async (c) => {
+    const user = c.get("user");
+    const orgId = parseInt(c.req.param("id"));
+    const body = c.req.valid("json");
 
-  const membership = await db
-    .selectFrom("user_organizations")
-    .select("role")
-    .where("user_id", "=", user.id)
-    .where("organization_id", "=", orgId)
-    .executeTakeFirst();
-
-  if (!membership && !user.is_admin) {
-    return c.json({ error: "Organization not found" }, 404);
-  }
-
-  if (
-    membership &&
-    !["owner", "admin"].includes(membership.role) &&
-    !user.is_admin
-  ) {
-    return c.json({ error: "Insufficient permissions" }, 403);
-  }
-
-  if (!body.email?.trim()) {
-    return c.json({ error: "Email is required" }, 400);
-  }
-
-  const email = body.email.trim().toLowerCase();
-
-  // Check if user is already a member
-  const existingUser = await db
-    .selectFrom("users")
-    .select("id")
-    .where("email", "=", email)
-    .executeTakeFirst();
-
-  if (existingUser) {
-    const existingMembership = await db
+    const membership = await db
       .selectFrom("user_organizations")
-      .select("id")
-      .where("user_id", "=", existingUser.id)
+      .select("role")
+      .where("user_id", "=", user.id)
       .where("organization_id", "=", orgId)
       .executeTakeFirst();
 
-    if (existingMembership) {
-      return c.json({ error: "User is already a member" }, 409);
+    if (!membership && !user.is_admin) {
+      return c.json({ error: "Organization not found" }, 404);
     }
-  }
 
-  // Check for existing pending invitation
-  const existingInvitation = await db
-    .selectFrom("organization_invitations")
-    .select("id")
-    .where("organization_id", "=", orgId)
-    .where("email", "=", email)
-    .where("accepted_at", "is", null)
-    .where("expires_at", ">", new Date())
-    .executeTakeFirst();
+    if (
+      membership &&
+      !["owner", "admin"].includes(membership.role) &&
+      !user.is_admin
+    ) {
+      return c.json({ error: "Insufficient permissions" }, 403);
+    }
 
-  if (existingInvitation) {
-    return c.json(
-      { error: "An invitation is already pending for this email" },
-      409,
-    );
-  }
+    const email = body.email.trim().toLowerCase();
 
-  const token = randomBytes(32).toString("hex");
-  const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
+    // Check if user is already a member
+    const existingUser = await db
+      .selectFrom("users")
+      .select("id")
+      .where("email", "=", email)
+      .executeTakeFirst();
 
-  const invitation = await db
-    .insertInto("organization_invitations")
-    .values({
-      organization_id: orgId,
-      email,
-      token,
-      role: body.role || "member",
-      invited_by: user.id,
-      expires_at: expiresAt,
-    })
-    .returningAll()
-    .executeTakeFirstOrThrow();
+    if (existingUser) {
+      const existingMembership = await db
+        .selectFrom("user_organizations")
+        .select("id")
+        .where("user_id", "=", existingUser.id)
+        .where("organization_id", "=", orgId)
+        .executeTakeFirst();
 
-  return c.json(invitation, 201);
-});
+      if (existingMembership) {
+        return c.json({ error: "User is already a member" }, 409);
+      }
+    }
+
+    // Check for existing pending invitation
+    const existingInvitation = await db
+      .selectFrom("organization_invitations")
+      .select("id")
+      .where("organization_id", "=", orgId)
+      .where("email", "=", email)
+      .where("accepted_at", "is", null)
+      .where("expires_at", ">", new Date())
+      .executeTakeFirst();
+
+    if (existingInvitation) {
+      return c.json(
+        { error: "An invitation is already pending for this email" },
+        409,
+      );
+    }
+
+    const role = body.role || "member";
+
+    const token = randomBytes(32).toString("hex");
+    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
+
+    const invitation = await db
+      .insertInto("organization_invitations")
+      .values({
+        organization_id: orgId,
+        email,
+        token,
+        role,
+        invited_by: user.id,
+        expires_at: expiresAt,
+      })
+      .returningAll()
+      .executeTakeFirstOrThrow();
+
+    return c.json(invitation, 201);
+  },
+);
 
 organizationsRoutes.delete("/:id/invitations/:invitationId", async (c) => {
   const user = c.get("user");

@@ -3,6 +3,8 @@ import { db } from "../server.js";
 import { syncToNode } from "../lib/sync.js";
 import { logger } from "../logger.js";
 import { requireTenantAccess } from "../middleware/auth.js";
+import { arktypeValidator } from "@hono/arktype-validator";
+import { OpenApiImportSchema, ValidatePatternSchema } from "../lib/schemas.js";
 
 export const openapiRoutes = new Hono();
 
@@ -185,102 +187,102 @@ openapiRoutes.delete("/spec", async (c) => {
 });
 
 // POST /openapi/import - Import OpenAPI spec and create endpoints
-openapiRoutes.post("/import", async (c) => {
-  const tenantId = parseInt(c.req.param("tenantId") ?? "");
-  const body = await c.req.json();
+openapiRoutes.post(
+  "/import",
+  arktypeValidator("json", OpenApiImportSchema),
+  async (c) => {
+    const tenantId = parseInt(c.req.param("tenantId") ?? "");
+    const body = c.req.valid("json");
 
-  if (!body.spec) {
-    return c.json({ error: "spec is required" }, 400);
-  }
-
-  const validation = validateOpenApiSpec(body.spec);
-  if (!validation.valid) {
-    return c.json(
-      { error: "Invalid OpenAPI spec", details: validation.errors },
-      400,
-    );
-  }
-
-  const spec = body.spec as OpenApiSpec;
-  const paths = extractPathsFromSpec(spec);
-
-  if (paths.length === 0) {
-    return c.json({ error: "No paths found in spec" }, 400);
-  }
-
-  // Store the spec on tenant
-  await db
-    .updateTable("tenants")
-    .set({ openapi_spec: JSON.stringify(spec) })
-    .where("id", "=", tenantId)
-    .execute();
-
-  // Get existing endpoints to check for duplicates
-  const existingEndpoints = await db
-    .selectFrom("endpoints")
-    .select(["id", "path_pattern"])
-    .where("tenant_id", "=", tenantId)
-    .where("is_active", "=", true)
-    .execute();
-
-  const existingPatternMap = new Map(
-    existingEndpoints.map((e) => [e.path_pattern, e.id]),
-  );
-
-  // Create or update endpoints for each path
-  const created: string[] = [];
-  const linked: string[] = [];
-
-  for (const pathInfo of paths) {
-    const existingId = existingPatternMap.get(pathInfo.pattern);
-
-    if (existingId) {
-      // Update existing endpoint with lineage
-      await db
-        .updateTable("endpoints")
-        .set({ openapi_source_paths: [pathInfo.path] })
-        .where("id", "=", existingId)
-        .execute();
-      linked.push(pathInfo.path);
-    } else {
-      // Create new endpoint
-      await db
-        .insertInto("endpoints")
-        .values({
-          tenant_id: tenantId,
-          path: pathInfo.path,
-          path_pattern: pathInfo.pattern,
-          description: pathInfo.description,
-          priority: 100,
-          is_active: true,
-          openapi_source_paths: [pathInfo.path],
-        })
-        .execute();
-      created.push(pathInfo.path);
+    const validation = validateOpenApiSpec(body.spec);
+    if (!validation.valid) {
+      return c.json(
+        { error: "Invalid OpenAPI spec", details: validation.errors },
+        400,
+      );
     }
-  }
 
-  // Sync to nodes
-  const tenant = await db
-    .selectFrom("tenants")
-    .select("node_id")
-    .where("id", "=", tenantId)
-    .executeTakeFirst();
+    const spec = body.spec as OpenApiSpec;
+    const paths = extractPathsFromSpec(spec);
 
-  if (tenant?.node_id) {
-    syncToNode(tenant.node_id).catch((err) => logger.error(String(err)));
-  }
+    if (paths.length === 0) {
+      return c.json({ error: "No paths found in spec" }, 400);
+    }
 
-  return c.json({
-    success: true,
-    created: created.length,
-    linked: linked.length,
-    paths: {
-      created,
-      linked,
-    },
-  });
-});
+    // Store the spec on tenant
+    await db
+      .updateTable("tenants")
+      .set({ openapi_spec: JSON.stringify(spec) })
+      .where("id", "=", tenantId)
+      .execute();
+
+    // Get existing endpoints to check for duplicates
+    const existingEndpoints = await db
+      .selectFrom("endpoints")
+      .select(["id", "path_pattern"])
+      .where("tenant_id", "=", tenantId)
+      .where("is_active", "=", true)
+      .execute();
+
+    const existingPatternMap = new Map(
+      existingEndpoints.map((e) => [e.path_pattern, e.id]),
+    );
+
+    // Create or update endpoints for each path
+    const created: string[] = [];
+    const linked: string[] = [];
+
+    for (const pathInfo of paths) {
+      const existingId = existingPatternMap.get(pathInfo.pattern);
+
+      if (existingId) {
+        // Update existing endpoint with lineage
+        await db
+          .updateTable("endpoints")
+          .set({ openapi_source_paths: [pathInfo.path] })
+          .where("id", "=", existingId)
+          .execute();
+        linked.push(pathInfo.path);
+      } else {
+        // Create new endpoint
+        await db
+          .insertInto("endpoints")
+          .values({
+            tenant_id: tenantId,
+            path: pathInfo.path,
+            path_pattern: pathInfo.pattern,
+            description: pathInfo.description,
+            priority: 100,
+            is_active: true,
+            openapi_source_paths: [pathInfo.path],
+          })
+          .execute();
+        created.push(pathInfo.path);
+      }
+    }
+
+    // Sync to nodes
+    const tenant = await db
+      .selectFrom("tenants")
+      .select("node_id")
+      .where("id", "=", tenantId)
+      .executeTakeFirst();
+
+    if (tenant?.node_id) {
+      syncToNode(tenant.node_id).catch((err) => logger.error(String(err)));
+    }
+
+    return c.json({
+      success: true,
+      created: created.length,
+      linked: linked.length,
+      paths: {
+        created,
+        linked,
+      },
+    });
+  },
+);
 
 // GET /openapi/export - Export endpoints as OpenAPI spec
 openapiRoutes.get("/export", async (c) => {
@@ -410,61 +412,60 @@ openapiRoutes.get("/export", async (c) => {
 });
 
 // POST /openapi/validate-pattern - Validate regex pattern against stored spec
-openapiRoutes.post("/validate-pattern", async (c) => {
-  const tenantId = parseInt(c.req.param("tenantId") ?? "");
-  const body = await c.req.json();
+openapiRoutes.post(
+  "/validate-pattern",
+  arktypeValidator("json", ValidatePatternSchema),
+  async (c) => {
+    const tenantId = parseInt(c.req.param("tenantId") ?? "");
+    const body = c.req.valid("json");
+    const pattern = body.pattern;
 
-  if (!body.pattern) {
-    return c.json({ error: "pattern is required" }, 400);
-  }
+    // Check if pattern is valid regex
+    if (!isValidRegex(pattern)) {
+      return c.json({
+        valid: false,
+        isValidRegex: false,
+        matches: [],
+        error: "Invalid regex pattern",
+      });
+    }
 
-  const pattern = body.pattern as string;
+    const tenant = await db
+      .selectFrom("tenants")
+      .select(["openapi_spec"])
+      .where("id", "=", tenantId)
+      .executeTakeFirst();
 
-  // Check if pattern is valid regex
-  if (!isValidRegex(pattern)) {
-    return c.json({
-      valid: false,
-      isValidRegex: false,
-      matches: [],
-      error: "Invalid regex pattern",
-    });
-  }
+    if (!tenant) {
+      return c.json({ error: "Tenant not found" }, 404);
+    }
 
-  const tenant = await db
-    .selectFrom("tenants")
-    .select(["openapi_spec"])
-    .where("id", "=", tenantId)
-    .executeTakeFirst();
+    if (!tenant.openapi_spec) {
+      return c.json({
+        valid: true,
+        isValidRegex: true,
+        matches: [],
+        hasSpec: false,
+      });
+    }
 
-  if (!tenant) {
-    return c.json({ error: "Tenant not found" }, 404);
-  }
+    const spec = tenant.openapi_spec as OpenApiSpec;
+    const specPaths = Object.keys(spec.paths || {});
 
-  if (!tenant.openapi_spec) {
+    // Test pattern against each path in the spec
+    const matches: string[] = [];
+    for (const path of specPaths) {
+      if (testPatternMatch(pattern, path)) {
+        matches.push(path);
+      }
+    }
+
     return c.json({
       valid: true,
       isValidRegex: true,
-      matches: [],
-      hasSpec: false,
+      matches,
+      hasSpec: true,
+      totalSpecPaths: specPaths.length,
     });
-  }
-
-  const spec = tenant.openapi_spec as OpenApiSpec;
-  const specPaths = Object.keys(spec.paths || {});
-
-  // Test pattern against each path in the spec
-  const matches: string[] = [];
-  for (const path of specPaths) {
-    if (testPatternMatch(pattern, path)) {
-      matches.push(path);
-    }
-  }
-
-  return c.json({
-    valid: true,
-    isValidRegex: true,
-    matches,
-    hasSpec: true,
-    totalSpecPaths: specPaths.length,
-  });
-});
+  },
+);

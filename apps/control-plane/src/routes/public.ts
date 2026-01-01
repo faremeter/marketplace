@@ -1,38 +1,32 @@
 import { Hono } from "hono";
 import { db } from "../server.js";
 import { optionalAuth, requireAuth } from "../middleware/auth.js";
+import { normalizeEmail, isExpired } from "../lib/validation.js";
+import { arktypeValidator } from "@hono/arktype-validator";
+import { WaitlistSchema } from "../lib/schemas.js";
 
 export const publicRoutes = new Hono();
 
-publicRoutes.post("/waitlist", async (c) => {
-  const body = await c.req.json();
-  const email = body.email?.trim()?.toLowerCase();
+publicRoutes.post(
+  "/waitlist",
+  arktypeValidator("json", WaitlistSchema),
+  async (c) => {
+    const body = c.req.valid("json");
+    const email = normalizeEmail(body.email);
 
-  if (!email) {
-    return c.json({ error: "Email is required" }, 400);
-  }
+    try {
+      await db
+        .insertInto("waitlist")
+        .values({ email })
+        .onConflict((oc) => oc.column("email").doNothing())
+        .execute();
 
-  if (email.length > 254) {
-    return c.json({ error: "Email is too long" }, 400);
-  }
-
-  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  if (!emailRegex.test(email)) {
-    return c.json({ error: "Invalid email format" }, 400);
-  }
-
-  try {
-    await db
-      .insertInto("waitlist")
-      .values({ email })
-      .onConflict((oc) => oc.column("email").doNothing())
-      .execute();
-
-    return c.json({ success: true });
-  } catch {
-    return c.json({ error: "Failed to join waitlist" }, 500);
-  }
-});
+      return c.json({ success: true });
+    } catch {
+      return c.json({ error: "Failed to join waitlist" }, 500);
+    }
+  },
+);
 
 // Get invitation details (public, no auth required)
 publicRoutes.get("/invitations/:token", optionalAuth, async (c) => {
@@ -65,7 +59,7 @@ publicRoutes.get("/invitations/:token", optionalAuth, async (c) => {
     return c.json({ error: "Invitation has already been accepted" }, 410);
   }
 
-  if (new Date(invitation.expires_at) < new Date()) {
+  if (isExpired(invitation.expires_at)) {
     return c.json({ error: "Invitation has expired" }, 410);
   }
 
@@ -100,7 +94,7 @@ publicRoutes.post("/invitations/:token/accept", requireAuth, async (c) => {
     return c.json({ error: "Invitation has already been accepted" }, 410);
   }
 
-  if (new Date(invitation.expires_at) < new Date()) {
+  if (isExpired(invitation.expires_at)) {
     return c.json({ error: "Invitation has expired" }, 410);
   }
 

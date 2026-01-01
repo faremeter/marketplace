@@ -12,6 +12,12 @@ import {
 import { enqueueCertProvisioning } from "../lib/queue.js";
 import { validateProxyName } from "../lib/proxy-name.js";
 import { requireAdmin } from "../middleware/auth.js";
+import { arktypeValidator } from "@hono/arktype-validator";
+import {
+  CreateTenantSchema,
+  UpdateTenantSchema,
+  AssignNodeSchema,
+} from "../lib/schemas.js";
 
 export const tenantsRoutes = new Hono();
 
@@ -40,97 +46,104 @@ tenantsRoutes.get("/:id", async (c) => {
   return c.json(tenant);
 });
 
-tenantsRoutes.post("/", async (c) => {
-  const body = await c.req.json();
+tenantsRoutes.post(
+  "/",
+  arktypeValidator("json", CreateTenantSchema),
+  async (c) => {
+    const body = c.req.valid("json");
 
-  if (!body.name?.trim()) {
-    return c.json({ error: "Tenant name is required" }, 400);
-  }
+    const nameValidation = validateProxyName(body.name);
+    if (!nameValidation.valid) {
+      return c.json({ error: nameValidation.error }, 400);
+    }
+    const sanitizedName = nameValidation.sanitized;
 
-  const nameValidation = validateProxyName(body.name);
-  if (!nameValidation.valid) {
-    return c.json({ error: nameValidation.error }, 400);
-  }
-  const sanitizedName = nameValidation.sanitized;
+    const result = await db
+      .insertInto("tenants")
+      .values({
+        name: sanitizedName,
+        backend_url: body.backend_url,
+        wallet_id: body.wallet_id ?? null,
+        default_price_usdc: body.default_price_usdc ?? 0,
+        default_scheme: body.default_scheme ?? "exact",
+        upstream_auth_header: body.upstream_auth_header ?? null,
+        upstream_auth_value: body.upstream_auth_value ?? null,
+        is_active: body.is_active ?? true,
+      })
+      .returningAll()
+      .executeTakeFirstOrThrow();
 
-  const result = await db
-    .insertInto("tenants")
-    .values({
-      name: sanitizedName,
-      backend_url: body.backend_url,
-      wallet_id: body.wallet_id ?? null,
-      default_price_usdc: body.default_price_usdc,
-      default_scheme: body.default_scheme ?? "exact",
-      upstream_auth_header: body.upstream_auth_header ?? null,
-      upstream_auth_value: body.upstream_auth_value ?? null,
-      is_active: body.is_active ?? true,
-    })
-    .returningAll()
-    .executeTakeFirstOrThrow();
+    return c.json(result, 201);
+  },
+);
 
-  return c.json(result, 201);
-});
+tenantsRoutes.put(
+  "/:id",
+  arktypeValidator("json", UpdateTenantSchema),
+  async (c) => {
+    const id = parseInt(c.req.param("id"));
+    const body = c.req.valid("json");
 
-tenantsRoutes.put("/:id", async (c) => {
-  const id = parseInt(c.req.param("id"));
-  const body = await c.req.json();
+    const tenant = await db
+      .selectFrom("tenants")
+      .select(["id", "status"])
+      .where("id", "=", id)
+      .executeTakeFirst();
 
-  const tenant = await db
-    .selectFrom("tenants")
-    .select(["id", "status"])
-    .where("id", "=", id)
-    .executeTakeFirst();
+    if (!tenant) {
+      return c.json({ error: "Tenant not found" }, 404);
+    }
 
-  if (!tenant) {
-    return c.json({ error: "Tenant not found" }, 404);
-  }
+    if (tenant.status !== "active") {
+      return c.json(
+        {
+          error: "Cannot modify tenant while another operation is in progress",
+        },
+        400,
+      );
+    }
 
-  if (tenant.status !== "active") {
-    return c.json(
-      { error: "Cannot modify tenant while another operation is in progress" },
-      400,
-    );
-  }
+    const updateData: Record<string, unknown> = {};
+    if (body.name !== undefined) updateData.name = body.name;
+    if (body.backend_url !== undefined)
+      updateData.backend_url = body.backend_url;
+    if (body.organization_id !== undefined)
+      updateData.organization_id = body.organization_id;
+    if (body.wallet_id !== undefined) updateData.wallet_id = body.wallet_id;
+    if (body.default_price_usdc !== undefined)
+      updateData.default_price_usdc = body.default_price_usdc;
+    if (body.default_scheme !== undefined)
+      updateData.default_scheme = body.default_scheme;
+    if (body.upstream_auth_header !== undefined)
+      updateData.upstream_auth_header = body.upstream_auth_header;
+    if (body.upstream_auth_value !== undefined)
+      updateData.upstream_auth_value = body.upstream_auth_value;
+    if (body.is_active !== undefined) updateData.is_active = body.is_active;
 
-  const updateData: Record<string, unknown> = {};
-  if (body.name !== undefined) updateData.name = body.name;
-  if (body.backend_url !== undefined) updateData.backend_url = body.backend_url;
-  if (body.organization_id !== undefined)
-    updateData.organization_id = body.organization_id;
-  if (body.wallet_id !== undefined) updateData.wallet_id = body.wallet_id;
-  if (body.default_price_usdc !== undefined)
-    updateData.default_price_usdc = body.default_price_usdc;
-  if (body.default_scheme !== undefined)
-    updateData.default_scheme = body.default_scheme;
-  if (body.upstream_auth_header !== undefined)
-    updateData.upstream_auth_header = body.upstream_auth_header;
-  if (body.upstream_auth_value !== undefined)
-    updateData.upstream_auth_value = body.upstream_auth_value;
-  if (body.is_active !== undefined) updateData.is_active = body.is_active;
+    const result = await db
+      .updateTable("tenants")
+      .set(updateData)
+      .where("id", "=", id)
+      .returningAll()
+      .executeTakeFirst();
 
-  const result = await db
-    .updateTable("tenants")
-    .set(updateData)
-    .where("id", "=", id)
-    .returningAll()
-    .executeTakeFirst();
+    if (!result) {
+      return c.json({ error: "Tenant not found" }, 404);
+    }
 
-  if (!result) {
-    return c.json({ error: "Tenant not found" }, 404);
-  }
+    const assignedNodes = await db
+      .selectFrom("tenant_nodes")
+      .select(["node_id"])
+      .where("tenant_id", "=", id)
+      .execute();
 
-  const assignedNodes = await db
-    .selectFrom("tenant_nodes")
-    .select(["node_id"])
-    .where("tenant_id", "=", id)
-    .execute();
+    for (const { node_id } of assignedNodes) {
+      syncToNode(node_id).catch((err) => logger.error(String(err)));
+    }
 
-  for (const { node_id } of assignedNodes) {
-    syncToNode(node_id).catch((err) => logger.error(String(err)));
-  }
-
-  return c.json(result);
-});
+    return c.json(result);
+  },
+);
 
 tenantsRoutes.delete("/:id", async (c) => {
   const id = parseInt(c.req.param("id"));
@@ -209,94 +222,100 @@ tenantsRoutes.get("/:id/nodes", async (c) => {
   return c.json(tenantNodes);
 });
 
-tenantsRoutes.post("/:id/nodes", async (c) => {
-  const tenantId = parseInt(c.req.param("id"));
-  const body = await c.req.json();
-  const nodeId = body.node_id;
-  const isPrimary = body.is_primary ?? false;
+tenantsRoutes.post(
+  "/:id/nodes",
+  arktypeValidator("json", AssignNodeSchema),
+  async (c) => {
+    const tenantId = parseInt(c.req.param("id"));
+    const body = c.req.valid("json");
+    const nodeId = body.node_id;
+    const isPrimary = body.is_primary ?? false;
 
-  if (!nodeId) {
-    return c.json({ error: "node_id is required" }, 400);
-  }
+    const tenant = await db
+      .selectFrom("tenants")
+      .select(["id", "name"])
+      .where("id", "=", tenantId)
+      .executeTakeFirst();
 
-  const tenant = await db
-    .selectFrom("tenants")
-    .select(["id", "name"])
-    .where("id", "=", tenantId)
-    .executeTakeFirst();
+    if (!tenant) {
+      return c.json({ error: "Tenant not found" }, 404);
+    }
 
-  if (!tenant) {
-    return c.json({ error: "Tenant not found" }, 404);
-  }
+    const node = await db
+      .selectFrom("nodes")
+      .select(["id", "public_ip", "status"])
+      .where("id", "=", nodeId)
+      .executeTakeFirst();
 
-  const node = await db
-    .selectFrom("nodes")
-    .select(["id", "public_ip", "status"])
-    .where("id", "=", nodeId)
-    .executeTakeFirst();
+    if (!node) {
+      return c.json({ error: "Node not found" }, 404);
+    }
 
-  if (!node) {
-    return c.json({ error: "Node not found" }, 404);
-  }
+    if (!node.public_ip) {
+      return c.json(
+        { error: "Node does not have a public IP configured" },
+        400,
+      );
+    }
 
-  if (!node.public_ip) {
-    return c.json({ error: "Node does not have a public IP configured" }, 400);
-  }
-
-  const existing = await db
-    .selectFrom("tenant_nodes")
-    .select(["id"])
-    .where("tenant_id", "=", tenantId)
-    .where("node_id", "=", nodeId)
-    .executeTakeFirst();
-
-  if (existing) {
-    return c.json({ error: "Node already assigned to tenant" }, 409);
-  }
-
-  if (isPrimary) {
-    await db
-      .updateTable("tenant_nodes")
-      .set({ is_primary: false })
+    const existing = await db
+      .selectFrom("tenant_nodes")
+      .select(["id"])
       .where("tenant_id", "=", tenantId)
-      .execute();
-  }
+      .where("node_id", "=", nodeId)
+      .executeTakeFirst();
 
-  const result = await db
-    .insertInto("tenant_nodes")
-    .values({
-      tenant_id: tenantId,
-      node_id: nodeId,
-      is_primary: isPrimary,
-    })
-    .returningAll()
-    .executeTakeFirstOrThrow();
+    if (existing) {
+      return c.json({ error: "Node already assigned to tenant" }, 409);
+    }
 
-  const healthCheckId = await createHealthCheck(tenant.name, node.public_ip);
-  if (healthCheckId) {
-    await db
-      .updateTable("tenant_nodes")
-      .set({ health_check_id: healthCheckId })
-      .where("id", "=", result.id)
-      .execute();
-  }
+    if (isPrimary) {
+      await db
+        .updateTable("tenant_nodes")
+        .set({ is_primary: false })
+        .where("tenant_id", "=", tenantId)
+        .execute();
+    }
 
-  upsertNodeDnsRecord(tenant.name, nodeId, node.public_ip, healthCheckId).catch(
-    (err) => logger.error(`Failed to create DNS record: ${err}`),
-  );
+    const result = await db
+      .insertInto("tenant_nodes")
+      .values({
+        tenant_id: tenantId,
+        node_id: nodeId,
+        is_primary: isPrimary,
+      })
+      .returningAll()
+      .executeTakeFirstOrThrow();
 
-  if (node.status === "active") {
-    enqueueCertProvisioning([nodeId], tenant.name).catch((err) =>
-      logger.error(
-        `Failed to enqueue cert provisioning for tenant ${tenant.name} on node ${nodeId}: ${err}`,
-      ),
-    );
-  }
+    const healthCheckId = await createHealthCheck(tenant.name, node.public_ip);
+    if (healthCheckId) {
+      await db
+        .updateTable("tenant_nodes")
+        .set({ health_check_id: healthCheckId })
+        .where("id", "=", result.id)
+        .execute();
+    }
 
-  syncToNode(nodeId).catch((err) => logger.error(String(err)));
+    upsertNodeDnsRecord(
+      tenant.name,
+      nodeId,
+      node.public_ip,
+      healthCheckId,
+    ).catch((err) => logger.error(`Failed to create DNS record: ${err}`));
 
-  return c.json(result, 201);
-});
+    if (node.status === "active") {
+      enqueueCertProvisioning([nodeId], tenant.name).catch((err) =>
+        logger.error(
+          `Failed to enqueue cert provisioning for tenant ${tenant.name} on node ${nodeId}: ${err}`,
+        ),
+      );
+    }
+
+    syncToNode(nodeId).catch((err) => logger.error(String(err)));
+
+    return c.json(result, 201);
+  },
+);
 
 tenantsRoutes.delete("/:id/nodes/:nodeId", async (c) => {
   const tenantId = parseInt(c.req.param("id"));

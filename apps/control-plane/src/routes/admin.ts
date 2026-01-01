@@ -3,7 +3,10 @@ import { db } from "../server.js";
 import { requireAdmin } from "../middleware/auth.js";
 import { syncToNode } from "../lib/sync.js";
 import { logger } from "../logger.js";
-import { encryptWalletKeys } from "../lib/crypto.js";
+import {
+  encryptWalletKeys,
+  type WalletConfig as CryptoWalletConfig,
+} from "../lib/crypto.js";
 import { fetchWalletBalances } from "../lib/balances.js";
 import {
   createHealthCheck,
@@ -25,6 +28,16 @@ import {
   type CorbitsTransaction,
 } from "../lib/corbits-dash.js";
 import { validateProxyName } from "../lib/proxy-name.js";
+import { parsePagination } from "../lib/validation.js";
+import { arktypeValidator } from "@hono/arktype-validator";
+import {
+  AdminCreateTenantSchema,
+  AdminUpdateTenantSchema,
+  AdminUpdateEndpointSchema,
+  AdminUpdateUserSchema,
+  AdminUpdateSettingsSchema,
+  AdminAssignNodeSchema,
+} from "../lib/schemas.js";
 import {
   getPlatformEarnings,
   getOrganizationEarnings,
@@ -94,28 +107,32 @@ adminRoutes.get("/users/:id", async (c) => {
   return c.json({ ...user, organizations });
 });
 
-adminRoutes.put("/users/:id", async (c) => {
-  const id = parseInt(c.req.param("id"));
-  const body = await c.req.json();
+adminRoutes.put(
+  "/users/:id",
+  arktypeValidator("json", AdminUpdateUserSchema),
+  async (c) => {
+    const id = parseInt(c.req.param("id"));
+    const body = c.req.valid("json");
 
-  const updateData: Record<string, unknown> = {};
-  if (body.is_admin !== undefined) updateData.is_admin = body.is_admin;
-  if (body.email_verified !== undefined)
-    updateData.email_verified = body.email_verified;
+    const updateData: Record<string, unknown> = {};
+    if (body.is_admin !== undefined) updateData.is_admin = body.is_admin;
+    if (body.email_verified !== undefined)
+      updateData.email_verified = body.email_verified;
 
-  const user = await db
-    .updateTable("users")
-    .set(updateData)
-    .where("id", "=", id)
-    .returning(["id", "email", "is_admin", "email_verified", "created_at"])
-    .executeTakeFirst();
+    const user = await db
+      .updateTable("users")
+      .set(updateData)
+      .where("id", "=", id)
+      .returning(["id", "email", "is_admin", "email_verified", "created_at"])
+      .executeTakeFirst();
 
-  if (!user) {
-    return c.json({ error: "User not found" }, 404);
-  }
+    if (!user) {
+      return c.json({ error: "User not found" }, 404);
+    }
 
-  return c.json(user);
-});
+    return c.json(user);
+  },
+);
 
 adminRoutes.delete("/users/:id", async (c) => {
   const id = parseInt(c.req.param("id"));
@@ -309,297 +326,304 @@ adminRoutes.get("/tenants/check-name", async (c) => {
   return c.json({ available: !existing });
 });
 
-adminRoutes.post("/tenants", async (c) => {
-  const body = await c.req.json();
-  const nodeIds: number[] =
-    body.node_ids ?? (body.node_id ? [body.node_id] : []);
+adminRoutes.post(
+  "/tenants",
+  arktypeValidator("json", AdminCreateTenantSchema),
+  async (c) => {
+    const body = c.req.valid("json");
+    const nodeIds: number[] =
+      body.node_ids ?? (body.node_id ? [body.node_id] : []);
 
-  if (!body.name?.trim()) {
-    return c.json({ error: "Tenant name is required" }, 400);
-  }
-
-  const nameValidation = validateProxyName(body.name);
-  if (!nameValidation.valid) {
-    return c.json({ error: nameValidation.error }, 400);
-  }
-  const sanitizedName = nameValidation.sanitized;
-
-  // Get or default to master wallet
-  let walletId = body.wallet_id;
-
-  if (!walletId) {
-    // Try to find master wallet (organization_id = null)
-    const masterWallet = await db
-      .selectFrom("wallets")
-      .select("id")
-      .where("organization_id", "is", null)
-      .executeTakeFirst();
-
-    if (masterWallet) {
-      walletId = masterWallet.id;
-    }
-  }
-
-  const tenant = await db
-    .insertInto("tenants")
-    .values({
-      name: sanitizedName,
-      backend_url: body.backend_url,
-      node_id: nodeIds[0] ?? null,
-      organization_id: body.organization_id ?? null,
-      wallet_id: walletId ?? null,
-      default_price_usdc: body.default_price_usdc ?? 0,
-      default_scheme: body.default_scheme ?? "exact",
-      upstream_auth_header: body.upstream_auth_header ?? null,
-      upstream_auth_value: body.upstream_auth_value ?? null,
-    })
-    .returningAll()
-    .executeTakeFirstOrThrow();
-
-  const activeNodeIds: number[] = [];
-
-  for (const [i, nodeId] of nodeIds.entries()) {
-    const isPrimary = i === 0;
-
-    const node = await db
-      .selectFrom("nodes")
-      .select(["id", "public_ip", "status"])
-      .where("id", "=", nodeId)
-      .executeTakeFirst();
-
-    if (!node) {
-      logger.warn(`Node ${nodeId} not found, skipping`);
-      continue;
-    }
-
-    const result = await db
-      .insertInto("tenant_nodes")
-      .values({
-        tenant_id: tenant.id,
-        node_id: nodeId,
-        is_primary: isPrimary,
-      })
-      .returningAll()
-      .executeTakeFirstOrThrow();
-
-    if (node.public_ip) {
-      const healthCheckId = await createHealthCheck(
-        tenant.name,
-        node.public_ip,
-      );
-      if (healthCheckId) {
-        await db
-          .updateTable("tenant_nodes")
-          .set({ health_check_id: healthCheckId })
-          .where("id", "=", result.id)
-          .execute();
-      }
-
-      upsertNodeDnsRecord(
-        tenant.name,
-        nodeId,
-        node.public_ip,
-        healthCheckId,
-      ).catch((err) => logger.error(`Failed to create DNS record: ${err}`));
-    }
-
-    if (node.status === "active") {
-      activeNodeIds.push(nodeId);
-    }
-
-    syncToNode(nodeId).catch((err) => logger.error(String(err)));
-  }
-
-  if (activeNodeIds.length > 0) {
-    enqueueCertProvisioning(activeNodeIds, tenant.name).catch((err) =>
-      logger.error(`Failed to enqueue cert provisioning: ${err}`),
-    );
-  }
-
-  // Check if tenant can immediately transition to active
-  // (e.g., if no wallet and no nodes)
-  await checkAndUpdateTenantStatus(tenant.id);
-
-  if (walletId) {
-    const wallet = await db
-      .selectFrom("wallets")
-      .select("wallet_config")
-      .where("id", "=", walletId)
-      .executeTakeFirst();
-
-    if (wallet?.wallet_config) {
-      const config = wallet.wallet_config as WalletConfig;
-      const accessToken = Math.random().toString(36).substring(2, 7);
-      const addresses = {
-        solana: config.solana?.["mainnet-beta"]?.address,
-        base: config.evm?.base?.address,
-        polygon: config.evm?.polygon?.address,
-        monad: config.evm?.monad?.address,
-      };
-
-      setupAccountWithAddresses(tenant.name, accessToken, addresses).catch(
-        (err) =>
-          logger.error(
-            `Failed to setup corbits dash account for ${tenant.name}: ${err}`,
-          ),
-      );
-    }
-  }
-
-  return c.json(tenant, 201);
-});
-
-adminRoutes.put("/tenants/:id", async (c) => {
-  const id = parseInt(c.req.param("id"));
-  const body = await c.req.json();
-
-  const tenant = await db
-    .selectFrom("tenants")
-    .select(["id", "name", "status"])
-    .where("id", "=", id)
-    .executeTakeFirst();
-
-  if (!tenant) {
-    return c.json({ error: "Tenant not found" }, 404);
-  }
-
-  if (body.name !== undefined) {
     const nameValidation = validateProxyName(body.name);
     if (!nameValidation.valid) {
       return c.json({ error: nameValidation.error }, 400);
     }
+    const sanitizedName = nameValidation.sanitized;
 
-    if (nameValidation.sanitized !== tenant.name) {
-      if (tenant.status !== "active") {
-        return c.json(
-          {
-            error:
-              "Cannot rename tenant while another operation is in progress",
-          },
-          400,
-        );
-      }
+    // Get or default to master wallet
+    let walletId = body.wallet_id;
 
-      const existing = await db
-        .selectFrom("tenants")
+    if (!walletId) {
+      // Try to find master wallet (organization_id = null)
+      const masterWallet = await db
+        .selectFrom("wallets")
         .select("id")
-        .where("name", "=", nameValidation.sanitized)
-        .where("id", "!=", id)
+        .where("organization_id", "is", null)
         .executeTakeFirst();
 
-      if (existing) {
-        return c.json({ error: "Name already taken" }, 400);
+      if (masterWallet) {
+        walletId = masterWallet.id;
+      }
+    }
+
+    const tenant = await db
+      .insertInto("tenants")
+      .values({
+        name: sanitizedName,
+        backend_url: body.backend_url,
+        node_id: nodeIds[0] ?? null,
+        organization_id: body.organization_id ?? null,
+        wallet_id: walletId ?? null,
+        default_price_usdc: body.default_price_usdc ?? 0,
+        default_scheme: body.default_scheme ?? "exact",
+        upstream_auth_header: body.upstream_auth_header ?? null,
+        upstream_auth_value: body.upstream_auth_value ?? null,
+      })
+      .returningAll()
+      .executeTakeFirstOrThrow();
+
+    const activeNodeIds: number[] = [];
+
+    for (const [i, nodeId] of nodeIds.entries()) {
+      const isPrimary = i === 0;
+
+      const node = await db
+        .selectFrom("nodes")
+        .select(["id", "public_ip", "status"])
+        .where("id", "=", nodeId)
+        .executeTakeFirst();
+
+      if (!node) {
+        logger.warn(`Node ${nodeId} not found, skipping`);
+        continue;
       }
 
-      await db
-        .updateTable("tenants")
-        .set({ status: "pending" })
-        .where("id", "=", id)
-        .execute();
+      const result = await db
+        .insertInto("tenant_nodes")
+        .values({
+          tenant_id: tenant.id,
+          node_id: nodeId,
+          is_primary: isPrimary,
+        })
+        .returningAll()
+        .executeTakeFirstOrThrow();
 
-      await enqueueTenantRename(id, tenant.name, nameValidation.sanitized);
+      if (node.public_ip) {
+        const healthCheckId = await createHealthCheck(
+          tenant.name,
+          node.public_ip,
+        );
+        if (healthCheckId) {
+          await db
+            .updateTable("tenant_nodes")
+            .set({ health_check_id: healthCheckId })
+            .where("id", "=", result.id)
+            .execute();
+        }
 
-      return c.json({
-        id: tenant.id,
-        name: nameValidation.sanitized,
-        status: "pending",
-      });
+        upsertNodeDnsRecord(
+          tenant.name,
+          nodeId,
+          node.public_ip,
+          healthCheckId,
+        ).catch((err) => logger.error(`Failed to create DNS record: ${err}`));
+      }
+
+      if (node.status === "active") {
+        activeNodeIds.push(nodeId);
+      }
+
+      syncToNode(nodeId).catch((err) => logger.error(String(err)));
     }
-  }
 
-  if (tenant.status !== "active" && tenant.status !== "pending") {
-    return c.json(
-      { error: "Cannot modify tenant while another operation is in progress" },
-      400,
-    );
-  }
+    if (activeNodeIds.length > 0) {
+      enqueueCertProvisioning(activeNodeIds, tenant.name).catch((err) =>
+        logger.error(`Failed to enqueue cert provisioning: ${err}`),
+      );
+    }
 
-  if (tenant.status === "pending") {
-    const allowedPendingFields = ["wallet_id"];
-    const requestedFields = Object.keys(body).filter(
-      (k) => body[k as keyof typeof body] !== undefined,
-    );
-    const hasDisallowedFields = requestedFields.some(
-      (f) => !allowedPendingFields.includes(f),
-    );
-    if (hasDisallowedFields) {
+    // Check if tenant can immediately transition to active
+    // (e.g., if no wallet and no nodes)
+    await checkAndUpdateTenantStatus(tenant.id);
+
+    if (walletId) {
+      const wallet = await db
+        .selectFrom("wallets")
+        .select("wallet_config")
+        .where("id", "=", walletId)
+        .executeTakeFirst();
+
+      if (wallet?.wallet_config) {
+        const config = wallet.wallet_config as WalletConfig;
+        const accessToken = Math.random().toString(36).substring(2, 7);
+        const addresses = {
+          solana: config.solana?.["mainnet-beta"]?.address,
+          base: config.evm?.base?.address,
+          polygon: config.evm?.polygon?.address,
+          monad: config.evm?.monad?.address,
+        };
+
+        setupAccountWithAddresses(tenant.name, accessToken, addresses).catch(
+          (err) =>
+            logger.error(
+              `Failed to setup corbits dash account for ${tenant.name}: ${err}`,
+            ),
+        );
+      }
+    }
+
+    return c.json(tenant, 201);
+  },
+);
+
+adminRoutes.put(
+  "/tenants/:id",
+  arktypeValidator("json", AdminUpdateTenantSchema),
+  async (c) => {
+    const id = parseInt(c.req.param("id"));
+    const body = c.req.valid("json");
+
+    const tenant = await db
+      .selectFrom("tenants")
+      .select(["id", "name", "status"])
+      .where("id", "=", id)
+      .executeTakeFirst();
+
+    if (!tenant) {
+      return c.json({ error: "Tenant not found" }, 404);
+    }
+
+    if (body.name !== undefined) {
+      const nameValidation = validateProxyName(body.name);
+      if (!nameValidation.valid) {
+        return c.json({ error: nameValidation.error }, 400);
+      }
+
+      if (nameValidation.sanitized !== tenant.name) {
+        if (tenant.status !== "active") {
+          return c.json(
+            {
+              error:
+                "Cannot rename tenant while another operation is in progress",
+            },
+            400,
+          );
+        }
+
+        const existing = await db
+          .selectFrom("tenants")
+          .select("id")
+          .where("name", "=", nameValidation.sanitized)
+          .where("id", "!=", id)
+          .executeTakeFirst();
+
+        if (existing) {
+          return c.json({ error: "Name already taken" }, 400);
+        }
+
+        await db
+          .updateTable("tenants")
+          .set({ status: "pending" })
+          .where("id", "=", id)
+          .execute();
+
+        await enqueueTenantRename(id, tenant.name, nameValidation.sanitized);
+
+        return c.json({
+          id: tenant.id,
+          name: nameValidation.sanitized,
+          status: "pending",
+        });
+      }
+    }
+
+    if (tenant.status !== "active" && tenant.status !== "pending") {
       return c.json(
         {
-          error:
-            "Cannot modify tenant while initializing. Only wallet assignment is allowed.",
+          error: "Cannot modify tenant while another operation is in progress",
         },
         400,
       );
     }
-  }
 
-  const updateData: Record<string, unknown> = {};
-  if (body.backend_url !== undefined) updateData.backend_url = body.backend_url;
-  if (body.organization_id !== undefined)
-    updateData.organization_id = body.organization_id;
-  if (body.node_id !== undefined) updateData.node_id = body.node_id;
-  if (body.is_active !== undefined) updateData.is_active = body.is_active;
-  if (body.upstream_auth_header !== undefined)
-    updateData.upstream_auth_header = body.upstream_auth_header;
-  if (body.upstream_auth_value !== undefined)
-    updateData.upstream_auth_value = body.upstream_auth_value;
-
-  let newWalletConfig: WalletConfig | null = null;
-  if (body.wallet_id !== undefined) {
-    updateData.wallet_id = body.wallet_id;
-    if (body.wallet_id !== null) {
-      const wallet = await db
-        .selectFrom("wallets")
-        .select("wallet_config")
-        .where("id", "=", body.wallet_id)
-        .executeTakeFirst();
-      newWalletConfig = wallet?.wallet_config as WalletConfig | null;
+    if (tenant.status === "pending") {
+      const allowedPendingFields = ["wallet_id"];
+      const requestedFields = Object.keys(body).filter(
+        (k) => body[k as keyof typeof body] !== undefined,
+      );
+      const hasDisallowedFields = requestedFields.some(
+        (f) => !allowedPendingFields.includes(f),
+      );
+      if (hasDisallowedFields) {
+        return c.json(
+          {
+            error:
+              "Cannot modify tenant while initializing. Only wallet assignment is allowed.",
+          },
+          400,
+        );
+      }
     }
-  }
 
-  const result = await db
-    .updateTable("tenants")
-    .set(updateData)
-    .where("id", "=", id)
-    .returningAll()
-    .executeTakeFirst();
+    const updateData: Record<string, unknown> = {};
+    if (body.backend_url !== undefined)
+      updateData.backend_url = body.backend_url;
+    if (body.organization_id !== undefined)
+      updateData.organization_id = body.organization_id;
+    if (body.node_id !== undefined) updateData.node_id = body.node_id;
+    if (body.is_active !== undefined) updateData.is_active = body.is_active;
+    if (body.upstream_auth_header !== undefined)
+      updateData.upstream_auth_header = body.upstream_auth_header;
+    if (body.upstream_auth_value !== undefined)
+      updateData.upstream_auth_value = body.upstream_auth_value;
 
-  if (!result) {
-    return c.json({ error: "Tenant not found" }, 404);
-  }
+    let newWalletConfig: WalletConfig | null = null;
+    if (body.wallet_id !== undefined) {
+      updateData.wallet_id = body.wallet_id;
+      if (body.wallet_id !== null) {
+        const wallet = await db
+          .selectFrom("wallets")
+          .select("wallet_config")
+          .where("id", "=", body.wallet_id)
+          .executeTakeFirst();
+        newWalletConfig = wallet?.wallet_config as WalletConfig | null;
+      }
+    }
 
-  // Sync to all nodes the tenant is on
-  const tenantNodes = await db
-    .selectFrom("tenant_nodes")
-    .select("node_id")
-    .where("tenant_id", "=", id)
-    .execute();
+    const result = await db
+      .updateTable("tenants")
+      .set(updateData)
+      .where("id", "=", id)
+      .returningAll()
+      .executeTakeFirst();
 
-  for (const tn of tenantNodes) {
-    syncToNode(tn.node_id).catch((err) => logger.error(String(err)));
-  }
+    if (!result) {
+      return c.json({ error: "Tenant not found" }, 404);
+    }
 
-  if (newWalletConfig) {
-    const addresses = {
-      solana: newWalletConfig.solana?.["mainnet-beta"]?.address,
-      base: newWalletConfig.evm?.base?.address,
-      polygon: newWalletConfig.evm?.polygon?.address,
-      monad: newWalletConfig.evm?.monad?.address,
-    };
+    // Sync to all nodes the tenant is on
+    const tenantNodes = await db
+      .selectFrom("tenant_nodes")
+      .select("node_id")
+      .where("tenant_id", "=", id)
+      .execute();
 
-    updateAccountAddresses(tenant.name, addresses).catch((err) =>
-      logger.error(
-        `Failed to update corbits dash addresses for ${tenant.name}: ${err}`,
-      ),
-    );
-  }
+    for (const tn of tenantNodes) {
+      syncToNode(tn.node_id).catch((err) => logger.error(String(err)));
+    }
 
-  if (body.wallet_id !== undefined && body.wallet_id !== null) {
-    await checkAndUpdateTenantStatus(id);
-  }
+    if (newWalletConfig) {
+      const addresses = {
+        solana: newWalletConfig.solana?.["mainnet-beta"]?.address,
+        base: newWalletConfig.evm?.base?.address,
+        polygon: newWalletConfig.evm?.polygon?.address,
+        monad: newWalletConfig.evm?.monad?.address,
+      };
 
-  return c.json(result);
-});
+      updateAccountAddresses(tenant.name, addresses).catch((err) =>
+        logger.error(
+          `Failed to update corbits dash addresses for ${tenant.name}: ${err}`,
+        ),
+      );
+    }
+
+    if (body.wallet_id !== undefined && body.wallet_id !== null) {
+      await checkAndUpdateTenantStatus(id);
+    }
+
+    return c.json(result);
+  },
+);
 
 adminRoutes.delete("/tenants/:id", async (c) => {
   const id = parseInt(c.req.param("id"));
@@ -655,92 +679,95 @@ adminRoutes.delete("/tenants/:id", async (c) => {
   return c.json({ success: true });
 });
 
-adminRoutes.post("/tenants/:id/nodes", async (c) => {
-  const tenantId = parseInt(c.req.param("id"));
-  const body = await c.req.json();
-  const nodeId = body.node_id;
+adminRoutes.post(
+  "/tenants/:id/nodes",
+  arktypeValidator("json", AdminAssignNodeSchema),
+  async (c) => {
+    const tenantId = parseInt(c.req.param("id"));
+    const body = c.req.valid("json");
+    const nodeId = body.node_id;
 
-  if (!nodeId) {
-    return c.json({ error: "node_id is required" }, 400);
-  }
+    const tenant = await db
+      .selectFrom("tenants")
+      .select(["id", "name"])
+      .where("id", "=", tenantId)
+      .executeTakeFirst();
 
-  const tenant = await db
-    .selectFrom("tenants")
-    .select(["id", "name"])
-    .where("id", "=", tenantId)
-    .executeTakeFirst();
-
-  if (!tenant) {
-    return c.json({ error: "Tenant not found" }, 404);
-  }
-
-  const node = await db
-    .selectFrom("nodes")
-    .select(["id", "public_ip", "status"])
-    .where("id", "=", nodeId)
-    .executeTakeFirst();
-
-  if (!node) {
-    return c.json({ error: "Node not found" }, 404);
-  }
-
-  const existing = await db
-    .selectFrom("tenant_nodes")
-    .select(["id"])
-    .where("tenant_id", "=", tenantId)
-    .where("node_id", "=", nodeId)
-    .executeTakeFirst();
-
-  if (existing) {
-    return c.json({ error: "Node already assigned to tenant" }, 400);
-  }
-
-  const hasOtherNodes = await db
-    .selectFrom("tenant_nodes")
-    .select(["id"])
-    .where("tenant_id", "=", tenantId)
-    .executeTakeFirst();
-
-  const isPrimary = !hasOtherNodes;
-
-  const result = await db
-    .insertInto("tenant_nodes")
-    .values({
-      tenant_id: tenantId,
-      node_id: nodeId,
-      is_primary: isPrimary,
-    })
-    .returningAll()
-    .executeTakeFirstOrThrow();
-
-  if (node.public_ip) {
-    const healthCheckId = await createHealthCheck(tenant.name, node.public_ip);
-    if (healthCheckId) {
-      await db
-        .updateTable("tenant_nodes")
-        .set({ health_check_id: healthCheckId })
-        .where("id", "=", result.id)
-        .execute();
+    if (!tenant) {
+      return c.json({ error: "Tenant not found" }, 404);
     }
 
-    upsertNodeDnsRecord(
-      tenant.name,
-      nodeId,
-      node.public_ip,
-      healthCheckId,
-    ).catch((err) => logger.error(`Failed to create DNS record: ${err}`));
-  }
+    const node = await db
+      .selectFrom("nodes")
+      .select(["id", "public_ip", "status"])
+      .where("id", "=", nodeId)
+      .executeTakeFirst();
 
-  if (node.status === "active") {
-    enqueueCertProvisioning([nodeId], tenant.name).catch((err) =>
-      logger.error(`Failed to enqueue cert provisioning: ${err}`),
-    );
-  }
+    if (!node) {
+      return c.json({ error: "Node not found" }, 404);
+    }
 
-  syncToNode(nodeId).catch((err) => logger.error(String(err)));
+    const existing = await db
+      .selectFrom("tenant_nodes")
+      .select(["id"])
+      .where("tenant_id", "=", tenantId)
+      .where("node_id", "=", nodeId)
+      .executeTakeFirst();
 
-  return c.json({ success: true, is_primary: isPrimary }, 201);
-});
+    if (existing) {
+      return c.json({ error: "Node already assigned to tenant" }, 400);
+    }
+
+    const hasOtherNodes = await db
+      .selectFrom("tenant_nodes")
+      .select(["id"])
+      .where("tenant_id", "=", tenantId)
+      .executeTakeFirst();
+
+    const isPrimary = !hasOtherNodes;
+
+    const result = await db
+      .insertInto("tenant_nodes")
+      .values({
+        tenant_id: tenantId,
+        node_id: nodeId,
+        is_primary: isPrimary,
+      })
+      .returningAll()
+      .executeTakeFirstOrThrow();
+
+    if (node.public_ip) {
+      const healthCheckId = await createHealthCheck(
+        tenant.name,
+        node.public_ip,
+      );
+      if (healthCheckId) {
+        await db
+          .updateTable("tenant_nodes")
+          .set({ health_check_id: healthCheckId })
+          .where("id", "=", result.id)
+          .execute();
+      }
+
+      upsertNodeDnsRecord(
+        tenant.name,
+        nodeId,
+        node.public_ip,
+        healthCheckId,
+      ).catch((err) => logger.error(`Failed to create DNS record: ${err}`));
+    }
+
+    if (node.status === "active") {
+      enqueueCertProvisioning([nodeId], tenant.name).catch((err) =>
+        logger.error(`Failed to enqueue cert provisioning: ${err}`),
+      );
+    }
+
+    syncToNode(nodeId).catch((err) => logger.error(String(err)));
+
+    return c.json({ success: true, is_primary: isPrimary }, 201);
+  },
+);
 
 adminRoutes.delete("/tenants/:id/nodes/:nodeId", async (c) => {
   const tenantId = parseInt(c.req.param("id"));
@@ -874,61 +901,69 @@ adminRoutes.get("/tenants/:tenantId/endpoints", async (c) => {
   return c.json(endpoints);
 });
 
-adminRoutes.put("/tenants/:tenantId/endpoints/:endpointId", async (c) => {
-  const tenantId = parseInt(c.req.param("tenantId"));
-  const endpointId = parseInt(c.req.param("endpointId"));
-  const body = await c.req.json();
+adminRoutes.put(
+  "/tenants/:tenantId/endpoints/:endpointId",
+  arktypeValidator("json", AdminUpdateEndpointSchema),
+  async (c) => {
+    const tenantId = parseInt(c.req.param("tenantId"));
+    const endpointId = parseInt(c.req.param("endpointId"));
+    const body = c.req.valid("json");
 
-  const updateData: Record<string, unknown> = {};
-  if (body.path !== undefined) {
-    const inputPath = body.path;
-    // Process path pattern similar to endpoints.ts
-    if (inputPath.startsWith("^")) {
-      updateData.path = inputPath;
-      updateData.path_pattern = inputPath;
-    } else if (inputPath.includes("{")) {
-      const regex = "^" + inputPath.replace(/\{[^}]+\}/g, "[^/]+") + "$";
-      updateData.path = inputPath;
-      updateData.path_pattern = regex;
-    } else {
-      updateData.path = inputPath;
-      updateData.path_pattern = inputPath;
+    const updateData: Record<string, unknown> = {};
+    if (body.path !== undefined) {
+      const inputPath = body.path;
+      // Process path pattern similar to endpoints.ts
+      if (inputPath.startsWith("^")) {
+        updateData.path = inputPath;
+        updateData.path_pattern = inputPath;
+      } else if (inputPath.includes("{")) {
+        const regex = "^" + inputPath.replace(/\{[^}]+\}/g, "[^/]+") + "$";
+        updateData.path = inputPath;
+        updateData.path_pattern = regex;
+      } else {
+        updateData.path = inputPath;
+        updateData.path_pattern = inputPath;
+      }
     }
-  }
-  if (body.price_usdc !== undefined) updateData.price_usdc = body.price_usdc;
-  if (body.scheme !== undefined) updateData.scheme = body.scheme;
-  if (body.description !== undefined) updateData.description = body.description;
-  if (body.priority !== undefined) updateData.priority = body.priority;
+    if (body.price_usdc !== undefined) updateData.price_usdc = body.price_usdc;
+    if (body.scheme !== undefined) updateData.scheme = body.scheme;
+    if (body.description !== undefined)
+      updateData.description = body.description;
+    if (body.priority !== undefined) updateData.priority = body.priority;
 
-  const result = await db
-    .updateTable("endpoints")
-    .set(updateData)
-    .where("id", "=", endpointId)
-    .where("tenant_id", "=", tenantId)
-    .returningAll()
-    .executeTakeFirst();
+    const result = await db
+      .updateTable("endpoints")
+      .set(updateData)
+      .where("id", "=", endpointId)
+      .where("tenant_id", "=", tenantId)
+      .returningAll()
+      .executeTakeFirst();
 
-  if (!result) {
-    return c.json({ error: "Endpoint not found" }, 404);
-  }
+    if (!result) {
+      return c.json({ error: "Endpoint not found" }, 404);
+    }
 
-  // Sync to all nodes the tenant is on
-  const tenantNodes = await db
-    .selectFrom("tenant_nodes")
-    .select("node_id")
-    .where("tenant_id", "=", tenantId)
-    .execute();
+    // Sync to all nodes the tenant is on
+    const tenantNodes = await db
+      .selectFrom("tenant_nodes")
+      .select("node_id")
+      .where("tenant_id", "=", tenantId)
+      .execute();
 
-  for (const tn of tenantNodes) {
-    syncToNode(tn.node_id).catch((err) => logger.error(String(err)));
-  }
+    for (const tn of tenantNodes) {
+      syncToNode(tn.node_id).catch((err) => logger.error(String(err)));
+    }
 
-  return c.json(result);
-});
+    return c.json(result);
+  },
+);
 
 adminRoutes.get("/transactions", async (c) => {
-  const limit = parseInt(c.req.query("limit") || "100");
-  const offset = parseInt(c.req.query("offset") || "0");
+  const { limit, offset } = parsePagination(
+    c.req.query("limit"),
+    c.req.query("offset"),
+    100,
+  );
 
   const transactions = await db
     .selectFrom("transactions")
@@ -965,8 +1000,11 @@ adminRoutes.get("/transactions", async (c) => {
 // Get Corbits transactions for a single tenant with pagination
 adminRoutes.get("/tenants/:id/corbits-transactions", async (c) => {
   const tenantId = parseInt(c.req.param("id"));
-  const limit = parseInt(c.req.query("limit") || "10");
-  const offset = parseInt(c.req.query("offset") || "0");
+  const { limit, offset } = parsePagination(
+    c.req.query("limit"),
+    c.req.query("offset"),
+    10,
+  );
   const forceRefresh = c.req.query("refresh") === "true";
 
   const tenant = await db
@@ -1258,63 +1296,55 @@ adminRoutes.get("/settings", async (c) => {
   });
 });
 
-adminRoutes.put("/settings", async (c) => {
-  const body = await c.req.json();
+adminRoutes.put(
+  "/settings",
+  arktypeValidator("json", AdminUpdateSettingsSchema),
+  async (c) => {
+    const body = c.req.valid("json");
 
-  const updateData: Record<string, unknown> = {
-    updated_at: new Date(),
-  };
+    const updateData: Record<string, unknown> = {
+      updated_at: new Date(),
+    };
 
-  if (body.wallet_config !== undefined) {
-    updateData.wallet_config = body.wallet_config
-      ? JSON.stringify(encryptWalletKeys(body.wallet_config))
-      : null;
-  }
-
-  if (body.minimum_balance_sol !== undefined) {
-    const amount = parseFloat(body.minimum_balance_sol);
-    if (isNaN(amount) || amount < 0.001 || amount > 1) {
-      return c.json(
-        { error: "Minimum SOL balance must be between 0.001 and 1" },
-        400,
-      );
+    if (body.wallet_config !== undefined) {
+      updateData.wallet_config = body.wallet_config
+        ? JSON.stringify(
+            encryptWalletKeys(body.wallet_config as CryptoWalletConfig),
+          )
+        : null;
     }
-    updateData.minimum_balance_sol = amount;
-  }
 
-  if (body.minimum_balance_usdc !== undefined) {
-    const amount = parseFloat(body.minimum_balance_usdc);
-    if (isNaN(amount) || amount < 0.001 || amount > 100) {
-      return c.json(
-        { error: "Minimum USDC balance must be between 0.001 and 100" },
-        400,
-      );
+    if (body.minimum_balance_sol !== undefined) {
+      updateData.minimum_balance_sol = body.minimum_balance_sol;
     }
-    updateData.minimum_balance_usdc = amount;
-  }
 
-  const settings = await db
-    .updateTable("admin_settings")
-    .set(updateData)
-    .where("id", "=", 1)
-    .returningAll()
-    .executeTakeFirst();
+    if (body.minimum_balance_usdc !== undefined) {
+      updateData.minimum_balance_usdc = body.minimum_balance_usdc;
+    }
 
-  if (!settings) {
-    return c.json({ error: "Settings not found" }, 404);
-  }
+    const settings = await db
+      .updateTable("admin_settings")
+      .set(updateData)
+      .where("id", "=", 1)
+      .returningAll()
+      .executeTakeFirst();
 
-  const walletConfig = body.wallet_config as WalletConfig | null;
-  const addresses = extractAddresses(walletConfig);
+    if (!settings) {
+      return c.json({ error: "Settings not found" }, 404);
+    }
 
-  return c.json({
-    hasWallet: walletConfig !== null,
-    addresses,
-    minimumBalanceSol: settings.minimum_balance_sol,
-    minimumBalanceUsdc: settings.minimum_balance_usdc,
-    updatedAt: settings.updated_at,
-  });
-});
+    const walletConfig = body.wallet_config as WalletConfig | null;
+    const addresses = extractAddresses(walletConfig);
+
+    return c.json({
+      hasWallet: walletConfig !== null,
+      addresses,
+      minimumBalanceSol: settings.minimum_balance_sol,
+      minimumBalanceUsdc: settings.minimum_balance_usdc,
+      updatedAt: settings.updated_at,
+    });
+  },
+);
 
 adminRoutes.get("/waitlist", async (c) => {
   const waitlist = await db
