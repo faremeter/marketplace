@@ -13,7 +13,6 @@ export const TenantSchema = type({
   id: "number",
   name: "string",
   backend_url: "string",
-  "node_id?": "number | null",
   "wallet_id?": "number | null",
   default_price_usdc: "number",
   default_scheme: "string",

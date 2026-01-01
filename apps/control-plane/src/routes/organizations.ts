@@ -476,7 +476,7 @@ organizationsRoutes.put(
 
     const tenant = await db
       .selectFrom("tenants")
-      .select(["id", "name", "node_id", "organization_id", "status"])
+      .select(["id", "name", "organization_id", "status"])
       .where("id", "=", tenantId)
       .executeTakeFirst();
 
@@ -832,7 +832,6 @@ organizationsRoutes.post(
         .values({
           name: sanitizedName,
           backend_url: body.backend_url,
-          node_id: nodeIds[0],
           organization_id: orgId,
           wallet_id: body.wallet_id,
           default_price_usdc: body.default_price_usdc ?? 0,

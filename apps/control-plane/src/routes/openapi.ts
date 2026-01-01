@@ -261,15 +261,15 @@ openapiRoutes.post(
       }
     }
 
-    // Sync to nodes
-    const tenant = await db
-      .selectFrom("tenants")
+    // Sync to all nodes
+    const tenantNodes = await db
+      .selectFrom("tenant_nodes")
       .select("node_id")
-      .where("id", "=", tenantId)
-      .executeTakeFirst();
+      .where("tenant_id", "=", tenantId)
+      .execute();
 
-    if (tenant?.node_id) {
-      syncToNode(tenant.node_id).catch((err) => logger.error(String(err)));
+    for (const tn of tenantNodes) {
+      syncToNode(tn.node_id).catch((err) => logger.error(String(err)));
     }
 
     return c.json({

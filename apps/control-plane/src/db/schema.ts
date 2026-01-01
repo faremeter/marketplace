@@ -60,7 +60,6 @@ export interface TenantsTable {
   id: ColumnType<number, never, never>;
   name: string;
   backend_url: string;
-  node_id: number | null;
   organization_id: number | null;
   wallet_id: number | null;
   status: ColumnType<string, string | undefined, string>;

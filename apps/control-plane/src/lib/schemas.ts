@@ -32,7 +32,6 @@ export const UpdateEndpointSchema = type({
   "openapi_source_paths?": "string[]",
 });
 
-// Tenant schemas
 export const CreateTenantSchema = type({
   name: "string > 0",
   backend_url: "string",
@@ -42,8 +41,6 @@ export const CreateTenantSchema = type({
   "upstream_auth_header?": `string <= ${MAX_AUTH_HEADER_LENGTH} | null`,
   "upstream_auth_value?": `string <= ${MAX_AUTH_VALUE_LENGTH} | null`,
   "is_active?": "boolean",
-  "node_id?": "number | null",
-  "node_ids?": "number[]",
   "organization_id?": "number | null",
 });
 
@@ -52,7 +49,6 @@ export const UpdateTenantSchema = type({
   "backend_url?": "string | null",
   "organization_id?": "number | null",
   "wallet_id?": "number | null",
-  "node_id?": "number | null",
   "default_price_usdc?": `0 <= number <= ${MAX_PRICE_USDC}`,
   "default_scheme?": "'exact' | 'per_request' | 'per_byte' | null",
   "upstream_auth_header?": `string <= ${MAX_AUTH_HEADER_LENGTH} | null`,
@@ -90,12 +86,10 @@ export const UpdateWalletSchema = type({
   "wallet_config?": "unknown",
 });
 
-// Organization tenant schemas (for nested routes)
 export const OrgCreateTenantSchema = type({
   name: "string > 0",
   backend_url: "string",
   wallet_id: "number",
-  "node_id?": "number | null",
   "default_price_usdc?": `0 <= number <= ${MAX_PRICE_USDC}`,
   "default_scheme?": "'exact' | 'per_request' | 'per_byte' | null",
   "upstream_auth_header?": `string <= ${MAX_AUTH_HEADER_LENGTH} | null`,
@@ -142,7 +136,6 @@ export const AdminUpdateTenantSchema = type({
   "backend_url?": "string | null",
   "organization_id?": "number | null",
   "wallet_id?": "number | null",
-  "node_id?": "number | null",
   "is_active?": "boolean",
   "upstream_auth_header?": `string <= ${MAX_AUTH_HEADER_LENGTH} | null`,
   "upstream_auth_value?": `string <= ${MAX_AUTH_VALUE_LENGTH} | null`,

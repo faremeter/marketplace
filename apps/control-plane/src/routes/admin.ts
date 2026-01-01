@@ -361,7 +361,6 @@ adminRoutes.post(
       .values({
         name: sanitizedName,
         backend_url: body.backend_url,
-        node_id: nodeIds[0] ?? null,
         organization_id: body.organization_id ?? null,
         wallet_id: walletId ?? null,
         default_price_usdc: body.default_price_usdc ?? 0,
@@ -560,7 +559,6 @@ adminRoutes.put(
       updateData.backend_url = body.backend_url;
     if (body.organization_id !== undefined)
       updateData.organization_id = body.organization_id;
-    if (body.node_id !== undefined) updateData.node_id = body.node_id;
     if (body.is_active !== undefined) updateData.is_active = body.is_active;
     if (body.upstream_auth_header !== undefined)
       updateData.upstream_auth_header = body.upstream_auth_header;
@@ -839,21 +837,9 @@ adminRoutes.delete("/tenants/:id/nodes/:nodeId", async (c) => {
             .where("id", "=", nextNode.id)
             .execute();
 
-          await db
-            .updateTable("tenants")
-            .set({ node_id: nextNode.node_id })
-            .where("id", "=", tenantId)
-            .execute();
-
           syncToNode(nextNode.node_id).catch((err) =>
             logger.error(String(err)),
           );
-        } else {
-          await db
-            .updateTable("tenants")
-            .set({ node_id: null })
-            .where("id", "=", tenantId)
-            .execute();
         }
       }
 
@@ -1117,7 +1103,7 @@ adminRoutes.get("/tenants-with-wallets", async (c) => {
 adminRoutes.get("/nodes", async (c) => {
   const nodes = await db
     .selectFrom("nodes")
-    .leftJoin("tenants", "tenants.node_id", "nodes.id")
+    .leftJoin("tenant_nodes", "tenant_nodes.node_id", "nodes.id")
     .select([
       "nodes.id",
       "nodes.name",
@@ -1126,7 +1112,7 @@ adminRoutes.get("/nodes", async (c) => {
       "nodes.wireguard_public_key",
       "nodes.wireguard_address",
       "nodes.created_at",
-      db.fn.count<number>("tenants.id").as("tenant_count"),
+      db.fn.count<number>("tenant_nodes.tenant_id").as("tenant_count"),
     ])
     .groupBy("nodes.id")
     .orderBy("nodes.created_at", "desc")

@@ -36,15 +36,15 @@ function processPathPattern(input: string): {
   return { path: input, path_pattern: input };
 }
 
-async function syncTenantNode(tenantId: number) {
-  const tenant = await db
-    .selectFrom("tenants")
+async function syncTenantNodes(tenantId: number) {
+  const tenantNodes = await db
+    .selectFrom("tenant_nodes")
     .select("node_id")
-    .where("id", "=", tenantId)
-    .executeTakeFirst();
+    .where("tenant_id", "=", tenantId)
+    .execute();
 
-  if (tenant?.node_id) {
-    syncToNode(tenant.node_id).catch((err) => logger.error(String(err)));
+  for (const tn of tenantNodes) {
+    syncToNode(tn.node_id).catch((err) => logger.error(String(err)));
   }
 }
 
@@ -129,7 +129,7 @@ endpointsRoutes.post(
       .returningAll()
       .executeTakeFirstOrThrow();
 
-    syncTenantNode(tenantId);
+    syncTenantNodes(tenantId);
 
     return c.json(result, 201);
   },
@@ -173,7 +173,7 @@ endpointsRoutes.put(
       return c.json({ error: "Endpoint not found" }, 404);
     }
 
-    syncTenantNode(tenantId);
+    syncTenantNodes(tenantId);
 
     return c.json(result);
   },
@@ -199,7 +199,7 @@ endpointsRoutes.delete("/:id", async (c) => {
     return c.json({ error: "Endpoint not found" }, 404);
   }
 
-  syncTenantNode(tenantId);
+  syncTenantNodes(tenantId);
 
   return c.json({ deleted: true, endpoint: result });
 });
