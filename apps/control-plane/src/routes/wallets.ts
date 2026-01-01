@@ -2,6 +2,10 @@ import { Hono } from "hono";
 import { db } from "../server.js";
 import { requireAuth, requireAdmin } from "../middleware/auth.js";
 import {
+  createResourceLimiter,
+  modifyResourceLimiter,
+} from "../middleware/rate-limit.js";
+import {
   fetchWalletBalances,
   extractAddresses,
   BALANCE_CACHE_TTL_MS,
@@ -185,6 +189,7 @@ walletsRoutes.get("/:id/balances", async (c) => {
 // Create wallet for an organization
 walletsRoutes.post(
   "/organization/:orgId",
+  createResourceLimiter,
   arktypeValidator("json", CreateWalletSchema),
   async (c) => {
     const user = c.get("user");
@@ -246,6 +251,7 @@ walletsRoutes.post(
 // Update wallet
 walletsRoutes.put(
   "/:id",
+  modifyResourceLimiter,
   arktypeValidator("json", UpdateWalletSchema),
   async (c) => {
     const user = c.get("user");
@@ -320,7 +326,7 @@ walletsRoutes.put(
 );
 
 // Delete wallet
-walletsRoutes.delete("/:id", async (c) => {
+walletsRoutes.delete("/:id", modifyResourceLimiter, async (c) => {
   const user = c.get("user");
   const id = parseInt(c.req.param("id"));
 

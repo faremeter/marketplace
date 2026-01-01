@@ -8,6 +8,10 @@ import { CreateEndpointSchema, UpdateEndpointSchema } from "../lib/schemas.js";
 import { syncToNode } from "../lib/sync.js";
 import { logger } from "../logger.js";
 import { requireTenantAccess } from "../middleware/auth.js";
+import {
+  createResourceLimiter,
+  modifyResourceLimiter,
+} from "../middleware/rate-limit.js";
 
 function processPathPattern(input: string): {
   path: string;
@@ -90,6 +94,7 @@ endpointsRoutes.get("/:id", async (c) => {
 
 endpointsRoutes.post(
   "/",
+  createResourceLimiter,
   arktypeValidator("json", CreateEndpointSchema),
   async (c) => {
     const tenantId = parseInt(c.req.param("tenantId") ?? "");
@@ -137,6 +142,7 @@ endpointsRoutes.post(
 
 endpointsRoutes.put(
   "/:id",
+  modifyResourceLimiter,
   arktypeValidator("json", UpdateEndpointSchema),
   async (c) => {
     const tenantId = parseInt(c.req.param("tenantId") ?? "");
@@ -179,7 +185,7 @@ endpointsRoutes.put(
   },
 );
 
-endpointsRoutes.delete("/:id", async (c) => {
+endpointsRoutes.delete("/:id", modifyResourceLimiter, async (c) => {
   const tenantId = parseInt(c.req.param("tenantId") ?? "");
   const id = parseInt(c.req.param("id"));
 

@@ -3,6 +3,10 @@ import { randomBytes } from "crypto";
 import { db } from "../server.js";
 import { requireAuth } from "../middleware/auth.js";
 import {
+  createResourceLimiter,
+  modifyResourceLimiter,
+} from "../middleware/rate-limit.js";
+import {
   fetchWalletBalances,
   extractAddresses,
   checkBalancesMeetMinimum,
@@ -79,6 +83,7 @@ const MAX_ORGS_PER_USER = 5;
 
 organizationsRoutes.post(
   "/",
+  createResourceLimiter,
   arktypeValidator("json", CreateOrganizationSchema),
   async (c) => {
     const user = c.get("user");
@@ -165,6 +170,7 @@ organizationsRoutes.get("/:id", async (c) => {
 
 organizationsRoutes.put(
   "/:id",
+  modifyResourceLimiter,
   arktypeValidator("json", UpdateOrganizationSchema),
   async (c) => {
     const user = c.get("user");
@@ -219,7 +225,7 @@ organizationsRoutes.put(
   },
 );
 
-organizationsRoutes.delete("/:id", async (c) => {
+organizationsRoutes.delete("/:id", modifyResourceLimiter, async (c) => {
   const user = c.get("user");
   const id = parseInt(c.req.param("id"));
 
@@ -276,6 +282,7 @@ organizationsRoutes.get("/:id/members", async (c) => {
 
 organizationsRoutes.post(
   "/:id/members",
+  createResourceLimiter,
   arktypeValidator("json", AddMemberSchema),
   async (c) => {
     const user = c.get("user");
@@ -337,47 +344,51 @@ organizationsRoutes.post(
   },
 );
 
-organizationsRoutes.delete("/:id/members/:userId", async (c) => {
-  const user = c.get("user");
-  const orgId = parseInt(c.req.param("id"));
-  const targetUserId = parseInt(c.req.param("userId"));
+organizationsRoutes.delete(
+  "/:id/members/:userId",
+  modifyResourceLimiter,
+  async (c) => {
+    const user = c.get("user");
+    const orgId = parseInt(c.req.param("id"));
+    const targetUserId = parseInt(c.req.param("userId"));
 
-  const membership = await db
-    .selectFrom("user_organizations")
-    .select("role")
-    .where("user_id", "=", user.id)
-    .where("organization_id", "=", orgId)
-    .executeTakeFirst();
+    const membership = await db
+      .selectFrom("user_organizations")
+      .select("role")
+      .where("user_id", "=", user.id)
+      .where("organization_id", "=", orgId)
+      .executeTakeFirst();
 
-  if (!membership && !user.is_admin) {
-    return c.json({ error: "Organization not found" }, 404);
-  }
+    if (!membership && !user.is_admin) {
+      return c.json({ error: "Organization not found" }, 404);
+    }
 
-  if (user.id === targetUserId) {
+    if (user.id === targetUserId) {
+      await db
+        .deleteFrom("user_organizations")
+        .where("user_id", "=", targetUserId)
+        .where("organization_id", "=", orgId)
+        .execute();
+      return c.json({ deleted: true });
+    }
+
+    if (
+      membership &&
+      !["owner", "admin"].includes(membership.role) &&
+      !user.is_admin
+    ) {
+      return c.json({ error: "Insufficient permissions" }, 403);
+    }
+
     await db
       .deleteFrom("user_organizations")
       .where("user_id", "=", targetUserId)
       .where("organization_id", "=", orgId)
       .execute();
+
     return c.json({ deleted: true });
-  }
-
-  if (
-    membership &&
-    !["owner", "admin"].includes(membership.role) &&
-    !user.is_admin
-  ) {
-    return c.json({ error: "Insufficient permissions" }, 403);
-  }
-
-  await db
-    .deleteFrom("user_organizations")
-    .where("user_id", "=", targetUserId)
-    .where("organization_id", "=", orgId)
-    .execute();
-
-  return c.json({ deleted: true });
-});
+  },
+);
 
 organizationsRoutes.get("/:id/tenants", async (c) => {
   const user = c.get("user");
@@ -456,6 +467,7 @@ organizationsRoutes.get("/:id/tenants", async (c) => {
 
 organizationsRoutes.put(
   "/:id/tenants/:tenantId",
+  modifyResourceLimiter,
   arktypeValidator("json", OrgUpdateTenantSchema),
   async (c) => {
     const user = c.get("user");
@@ -574,71 +586,75 @@ organizationsRoutes.put(
   },
 );
 
-organizationsRoutes.delete("/:id/tenants/:tenantId", async (c) => {
-  const user = c.get("user");
-  const orgId = parseInt(c.req.param("id"));
-  const tenantId = parseInt(c.req.param("tenantId"));
+organizationsRoutes.delete(
+  "/:id/tenants/:tenantId",
+  modifyResourceLimiter,
+  async (c) => {
+    const user = c.get("user");
+    const orgId = parseInt(c.req.param("id"));
+    const tenantId = parseInt(c.req.param("tenantId"));
 
-  const membership = await db
-    .selectFrom("user_organizations")
-    .select("role")
-    .where("user_id", "=", user.id)
-    .where("organization_id", "=", orgId)
-    .executeTakeFirst();
+    const membership = await db
+      .selectFrom("user_organizations")
+      .select("role")
+      .where("user_id", "=", user.id)
+      .where("organization_id", "=", orgId)
+      .executeTakeFirst();
 
-  if (!membership && !user.is_admin) {
-    return c.json({ error: "Organization not found" }, 404);
-  }
+    if (!membership && !user.is_admin) {
+      return c.json({ error: "Organization not found" }, 404);
+    }
 
-  const tenant = await db
-    .selectFrom("tenants")
-    .leftJoin("wallets", "wallets.id", "tenants.wallet_id")
-    .select([
-      "tenants.id",
-      "tenants.name",
-      "tenants.status",
-      "tenants.wallet_id",
-      "tenants.organization_id",
-      "wallets.wallet_config",
-    ])
-    .where("tenants.id", "=", tenantId)
-    .executeTakeFirst();
+    const tenant = await db
+      .selectFrom("tenants")
+      .leftJoin("wallets", "wallets.id", "tenants.wallet_id")
+      .select([
+        "tenants.id",
+        "tenants.name",
+        "tenants.status",
+        "tenants.wallet_id",
+        "tenants.organization_id",
+        "wallets.wallet_config",
+      ])
+      .where("tenants.id", "=", tenantId)
+      .executeTakeFirst();
 
-  if (!tenant || tenant.organization_id !== orgId) {
-    return c.json({ error: "Proxy not found" }, 404);
-  }
+    if (!tenant || tenant.organization_id !== orgId) {
+      return c.json({ error: "Proxy not found" }, 404);
+    }
 
-  if (tenant.status === "deleting") {
-    return c.json({ error: "Proxy is already being deleted" }, 400);
-  }
+    if (tenant.status === "deleting") {
+      return c.json({ error: "Proxy is already being deleted" }, 400);
+    }
 
-  const tenantNodes = await db
-    .selectFrom("tenant_nodes")
-    .select(["cert_status"])
-    .where("tenant_id", "=", tenantId)
-    .execute();
+    const tenantNodes = await db
+      .selectFrom("tenant_nodes")
+      .select(["cert_status"])
+      .where("tenant_id", "=", tenantId)
+      .execute();
 
-  const hasCertInFlight = tenantNodes.some(
-    (n) => n.cert_status === "pending" || n.cert_status === "deleting",
-  );
-
-  if (hasCertInFlight) {
-    return c.json(
-      { error: "Cannot delete while certificate operations are in progress" },
-      400,
+    const hasCertInFlight = tenantNodes.some(
+      (n) => n.cert_status === "pending" || n.cert_status === "deleting",
     );
-  }
 
-  await db
-    .updateTable("tenants")
-    .set({ status: "deleting" })
-    .where("id", "=", tenantId)
-    .execute();
+    if (hasCertInFlight) {
+      return c.json(
+        { error: "Cannot delete while certificate operations are in progress" },
+        400,
+      );
+    }
 
-  await enqueueTenantDeletion(tenant.id, tenant.name);
+    await db
+      .updateTable("tenants")
+      .set({ status: "deleting" })
+      .where("id", "=", tenantId)
+      .execute();
 
-  return c.json({ success: true });
-});
+    await enqueueTenantDeletion(tenant.id, tenant.name);
+
+    return c.json({ success: true });
+  },
+);
 
 organizationsRoutes.get("/:id/tenants/check-name", async (c) => {
   const user = c.get("user");
@@ -766,6 +782,7 @@ organizationsRoutes.get("/:id/can-create-proxy", async (c) => {
 
 organizationsRoutes.post(
   "/:id/tenants",
+  createResourceLimiter,
   arktypeValidator("json", OrgCreateTenantSchema),
   async (c) => {
     const user = c.get("user");
@@ -969,6 +986,7 @@ organizationsRoutes.get("/:id/invitations", async (c) => {
 
 organizationsRoutes.post(
   "/:id/invitations",
+  createResourceLimiter,
   arktypeValidator("json", AddMemberSchema),
   async (c) => {
     const user = c.get("user");
@@ -1055,48 +1073,52 @@ organizationsRoutes.post(
   },
 );
 
-organizationsRoutes.delete("/:id/invitations/:invitationId", async (c) => {
-  const user = c.get("user");
-  const orgId = parseInt(c.req.param("id"));
-  const invitationId = parseInt(c.req.param("invitationId"));
+organizationsRoutes.delete(
+  "/:id/invitations/:invitationId",
+  modifyResourceLimiter,
+  async (c) => {
+    const user = c.get("user");
+    const orgId = parseInt(c.req.param("id"));
+    const invitationId = parseInt(c.req.param("invitationId"));
 
-  const membership = await db
-    .selectFrom("user_organizations")
-    .select("role")
-    .where("user_id", "=", user.id)
-    .where("organization_id", "=", orgId)
-    .executeTakeFirst();
+    const membership = await db
+      .selectFrom("user_organizations")
+      .select("role")
+      .where("user_id", "=", user.id)
+      .where("organization_id", "=", orgId)
+      .executeTakeFirst();
 
-  if (!membership && !user.is_admin) {
-    return c.json({ error: "Organization not found" }, 404);
-  }
+    if (!membership && !user.is_admin) {
+      return c.json({ error: "Organization not found" }, 404);
+    }
 
-  if (
-    membership &&
-    !["owner", "admin"].includes(membership.role) &&
-    !user.is_admin
-  ) {
-    return c.json({ error: "Insufficient permissions" }, 403);
-  }
+    if (
+      membership &&
+      !["owner", "admin"].includes(membership.role) &&
+      !user.is_admin
+    ) {
+      return c.json({ error: "Insufficient permissions" }, 403);
+    }
 
-  const invitation = await db
-    .selectFrom("organization_invitations")
-    .select("id")
-    .where("id", "=", invitationId)
-    .where("organization_id", "=", orgId)
-    .executeTakeFirst();
+    const invitation = await db
+      .selectFrom("organization_invitations")
+      .select("id")
+      .where("id", "=", invitationId)
+      .where("organization_id", "=", orgId)
+      .executeTakeFirst();
 
-  if (!invitation) {
-    return c.json({ error: "Invitation not found" }, 404);
-  }
+    if (!invitation) {
+      return c.json({ error: "Invitation not found" }, 404);
+    }
 
-  await db
-    .deleteFrom("organization_invitations")
-    .where("id", "=", invitationId)
-    .execute();
+    await db
+      .deleteFrom("organization_invitations")
+      .where("id", "=", invitationId)
+      .execute();
 
-  return c.json({ deleted: true });
-});
+    return c.json({ deleted: true });
+  },
+);
 
 // Onboarding routes
 

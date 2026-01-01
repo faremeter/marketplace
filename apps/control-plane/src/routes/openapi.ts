@@ -3,6 +3,10 @@ import { db } from "../server.js";
 import { syncToNode } from "../lib/sync.js";
 import { logger } from "../logger.js";
 import { requireTenantAccess } from "../middleware/auth.js";
+import {
+  createResourceLimiter,
+  modifyResourceLimiter,
+} from "../middleware/rate-limit.js";
 import { arktypeValidator } from "@hono/arktype-validator";
 import { OpenApiImportSchema, ValidatePatternSchema } from "../lib/schemas.js";
 
@@ -169,7 +173,7 @@ openapiRoutes.get("/spec", async (c) => {
 });
 
 // DELETE /openapi/spec - Remove stored OpenAPI spec
-openapiRoutes.delete("/spec", async (c) => {
+openapiRoutes.delete("/spec", modifyResourceLimiter, async (c) => {
   const tenantId = parseInt(c.req.param("tenantId") ?? "");
 
   const result = await db
@@ -189,6 +193,7 @@ openapiRoutes.delete("/spec", async (c) => {
 // POST /openapi/import - Import OpenAPI spec and create endpoints
 openapiRoutes.post(
   "/import",
+  createResourceLimiter,
   arktypeValidator("json", OpenApiImportSchema),
   async (c) => {
     const tenantId = parseInt(c.req.param("tenantId") ?? "");

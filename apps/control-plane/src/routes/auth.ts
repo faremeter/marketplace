@@ -4,6 +4,11 @@ import bcrypt from "bcrypt";
 import crypto from "crypto";
 import { db } from "../server.js";
 import { signToken, requireAuth } from "../middleware/auth.js";
+import {
+  signupLimiter,
+  loginLimiter,
+  verifyLimiter,
+} from "../middleware/rate-limit.js";
 import { normalizeEmail, isExpired } from "../lib/validation.js";
 import { arktypeValidator } from "@hono/arktype-validator";
 import {
@@ -18,6 +23,7 @@ const SALT_ROUNDS = 10;
 
 authRoutes.post(
   "/signup",
+  signupLimiter,
   arktypeValidator("json", SignupSchema),
   async (c) => {
     if (process.env.NODE_ENV === "production") {
@@ -108,66 +114,74 @@ authRoutes.post(
   },
 );
 
-authRoutes.post("/login", arktypeValidator("json", LoginSchema), async (c) => {
-  const body = c.req.valid("json");
-  const email = normalizeEmail(body.email);
+authRoutes.post(
+  "/login",
+  loginLimiter,
+  arktypeValidator("json", LoginSchema),
+  async (c) => {
+    const body = c.req.valid("json");
+    const email = normalizeEmail(body.email);
 
-  const user = await db
-    .selectFrom("users")
-    .select(["id", "email", "password_hash", "is_admin", "email_verified"])
-    .where("email", "=", email)
-    .executeTakeFirst();
+    const user = await db
+      .selectFrom("users")
+      .select(["id", "email", "password_hash", "is_admin", "email_verified"])
+      .where("email", "=", email)
+      .executeTakeFirst();
 
-  if (!user) {
-    return c.json({ error: "Invalid email or password" }, 401);
-  }
+    if (!user) {
+      return c.json({ error: "Invalid email or password" }, 401);
+    }
 
-  const validPassword = await bcrypt.compare(body.password, user.password_hash);
-  if (!validPassword) {
-    return c.json({ error: "Invalid email or password" }, 401);
-  }
+    const validPassword = await bcrypt.compare(
+      body.password,
+      user.password_hash,
+    );
+    if (!validPassword) {
+      return c.json({ error: "Invalid email or password" }, 401);
+    }
 
-  const token = signToken({
-    userId: user.id,
-    email: user.email,
-    isAdmin: user.is_admin,
-  });
-
-  setCookie(c, "auth_token", token, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "lax",
-    maxAge: 7 * 24 * 60 * 60,
-    path: "/",
-  });
-
-  const organizations = await db
-    .selectFrom("user_organizations")
-    .innerJoin(
-      "organizations",
-      "organizations.id",
-      "user_organizations.organization_id",
-    )
-    .select([
-      "organizations.id",
-      "organizations.name",
-      "organizations.slug",
-      "user_organizations.role",
-    ])
-    .where("user_organizations.user_id", "=", user.id)
-    .orderBy("organizations.name", "asc")
-    .execute();
-
-  return c.json({
-    user: {
-      id: user.id,
+    const token = signToken({
+      userId: user.id,
       email: user.email,
-      is_admin: user.is_admin,
-      email_verified: user.email_verified,
-      organizations,
-    },
-  });
-});
+      isAdmin: user.is_admin,
+    });
+
+    setCookie(c, "auth_token", token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
+      maxAge: 7 * 24 * 60 * 60,
+      path: "/",
+    });
+
+    const organizations = await db
+      .selectFrom("user_organizations")
+      .innerJoin(
+        "organizations",
+        "organizations.id",
+        "user_organizations.organization_id",
+      )
+      .select([
+        "organizations.id",
+        "organizations.name",
+        "organizations.slug",
+        "user_organizations.role",
+      ])
+      .where("user_organizations.user_id", "=", user.id)
+      .orderBy("organizations.name", "asc")
+      .execute();
+
+    return c.json({
+      user: {
+        id: user.id,
+        email: user.email,
+        is_admin: user.is_admin,
+        email_verified: user.email_verified,
+        organizations,
+      },
+    });
+  },
+);
 
 authRoutes.post("/logout", (c) => {
   deleteCookie(c, "auth_token", { path: "/" });
@@ -204,6 +218,7 @@ authRoutes.get("/me", requireAuth, async (c) => {
 
 authRoutes.post(
   "/verify",
+  verifyLimiter,
   arktypeValidator("json", VerifyEmailSchema),
   async (c) => {
     const body = c.req.valid("json");
