@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { db } from "../server.js";
+import { db } from "../db/instance.js";
 import { requireAdmin } from "../middleware/auth.js";
 import { syncToNode } from "../lib/sync.js";
 import { logger } from "../logger.js";

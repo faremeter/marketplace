@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { db } from "../server.js";
+import { db } from "../db/instance.js";
 import { regenWireguardConfig } from "../lib/wireguard.js";
 import { deleteNodeDnsRecord, deleteHealthCheck } from "../lib/dns.js";
 import { logger } from "../logger.js";

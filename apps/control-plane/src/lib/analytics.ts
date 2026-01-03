@@ -1,4 +1,4 @@
-import { db } from "../server.js";
+import { db } from "../db/instance.js";
 import { sql } from "kysely";
 
 export interface EarningsAnalytics {

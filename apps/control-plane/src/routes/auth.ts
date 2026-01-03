@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import { setCookie, deleteCookie } from "hono/cookie";
 import bcrypt from "bcrypt";
 import crypto from "crypto";
-import { db } from "../server.js";
+import { db } from "../db/instance.js";
 import { signToken, requireAuth } from "../middleware/auth.js";
 import {
   signupLimiter,

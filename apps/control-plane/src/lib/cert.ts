@@ -1,6 +1,6 @@
 import { exec } from "child_process";
 import { promisify } from "util";
-import { db } from "../server.js";
+import { db } from "../db/instance.js";
 import { logger } from "../logger.js";
 import { checkAndUpdateTenantStatus } from "./queue.js";
 

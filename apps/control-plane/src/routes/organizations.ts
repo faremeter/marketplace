@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { randomBytes } from "crypto";
-import { db } from "../server.js";
+import { db } from "../db/instance.js";
 import { requireAuth } from "../middleware/auth.js";
 import {
   createResourceLimiter,

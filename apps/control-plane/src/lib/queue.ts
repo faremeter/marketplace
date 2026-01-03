@@ -15,7 +15,7 @@ import { syncToNode } from "./sync.js";
 import { fetchWalletBalances } from "./balances.js";
 import { cleanupAccount, renameAccount } from "./corbits-dash.js";
 import { logger } from "../logger.js";
-import { db } from "../server.js";
+import { db } from "../db/instance.js";
 
 let boss: PgBoss | null = null;
 

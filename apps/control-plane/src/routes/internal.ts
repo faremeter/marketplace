@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { db } from "../server.js";
+import { db } from "../db/instance.js";
 import { enqueueTransactionRecording } from "../lib/queue.js";
 import { logger } from "../logger.js";
 import { arktypeValidator } from "@hono/arktype-validator";

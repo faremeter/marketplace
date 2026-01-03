@@ -3,7 +3,6 @@ import { exec } from "child_process";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { serve } from "@hono/node-server";
-import { createDatabase } from "./db/client.js";
 import { tenantsRoutes } from "./routes/tenants.js";
 import { nodesRoutes } from "./routes/nodes.js";
 import { endpointsRoutes } from "./routes/endpoints.js";
@@ -20,25 +19,12 @@ import { startQueue, stopQueue } from "./lib/queue.js";
 
 const app = new Hono();
 
-if (!process.env.DATABASE_PASSWORD) {
-  throw new Error("DATABASE_PASSWORD environment variable is required");
-}
-
 if (!process.env.WALLET_ENCRYPTION_KEY) {
   throw new Error("WALLET_ENCRYPTION_KEY environment variable is required");
 }
 if (process.env.WALLET_ENCRYPTION_KEY.length !== 64) {
   throw new Error("WALLET_ENCRYPTION_KEY must be 64 hex characters (32 bytes)");
 }
-
-export const db = createDatabase({
-  host: process.env.DATABASE_HOST || "localhost",
-  port: parseInt(process.env.DATABASE_PORT || "5432"),
-  database: process.env.DATABASE_NAME || "control_plane",
-  user: process.env.DATABASE_USER || "control_plane",
-  password: process.env.DATABASE_PASSWORD,
-  ssl: process.env.DATABASE_SSL === "true",
-});
 
 app.use(
   "*",
@@ -68,7 +54,7 @@ const dbConfig = {
   port: parseInt(process.env.DATABASE_PORT || "5432"),
   database: process.env.DATABASE_NAME || "control_plane",
   user: process.env.DATABASE_USER || "control_plane",
-  password: process.env.DATABASE_PASSWORD,
+  password: process.env.DATABASE_PASSWORD as string, // validated by db/instance.ts
   ssl: process.env.DATABASE_SSL === "true",
 };
 
@@ -76,7 +62,7 @@ startQueue(dbConfig).catch((err) => {
   logger.error(`Failed to start queue: ${err}`);
 });
 
-exec("sudo systemctl start wg-peers", (err, _stdout, _stderr) => {
+exec("sudo systemctl start wg-peers", (err) => {
   if (err) {
     logger.warn(`Failed to sync WireGuard peers: ${err.message}`);
   } else {

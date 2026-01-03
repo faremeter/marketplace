@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { db } from "../server.js";
+import { db } from "../db/instance.js";
 import { requireTenantAccess } from "../middleware/auth.js";
 import { parsePagination } from "../lib/validation.js";
 

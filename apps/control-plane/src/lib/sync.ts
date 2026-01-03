@@ -1,4 +1,4 @@
-import { db } from "../server.js";
+import { db } from "../db/instance.js";
 import { logger } from "../logger.js";
 
 export async function buildNodeConfig(nodeId: number) {

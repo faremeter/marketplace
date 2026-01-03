@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { db } from "../server.js";
+import { db } from "../db/instance.js";
 import { optionalAuth, requireAuth } from "../middleware/auth.js";
 import {
   waitlistLimiter,

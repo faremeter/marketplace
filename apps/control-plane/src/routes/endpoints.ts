@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { db } from "../server.js";
+import { db } from "../db/instance.js";
 import { sql } from "kysely";
 import safe from "safe-regex2";
 import { arktypeValidator } from "@hono/arktype-validator";
