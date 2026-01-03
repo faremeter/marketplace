@@ -9,7 +9,15 @@
     "migrate": "tsx src/db/migrate.ts",
     "migrate:up": "tsx src/db/migrate.ts up",
     "migrate:down": "tsx src/db/migrate.ts down",
-    "migrate:wallets": "tsx src/scripts/migrate-wallets.ts"
+    "migrate:wallets": "tsx src/scripts/migrate-wallets.ts",
+    "test": "tap 'src/**/*.test.ts'",
+    "test:watch": "tap 'src/**/*.test.ts' --watch"
+  },
+  "tap": {
+    "plugin": [
+      "!@tapjs/typescript",
+      "@tapjs/tsx"
+    ]
   },
   "dependencies": {
     "@aws-sdk/client-route-53": "^3.948.0",
@@ -34,12 +42,17 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.39.1",
+    "@tapjs/asserts": "^4.0.1",
+    "@tapjs/tsx": "^3.0.1",
     "@types/bcrypt": "^5.0.2",
+    "@types/better-sqlite3": "^7.6.11",
     "@types/jsonwebtoken": "^9.0.7",
     "@types/node": "^20.19.11",
     "@types/pg": "^8.11.10",
+    "better-sqlite3": "^11.0.0",
     "eslint": "^9.39.1",
     "prettier": "^3.7.4",
+    "tap": "^21.1.0",
     "tsx": "^4.20.5",
     "typescript": "^5.9.2",
     "typescript-eslint": "^8.48.1"
