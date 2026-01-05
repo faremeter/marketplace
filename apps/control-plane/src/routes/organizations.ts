@@ -727,8 +727,10 @@ organizationsRoutes.get("/:id/can-create-proxy", async (c) => {
       Date.now() - new Date(cachedAt).getTime() < BALANCE_CACHE_TTL_MS;
 
     if (isCacheFresh) {
-      // Use cached balances
-      const cached = wallet.cached_balances as WalletBalances;
+      const cached =
+        typeof wallet.cached_balances === "string"
+          ? (JSON.parse(wallet.cached_balances) as WalletBalances)
+          : (wallet.cached_balances as WalletBalances);
       if (checkBalancesMeetMinimum(cached, minSol, minUsdc)) {
         return c.json({ available: true });
       }
@@ -763,7 +765,10 @@ organizationsRoutes.get("/:id/can-create-proxy", async (c) => {
         );
         // If fetch fails but we have stale cache, use it as fallback
         if (wallet.cached_balances) {
-          const cached = wallet.cached_balances as WalletBalances;
+          const cached =
+            typeof wallet.cached_balances === "string"
+              ? (JSON.parse(wallet.cached_balances) as WalletBalances)
+              : (wallet.cached_balances as WalletBalances);
           if (checkBalancesMeetMinimum(cached, minSol, minUsdc)) {
             return c.json({ available: true });
           }
