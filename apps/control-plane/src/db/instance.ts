@@ -1,6 +1,7 @@
 import "dotenv/config";
 import { Kysely, PostgresDialect, SqliteDialect, sql } from "kysely";
 import type { Database } from "./schema.js";
+import { SqliteAdapterPlugin } from "./plugins/sqlite-adapter.js";
 
 const isTest = process.env.NODE_ENV === "test";
 
@@ -44,6 +45,7 @@ if (isTest) {
 
   db = new Kysely<Database>({
     dialect: new SqliteDialect({ database: sqliteDb }),
+    plugins: [new SqliteAdapterPlugin()],
   });
 } else {
   if (!process.env.DATABASE_PASSWORD) {

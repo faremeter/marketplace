@@ -1,5 +1,18 @@
 import type { ColumnType } from "kysely";
 
+type DateColumn = ColumnType<Date | string, Date | string, Date | string>;
+type OptionalDateColumn = ColumnType<
+  Date | string,
+  Date | string | undefined,
+  Date | string
+>;
+type NullableDateColumn = ColumnType<
+  Date | string | null,
+  Date | string | null,
+  Date | string | null
+>;
+type AutoDateColumn = ColumnType<Date | string, never, never>;
+
 export interface Database {
   tenants: TenantsTable;
   nodes: NodesTable;
@@ -21,8 +34,8 @@ export interface OrganizationsTable {
   slug: string;
   is_admin: ColumnType<boolean, boolean | undefined, boolean>;
   onboarding_completed: ColumnType<boolean, boolean | undefined, boolean>;
-  onboarding_completed_at: Date | null;
-  created_at: ColumnType<Date, never, never>;
+  onboarding_completed_at: NullableDateColumn;
+  created_at: AutoDateColumn;
 }
 
 export interface UsersTable {
@@ -32,8 +45,8 @@ export interface UsersTable {
   is_admin: ColumnType<boolean, boolean | undefined, boolean>;
   email_verified: ColumnType<boolean, boolean | undefined, boolean>;
   verification_token: string | null;
-  verification_expires: Date | null;
-  created_at: ColumnType<Date, never, never>;
+  verification_expires: NullableDateColumn;
+  created_at: AutoDateColumn;
 }
 
 export interface UserOrganizationsTable {
@@ -41,7 +54,7 @@ export interface UserOrganizationsTable {
   user_id: number;
   organization_id: number;
   role: string;
-  joined_at: ColumnType<Date, never, never>;
+  joined_at: ColumnType<string, never, never>;
 }
 
 export interface OrganizationInvitationsTable {
@@ -51,9 +64,9 @@ export interface OrganizationInvitationsTable {
   token: string;
   role: ColumnType<string, string | undefined, string>;
   invited_by: number | null;
-  expires_at: Date;
-  accepted_at: Date | null;
-  created_at: ColumnType<Date, never, never>;
+  expires_at: DateColumn;
+  accepted_at: NullableDateColumn;
+  created_at: AutoDateColumn;
 }
 
 export interface TenantsTable {
@@ -69,7 +82,7 @@ export interface TenantsTable {
   upstream_auth_value: string | null;
   openapi_spec: ColumnType<unknown, string | undefined, string> | null;
   is_active: ColumnType<boolean, boolean | undefined, boolean>;
-  created_at: ColumnType<Date, never, never>;
+  created_at: AutoDateColumn;
 }
 
 export interface NodesTable {
@@ -80,7 +93,7 @@ export interface NodesTable {
   status: string;
   wireguard_public_key: string | null;
   wireguard_address: string | null;
-  created_at: ColumnType<Date, never, never>;
+  created_at: AutoDateColumn;
 }
 
 export interface TenantNodesTable {
@@ -90,7 +103,7 @@ export interface TenantNodesTable {
   is_primary: ColumnType<boolean, boolean | undefined, boolean>;
   health_check_id: string | null;
   cert_status: string | null;
-  created_at: ColumnType<Date, never, never>;
+  created_at: AutoDateColumn;
 }
 
 export interface EndpointsTable {
@@ -108,8 +121,8 @@ export interface EndpointsTable {
     string[] | undefined
   >;
   is_active: ColumnType<boolean, boolean | undefined, boolean>;
-  created_at: ColumnType<Date, never, never>;
-  deleted_at: Date | null;
+  created_at: AutoDateColumn;
+  deleted_at: NullableDateColumn;
 }
 
 export interface TransactionsTable {
@@ -122,7 +135,7 @@ export interface TransactionsTable {
   tx_hash: string | null;
   network: string | null;
   request_path: string;
-  created_at: ColumnType<Date, never, never>;
+  created_at: AutoDateColumn;
 }
 
 export interface AdminSettingsTable {
@@ -130,8 +143,8 @@ export interface AdminSettingsTable {
   wallet_config: ColumnType<unknown, string | undefined, string> | null;
   minimum_balance_sol: ColumnType<number, number | undefined, number>;
   minimum_balance_usdc: ColumnType<number, number | undefined, number>;
-  created_at: ColumnType<Date, never, never>;
-  updated_at: ColumnType<Date, Date | undefined, Date>;
+  created_at: AutoDateColumn;
+  updated_at: OptionalDateColumn;
 }
 
 export interface WalletsTable {
@@ -141,12 +154,12 @@ export interface WalletsTable {
   wallet_config: ColumnType<unknown, string, string>;
   funding_status: ColumnType<string, string | undefined, string>;
   cached_balances: ColumnType<unknown, string | undefined, string> | null;
-  balances_cached_at: Date | null;
-  created_at: ColumnType<Date, never, never>;
+  balances_cached_at: NullableDateColumn;
+  created_at: AutoDateColumn;
 }
 
 export interface WaitlistTable {
   id: ColumnType<number, never, never>;
   email: string;
-  created_at: ColumnType<Date, never, never>;
+  created_at: AutoDateColumn;
 }
