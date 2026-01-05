@@ -1167,7 +1167,10 @@ adminRoutes.get("/cert-status", async (c) => {
 adminRoutes.get("/nodes/:id/health", async (c) => {
   const id = parseInt(c.req.param("id"));
 
-  if (process.env.NODE_ENV === "development") {
+  if (
+    process.env.NODE_ENV === "development" ||
+    process.env.NODE_ENV === "test"
+  ) {
     return c.json({ healthy: true, dev: true });
   }
 

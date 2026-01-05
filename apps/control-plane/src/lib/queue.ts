@@ -581,6 +581,10 @@ export async function enqueueCertProvisioning(
   nodeIds: number[],
   tenantName: string,
 ): Promise<void> {
+  if (process.env.NODE_ENV === "test") {
+    return;
+  }
+
   if (!boss) {
     throw new Error("Queue not initialized");
   }
@@ -631,6 +635,10 @@ export async function enqueueTenantDeletion(
   tenantId: number,
   tenantName: string,
 ): Promise<void> {
+  if (process.env.NODE_ENV === "test") {
+    return;
+  }
+
   if (!boss) {
     throw new Error("Queue not initialized");
   }
@@ -658,6 +666,10 @@ export async function enqueueTenantRename(
   oldName: string,
   newName: string,
 ): Promise<void> {
+  if (process.env.NODE_ENV === "test") {
+    return;
+  }
+
   if (!boss) {
     throw new Error("Queue not initialized");
   }
@@ -686,6 +698,10 @@ export async function enqueueBalanceCheck(
   walletId: number,
   solanaAddress: string,
 ): Promise<void> {
+  if (process.env.NODE_ENV === "test") {
+    return;
+  }
+
   if (!boss) {
     throw new Error("Queue not initialized");
   }
@@ -713,6 +729,10 @@ export async function enqueueBalanceCheck(
 export async function enqueueTransactionRecording(
   data: TransactionRecordingJob,
 ): Promise<void> {
+  if (process.env.NODE_ENV === "test") {
+    return;
+  }
+
   if (!boss) {
     throw new Error("Queue not initialized");
   }

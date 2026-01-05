@@ -5,7 +5,10 @@ import { logger } from "../logger.js";
 const execAsync = promisify(exec);
 
 export async function regenWireguardConfig() {
-  if (process.env.NODE_ENV === "development") {
+  if (
+    process.env.NODE_ENV === "development" ||
+    process.env.NODE_ENV === "test"
+  ) {
     logger.info("[DEV] skipped wg-peers trigger");
     return true;
   }

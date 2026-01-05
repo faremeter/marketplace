@@ -120,7 +120,10 @@ export async function triggerCertProvisioning(
     return true;
   }
 
-  if (process.env.NODE_ENV === "development") {
+  if (
+    process.env.NODE_ENV === "development" ||
+    process.env.NODE_ENV === "test"
+  ) {
     logger.info(`[DEV] skipped cert provisioning for ${tenantName}`);
     for (const nodeId of nodeIds) {
       await setCertStatus(tenantName, nodeId, "provisioned");
@@ -195,7 +198,10 @@ export async function deleteCertOnNode(
   nodeId: number,
   tenantName: string,
 ): Promise<boolean> {
-  if (process.env.NODE_ENV === "development") {
+  if (
+    process.env.NODE_ENV === "development" ||
+    process.env.NODE_ENV === "test"
+  ) {
     logger.info(
       `[DEV] skipped cert deletion for ${tenantName} on node ${nodeId}`,
     );
@@ -247,7 +253,10 @@ export async function deleteCertOnNode(
 }
 
 export async function deleteLocalCert(tenantName: string): Promise<void> {
-  if (process.env.NODE_ENV === "development") {
+  if (
+    process.env.NODE_ENV === "development" ||
+    process.env.NODE_ENV === "test"
+  ) {
     logger.info(`[DEV] skipped local cert deletion for ${tenantName}`);
     return;
   }

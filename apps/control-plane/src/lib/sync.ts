@@ -97,10 +97,11 @@ export async function buildNodeConfig(nodeId: number) {
   };
 }
 
-const isDev = process.env.NODE_ENV === "development";
+const skipSync =
+  process.env.NODE_ENV === "development" || process.env.NODE_ENV === "test";
 
 export async function syncToNode(nodeId: number) {
-  if (isDev) {
+  if (skipSync) {
     logger.info(`[DEV] syncToNode: Would sync to node ${nodeId} (skipped)`);
     return;
   }

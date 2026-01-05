@@ -13,7 +13,8 @@ const route53 = new Route53Client({});
 const ZONE_ID = process.env.ROUTE53_ZONE_ID;
 const DNS_TTL = 60;
 const BASE_DOMAIN = "test.api.corbits.dev";
-const isDev = process.env.NODE_ENV === "development";
+const skipExternal =
+  process.env.NODE_ENV === "development" || process.env.NODE_ENV === "test";
 
 export async function upsertNodeDnsRecord(
   tenantName: string,
@@ -21,7 +22,7 @@ export async function upsertNodeDnsRecord(
   publicIp: string,
   healthCheckId: string | null,
 ): Promise<boolean> {
-  if (isDev) {
+  if (skipExternal) {
     logger.info(`[DEV] skipped DNS upsert for ${tenantName}`);
     return true;
   }
@@ -77,7 +78,7 @@ export async function deleteNodeDnsRecord(
   tenantName: string,
   nodeId: number,
 ): Promise<boolean> {
-  if (isDev) {
+  if (skipExternal) {
     logger.info(`[DEV] skipped DNS delete for ${tenantName}`);
     return true;
   }
@@ -138,7 +139,7 @@ export async function deleteNodeDnsRecord(
 export async function deleteAllTenantDnsRecords(
   tenantName: string,
 ): Promise<boolean> {
-  if (isDev) {
+  if (skipExternal) {
     logger.info(`[DEV] skipped delete all DNS for ${tenantName}`);
     return true;
   }
@@ -192,7 +193,7 @@ export async function createHealthCheck(
   tenantName: string,
   nodePublicIp: string,
 ): Promise<string | null> {
-  if (isDev) {
+  if (skipExternal) {
     const mockId = `dev-hc-${Date.now()}`;
     logger.info(`[DEV] skipped health check creation, mock id: ${mockId}`);
     return mockId;
@@ -232,7 +233,7 @@ export async function createHealthCheck(
 export async function deleteHealthCheck(
   healthCheckId: string,
 ): Promise<boolean> {
-  if (isDev) {
+  if (skipExternal) {
     logger.info(`[DEV] skipped health check deletion: ${healthCheckId}`);
     return true;
   }
