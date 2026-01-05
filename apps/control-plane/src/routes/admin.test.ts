@@ -1,0 +1,1751 @@
+import "../tests/setup/env.js";
+import t from "tap";
+import { Hono } from "hono";
+import { sql } from "kysely";
+import { db, setupTestSchema, clearTestData } from "../db/instance.js";
+import { signToken } from "../middleware/auth.js";
+import { adminRoutes } from "./admin.js";
+import {
+  enableCorbitsMock,
+  disableCorbitsMock,
+} from "../tests/setup/corbits-mock.js";
+
+const app = new Hono();
+app.route("/api/admin", adminRoutes);
+
+await setupTestSchema();
+enableCorbitsMock();
+t.teardown(() => disableCorbitsMock());
+
+interface TestUser {
+  id: number;
+  token: string;
+}
+
+async function createUser(email: string, isAdmin = false): Promise<TestUser> {
+  const user = await db
+    .insertInto("users")
+    .values({
+      email,
+      password_hash: "hash",
+      is_admin: isAdmin,
+    })
+    .returning(["id", "email"])
+    .executeTakeFirstOrThrow();
+
+  const token = signToken({ userId: user.id, email: user.email, isAdmin });
+  return { id: user.id, token };
+}
+
+async function createOrg(name: string, slug: string) {
+  return db
+    .insertInto("organizations")
+    .values({ name, slug })
+    .returning(["id"])
+    .executeTakeFirstOrThrow();
+}
+
+async function createTenant(
+  orgId: number,
+  name: string,
+  opts: { wallet_id?: number; status?: string } = {},
+) {
+  return db
+    .insertInto("tenants")
+    .values({
+      name,
+      organization_id: orgId,
+      backend_url: "http://backend.example.com",
+      default_price_usdc: 0.01,
+      default_scheme: "exact",
+      wallet_id: opts.wallet_id ?? null,
+      status: opts.status ?? "active",
+    })
+    .returning(["id"])
+    .executeTakeFirstOrThrow();
+}
+
+async function createWallet(orgId: number | null, name: string) {
+  return db
+    .insertInto("wallets")
+    .values({
+      name,
+      organization_id: orgId,
+      funding_status: "funded",
+      wallet_config: JSON.stringify({
+        solana: { "mainnet-beta": { address: "abc123" } },
+      }),
+    })
+    .returning(["id"])
+    .executeTakeFirstOrThrow();
+}
+
+async function createNode(
+  name: string,
+  opts: { internal_ip?: string; status?: string } = {},
+) {
+  return db
+    .insertInto("nodes")
+    .values({
+      name,
+      internal_ip: opts.internal_ip ?? "10.0.0.1",
+      status: opts.status ?? "active",
+    })
+    .returning(["id"])
+    .executeTakeFirstOrThrow();
+}
+
+async function addMember(userId: number, orgId: number, role = "member") {
+  await db
+    .insertInto("user_organizations")
+    .values({ user_id: userId, organization_id: orgId, role })
+    .execute();
+}
+
+async function createEndpoint(
+  tenantId: number,
+  path: string,
+  opts: { priority?: number } = {},
+) {
+  return db
+    .insertInto("endpoints")
+    .values({
+      tenant_id: tenantId,
+      path,
+      path_pattern: `^${path}$`,
+      priority: opts.priority ?? 0,
+    })
+    .returning(["id"])
+    .executeTakeFirstOrThrow();
+}
+
+async function createAdminSettings() {
+  await sql`
+    INSERT OR REPLACE INTO admin_settings (id, minimum_balance_sol, minimum_balance_usdc)
+    VALUES (1, 0.1, 10)
+  `.execute(db);
+}
+
+async function addToWaitlist(email: string) {
+  return db
+    .insertInto("waitlist")
+    .values({ email })
+    .returning(["id"])
+    .executeTakeFirstOrThrow();
+}
+
+t.beforeEach(async () => {
+  await clearTestData();
+});
+
+await t.test("admin routes require authentication", async (t) => {
+  const res = await app.request("/api/admin/users");
+  t.equal(res.status, 401);
+});
+
+await t.test("admin routes reject non-admin users", async (t) => {
+  const user = await createUser("user@example.com", false);
+  const res = await app.request("/api/admin/users", {
+    headers: { Cookie: `auth_token=${user.token}` },
+  });
+  t.equal(res.status, 403);
+});
+
+await t.test("GET /api/admin/users", async (t) => {
+  await t.test("returns list of users for admin", async (t) => {
+    const admin = await createUser("admin@example.com", true);
+    await createUser("user1@example.com");
+    await createUser("user2@example.com");
+
+    const res = await app.request("/api/admin/users", {
+      headers: { Cookie: `auth_token=${admin.token}` },
+    });
+    t.equal(res.status, 200);
+    const data = (await res.json()) as unknown[];
+    t.equal(data.length, 3);
+  });
+});
+
+await t.test("GET /api/admin/users/:id", async (t) => {
+  await t.test("returns user with organizations", async (t) => {
+    const admin = await createUser("admin@example.com", true);
+    const user = await createUser("user@example.com");
+    const org = await createOrg("Team", "team");
+    await addMember(user.id, org.id, "owner");
+
+    const res = await app.request(`/api/admin/users/${user.id}`, {
+      headers: { Cookie: `auth_token=${admin.token}` },
+    });
+    t.equal(res.status, 200);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const data = (await res.json()) as any;
+    t.equal(data.email, "user@example.com");
+    t.equal(data.organizations.length, 1);
+    t.equal(data.organizations[0].role, "owner");
+  });
+
+  await t.test("returns 404 for non-existent user", async (t) => {
+    const admin = await createUser("admin@example.com", true);
+    const res = await app.request("/api/admin/users/999", {
+      headers: { Cookie: `auth_token=${admin.token}` },
+    });
+    t.equal(res.status, 404);
+  });
+});
+
+await t.test("PUT /api/admin/users/:id", async (t) => {
+  await t.test("updates user is_admin flag", async (t) => {
+    const admin = await createUser("admin@example.com", true);
+    const user = await createUser("user@example.com");
+
+    const res = await app.request(`/api/admin/users/${user.id}`, {
+      method: "PUT",
+      headers: {
+        Cookie: `auth_token=${admin.token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ is_admin: true }),
+    });
+    t.equal(res.status, 200);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const data = (await res.json()) as any;
+    t.equal(data.is_admin, true);
+  });
+
+  await t.test("updates email_verified flag", async (t) => {
+    const admin = await createUser("admin@example.com", true);
+    const user = await createUser("user@example.com");
+
+    const res = await app.request(`/api/admin/users/${user.id}`, {
+      method: "PUT",
+      headers: {
+        Cookie: `auth_token=${admin.token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ email_verified: true }),
+    });
+    t.equal(res.status, 200);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const data = (await res.json()) as any;
+    t.equal(data.email_verified, true);
+  });
+
+  await t.test("returns 404 for non-existent user", async (t) => {
+    const admin = await createUser("admin@example.com", true);
+    const res = await app.request("/api/admin/users/999", {
+      method: "PUT",
+      headers: {
+        Cookie: `auth_token=${admin.token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ is_admin: true }),
+    });
+    t.equal(res.status, 404);
+  });
+});
+
+await t.test("DELETE /api/admin/users/:id", async (t) => {
+  await t.test("deletes user", async (t) => {
+    const admin = await createUser("admin@example.com", true);
+    const user = await createUser("user@example.com");
+
+    const res = await app.request(`/api/admin/users/${user.id}`, {
+      method: "DELETE",
+      headers: { Cookie: `auth_token=${admin.token}` },
+    });
+    t.equal(res.status, 200);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const data = (await res.json()) as any;
+    t.equal(data.deleted, true);
+  });
+
+  await t.test("prevents admin from deleting themselves", async (t) => {
+    const admin = await createUser("admin@example.com", true);
+
+    const res = await app.request(`/api/admin/users/${admin.id}`, {
+      method: "DELETE",
+      headers: { Cookie: `auth_token=${admin.token}` },
+    });
+    t.equal(res.status, 400);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const data = (await res.json()) as any;
+    t.ok(data.error.includes("yourself"));
+  });
+
+  await t.test("returns 404 for non-existent user", async (t) => {
+    const admin = await createUser("admin@example.com", true);
+    const res = await app.request("/api/admin/users/999", {
+      method: "DELETE",
+      headers: { Cookie: `auth_token=${admin.token}` },
+    });
+    t.equal(res.status, 404);
+  });
+});
+
+await t.test("GET /api/admin/organizations", async (t) => {
+  await t.test("returns list of organizations with counts", async (t) => {
+    const admin = await createUser("admin@example.com", true);
+    const user = await createUser("user@example.com");
+    const org = await createOrg("Team", "team");
+    await addMember(user.id, org.id);
+    await createTenant(org.id, "tenant-1");
+    await createTenant(org.id, "tenant-2");
+
+    const res = await app.request("/api/admin/organizations", {
+      headers: { Cookie: `auth_token=${admin.token}` },
+    });
+    t.equal(res.status, 200);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const data = (await res.json()) as any[];
+    t.equal(data.length, 1);
+    t.equal(data[0].name, "Team");
+    t.equal(data[0].member_count, 1);
+    t.equal(data[0].tenant_count, 2);
+  });
+});
+
+await t.test("GET /api/admin/organizations/:id", async (t) => {
+  await t.test("returns organization with members and tenants", async (t) => {
+    const admin = await createUser("admin@example.com", true);
+    const user = await createUser("user@example.com");
+    const org = await createOrg("Team", "team");
+    await addMember(user.id, org.id, "owner");
+    await createTenant(org.id, "my-tenant");
+
+    const res = await app.request(`/api/admin/organizations/${org.id}`, {
+      headers: { Cookie: `auth_token=${admin.token}` },
+    });
+    t.equal(res.status, 200);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const data = (await res.json()) as any;
+    t.equal(data.name, "Team");
+    t.equal(data.members.length, 1);
+    t.equal(data.tenants.length, 1);
+  });
+
+  await t.test("returns 404 for non-existent org", async (t) => {
+    const admin = await createUser("admin@example.com", true);
+    const res = await app.request("/api/admin/organizations/999", {
+      headers: { Cookie: `auth_token=${admin.token}` },
+    });
+    t.equal(res.status, 404);
+  });
+});
+
+await t.test("GET /api/admin/wallets", async (t) => {
+  await t.test("returns list of wallets", async (t) => {
+    const admin = await createUser("admin@example.com", true);
+    const org = await createOrg("Team", "team");
+    await createWallet(org.id, "org-wallet");
+    await createWallet(null, "master-wallet");
+
+    const res = await app.request("/api/admin/wallets", {
+      headers: { Cookie: `auth_token=${admin.token}` },
+    });
+    t.equal(res.status, 200);
+    const data = (await res.json()) as unknown[];
+    t.equal(data.length, 2);
+  });
+});
+
+await t.test("GET /api/admin/tenants", async (t) => {
+  await t.test("returns list of tenants with nodes", async (t) => {
+    const admin = await createUser("admin@example.com", true);
+    const org = await createOrg("Team", "team");
+    const tenant = await createTenant(org.id, "my-tenant");
+    const node = await createNode("node-1");
+
+    await db
+      .insertInto("tenant_nodes")
+      .values({ tenant_id: tenant.id, node_id: node.id, is_primary: true })
+      .execute();
+
+    const res = await app.request("/api/admin/tenants", {
+      headers: { Cookie: `auth_token=${admin.token}` },
+    });
+    t.equal(res.status, 200);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const data = (await res.json()) as any[];
+    t.equal(data.length, 1);
+    t.equal(data[0].name, "my-tenant");
+    t.equal(data[0].nodes.length, 1);
+  });
+});
+
+await t.test("GET /api/admin/tenants/check-name", async (t) => {
+  await t.test("returns available=true for unused name", async (t) => {
+    const admin = await createUser("admin@example.com", true);
+
+    const res = await app.request(
+      "/api/admin/tenants/check-name?name=new-tenant",
+      {
+        headers: { Cookie: `auth_token=${admin.token}` },
+      },
+    );
+    t.equal(res.status, 200);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const data = (await res.json()) as any;
+    t.equal(data.available, true);
+  });
+
+  await t.test("returns available=false for taken name", async (t) => {
+    const admin = await createUser("admin@example.com", true);
+    const org = await createOrg("Team", "team");
+    await createTenant(org.id, "taken-name");
+
+    const res = await app.request(
+      "/api/admin/tenants/check-name?name=taken-name",
+      {
+        headers: { Cookie: `auth_token=${admin.token}` },
+      },
+    );
+    t.equal(res.status, 200);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const data = (await res.json()) as any;
+    t.equal(data.available, false);
+  });
+
+  await t.test("excludes specified ID from check", async (t) => {
+    const admin = await createUser("admin@example.com", true);
+    const org = await createOrg("Team", "team");
+    const tenant = await createTenant(org.id, "my-tenant");
+
+    const res = await app.request(
+      `/api/admin/tenants/check-name?name=my-tenant&excludeId=${tenant.id}`,
+      { headers: { Cookie: `auth_token=${admin.token}` } },
+    );
+    t.equal(res.status, 200);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const data = (await res.json()) as any;
+    t.equal(data.available, true);
+  });
+
+  await t.test("returns available=false for empty name", async (t) => {
+    const admin = await createUser("admin@example.com", true);
+
+    const res = await app.request("/api/admin/tenants/check-name?name=", {
+      headers: { Cookie: `auth_token=${admin.token}` },
+    });
+    t.equal(res.status, 200);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const data = (await res.json()) as any;
+    t.equal(data.available, false);
+  });
+});
+
+await t.test("POST /api/admin/tenants", async (t) => {
+  await t.test("creates tenant with valid data", async (t) => {
+    const admin = await createUser("admin@example.com", true);
+    const org = await createOrg("Team", "team");
+
+    const res = await app.request("/api/admin/tenants", {
+      method: "POST",
+      headers: {
+        Cookie: `auth_token=${admin.token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        name: "new-tenant",
+        backend_url: "http://backend.example.com",
+        organization_id: org.id,
+      }),
+    });
+    t.equal(res.status, 201);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const data = (await res.json()) as any;
+    t.equal(data.name, "new-tenant");
+  });
+
+  await t.test("rejects invalid tenant name", async (t) => {
+    const admin = await createUser("admin@example.com", true);
+
+    const res = await app.request("/api/admin/tenants", {
+      method: "POST",
+      headers: {
+        Cookie: `auth_token=${admin.token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        name: "!!!",
+        backend_url: "http://backend.example.com",
+      }),
+    });
+    t.equal(res.status, 400);
+  });
+
+  await t.test("uses master wallet if no wallet_id provided", async (t) => {
+    const admin = await createUser("admin@example.com", true);
+    const masterWallet = await createWallet(null, "master");
+
+    const res = await app.request("/api/admin/tenants", {
+      method: "POST",
+      headers: {
+        Cookie: `auth_token=${admin.token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        name: "auto-wallet-tenant",
+        backend_url: "http://backend.example.com",
+      }),
+    });
+    t.equal(res.status, 201);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const data = (await res.json()) as any;
+    t.equal(data.wallet_id, masterWallet.id);
+  });
+});
+
+await t.test("PUT /api/admin/tenants/:id", async (t) => {
+  await t.test("updates tenant backend_url", async (t) => {
+    const admin = await createUser("admin@example.com", true);
+    const org = await createOrg("Team", "team");
+    const tenant = await createTenant(org.id, "my-tenant");
+
+    const res = await app.request(`/api/admin/tenants/${tenant.id}`, {
+      method: "PUT",
+      headers: {
+        Cookie: `auth_token=${admin.token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ backend_url: "http://new-backend.example.com" }),
+    });
+    t.equal(res.status, 200);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const data = (await res.json()) as any;
+    t.equal(data.backend_url, "http://new-backend.example.com");
+  });
+
+  await t.test("returns 404 for non-existent tenant", async (t) => {
+    const admin = await createUser("admin@example.com", true);
+
+    const res = await app.request("/api/admin/tenants/999", {
+      method: "PUT",
+      headers: {
+        Cookie: `auth_token=${admin.token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ backend_url: "http://example.com" }),
+    });
+    t.equal(res.status, 404);
+  });
+
+  await t.test(
+    "rejects modification during non-active/pending status",
+    async (t) => {
+      const admin = await createUser("admin@example.com", true);
+      const org = await createOrg("Team", "team");
+      const tenant = await createTenant(org.id, "my-tenant", {
+        status: "deleting",
+      });
+
+      const res = await app.request(`/api/admin/tenants/${tenant.id}`, {
+        method: "PUT",
+        headers: {
+          Cookie: `auth_token=${admin.token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ backend_url: "http://example.com" }),
+      });
+      t.equal(res.status, 400);
+    },
+  );
+
+  await t.test("rejects rename to taken name", async (t) => {
+    const admin = await createUser("admin@example.com", true);
+    const org = await createOrg("Team", "team");
+    await createTenant(org.id, "taken-name");
+    const tenant = await createTenant(org.id, "my-tenant");
+
+    const res = await app.request(`/api/admin/tenants/${tenant.id}`, {
+      method: "PUT",
+      headers: {
+        Cookie: `auth_token=${admin.token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ name: "taken-name" }),
+    });
+    t.equal(res.status, 400);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const data = (await res.json()) as any;
+    t.ok(data.error.includes("already taken"));
+  });
+
+  await t.test("rejects rename when status is pending", async (t) => {
+    const admin = await createUser("admin@example.com", true);
+    const org = await createOrg("Team", "team");
+    const tenant = await createTenant(org.id, "my-tenant", {
+      status: "pending",
+    });
+
+    const res = await app.request(`/api/admin/tenants/${tenant.id}`, {
+      method: "PUT",
+      headers: {
+        Cookie: `auth_token=${admin.token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ name: "new-name" }),
+    });
+    t.equal(res.status, 400);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const data = (await res.json()) as any;
+    t.ok(data.error.includes("operation is in progress"));
+  });
+
+  await t.test(
+    "allows wallet_id assignment when status is pending",
+    async (t) => {
+      const admin = await createUser("admin@example.com", true);
+      const org = await createOrg("Team", "team");
+      const wallet = await createWallet(org.id, "my-wallet");
+      const tenant = await createTenant(org.id, "my-tenant", {
+        status: "pending",
+      });
+
+      const res = await app.request(`/api/admin/tenants/${tenant.id}`, {
+        method: "PUT",
+        headers: {
+          Cookie: `auth_token=${admin.token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ wallet_id: wallet.id }),
+      });
+      t.equal(res.status, 200);
+    },
+  );
+
+  await t.test(
+    "rejects non-wallet fields when status is pending",
+    async (t) => {
+      const admin = await createUser("admin@example.com", true);
+      const org = await createOrg("Team", "team");
+      const tenant = await createTenant(org.id, "my-tenant", {
+        status: "pending",
+      });
+
+      const res = await app.request(`/api/admin/tenants/${tenant.id}`, {
+        method: "PUT",
+        headers: {
+          Cookie: `auth_token=${admin.token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ backend_url: "http://new.example.com" }),
+      });
+      t.equal(res.status, 400);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const data = (await res.json()) as any;
+      t.ok(data.error.includes("Only wallet assignment"));
+    },
+  );
+});
+
+await t.test("DELETE /api/admin/tenants/:id", async (t) => {
+  await t.test("returns 404 for non-existent tenant", async (t) => {
+    const admin = await createUser("admin@example.com", true);
+
+    const res = await app.request("/api/admin/tenants/999", {
+      method: "DELETE",
+      headers: { Cookie: `auth_token=${admin.token}` },
+    });
+    t.equal(res.status, 404);
+  });
+
+  await t.test("rejects if already deleting", async (t) => {
+    const admin = await createUser("admin@example.com", true);
+    const org = await createOrg("Team", "team");
+    const tenant = await createTenant(org.id, "my-tenant", {
+      status: "deleting",
+    });
+
+    const res = await app.request(`/api/admin/tenants/${tenant.id}`, {
+      method: "DELETE",
+      headers: { Cookie: `auth_token=${admin.token}` },
+    });
+    t.equal(res.status, 400);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const data = (await res.json()) as any;
+    t.ok(data.error.includes("already being deleted"));
+  });
+
+  await t.test("rejects if cert operation in progress", async (t) => {
+    const admin = await createUser("admin@example.com", true);
+    const org = await createOrg("Team", "team");
+    const tenant = await createTenant(org.id, "my-tenant");
+    const node = await createNode("node-1");
+
+    await db
+      .insertInto("tenant_nodes")
+      .values({
+        tenant_id: tenant.id,
+        node_id: node.id,
+        cert_status: "pending",
+      })
+      .execute();
+
+    const res = await app.request(`/api/admin/tenants/${tenant.id}`, {
+      method: "DELETE",
+      headers: { Cookie: `auth_token=${admin.token}` },
+    });
+    t.equal(res.status, 400);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const data = (await res.json()) as any;
+    t.ok(data.error.includes("certificate operations"));
+  });
+});
+
+await t.test("POST /api/admin/tenants/:id/nodes", async (t) => {
+  await t.test("assigns node to tenant", async (t) => {
+    const admin = await createUser("admin@example.com", true);
+    const org = await createOrg("Team", "team");
+    const tenant = await createTenant(org.id, "my-tenant");
+    const node = await createNode("node-1");
+
+    const res = await app.request(`/api/admin/tenants/${tenant.id}/nodes`, {
+      method: "POST",
+      headers: {
+        Cookie: `auth_token=${admin.token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ node_id: node.id }),
+    });
+    t.equal(res.status, 201);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const data = (await res.json()) as any;
+    t.equal(data.success, true);
+    t.equal(data.is_primary, true);
+  });
+
+  await t.test("returns 404 for non-existent tenant", async (t) => {
+    const admin = await createUser("admin@example.com", true);
+    const node = await createNode("node-1");
+
+    const res = await app.request("/api/admin/tenants/999/nodes", {
+      method: "POST",
+      headers: {
+        Cookie: `auth_token=${admin.token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ node_id: node.id }),
+    });
+    t.equal(res.status, 404);
+  });
+
+  await t.test("returns 404 for non-existent node", async (t) => {
+    const admin = await createUser("admin@example.com", true);
+    const org = await createOrg("Team", "team");
+    const tenant = await createTenant(org.id, "my-tenant");
+
+    const res = await app.request(`/api/admin/tenants/${tenant.id}/nodes`, {
+      method: "POST",
+      headers: {
+        Cookie: `auth_token=${admin.token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ node_id: 999 }),
+    });
+    t.equal(res.status, 404);
+  });
+
+  await t.test("rejects duplicate assignment", async (t) => {
+    const admin = await createUser("admin@example.com", true);
+    const org = await createOrg("Team", "team");
+    const tenant = await createTenant(org.id, "my-tenant");
+    const node = await createNode("node-1");
+
+    await db
+      .insertInto("tenant_nodes")
+      .values({ tenant_id: tenant.id, node_id: node.id })
+      .execute();
+
+    const res = await app.request(`/api/admin/tenants/${tenant.id}/nodes`, {
+      method: "POST",
+      headers: {
+        Cookie: `auth_token=${admin.token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ node_id: node.id }),
+    });
+    t.equal(res.status, 400);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const data = (await res.json()) as any;
+    t.ok(data.error.includes("already assigned"));
+  });
+
+  await t.test("second node is not primary", async (t) => {
+    const admin = await createUser("admin@example.com", true);
+    const org = await createOrg("Team", "team");
+    const tenant = await createTenant(org.id, "my-tenant");
+    const node1 = await createNode("node-1");
+    const node2 = await createNode("node-2");
+
+    await db
+      .insertInto("tenant_nodes")
+      .values({ tenant_id: tenant.id, node_id: node1.id, is_primary: true })
+      .execute();
+
+    const res = await app.request(`/api/admin/tenants/${tenant.id}/nodes`, {
+      method: "POST",
+      headers: {
+        Cookie: `auth_token=${admin.token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ node_id: node2.id }),
+    });
+    t.equal(res.status, 201);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const data = (await res.json()) as any;
+    t.equal(data.is_primary, false);
+  });
+});
+
+await t.test("DELETE /api/admin/tenants/:id/nodes/:nodeId", async (t) => {
+  await t.test("returns 404 if node not assigned", async (t) => {
+    const admin = await createUser("admin@example.com", true);
+    const org = await createOrg("Team", "team");
+    const tenant = await createTenant(org.id, "my-tenant");
+
+    const res = await app.request(`/api/admin/tenants/${tenant.id}/nodes/999`, {
+      method: "DELETE",
+      headers: { Cookie: `auth_token=${admin.token}` },
+    });
+    t.equal(res.status, 404);
+  });
+
+  await t.test("rejects removal when cert operation in progress", async (t) => {
+    const admin = await createUser("admin@example.com", true);
+    const org = await createOrg("Team", "team");
+    const tenant = await createTenant(org.id, "my-tenant");
+    const node = await createNode("node-1");
+
+    await db
+      .insertInto("tenant_nodes")
+      .values({
+        tenant_id: tenant.id,
+        node_id: node.id,
+        cert_status: "pending",
+      })
+      .execute();
+
+    const res = await app.request(
+      `/api/admin/tenants/${tenant.id}/nodes/${node.id}`,
+      {
+        method: "DELETE",
+        headers: { Cookie: `auth_token=${admin.token}` },
+      },
+    );
+    t.equal(res.status, 400);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const data = (await res.json()) as any;
+    t.ok(data.error.includes("operation is in progress"));
+  });
+
+  await t.test("removes assigned node successfully", async (t) => {
+    const admin = await createUser("admin@example.com", true);
+    const org = await createOrg("Team", "team");
+    const tenant = await createTenant(org.id, "my-tenant");
+    const node = await createNode("node-1");
+
+    await db
+      .insertInto("tenant_nodes")
+      .values({ tenant_id: tenant.id, node_id: node.id, cert_status: "active" })
+      .execute();
+
+    const res = await app.request(
+      `/api/admin/tenants/${tenant.id}/nodes/${node.id}`,
+      {
+        method: "DELETE",
+        headers: { Cookie: `auth_token=${admin.token}` },
+      },
+    );
+    t.equal(res.status, 200);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const data = (await res.json()) as any;
+    t.equal(data.success, true);
+  });
+});
+
+await t.test("GET /api/admin/tenants/:tenantId/endpoints", async (t) => {
+  await t.test("returns endpoints for tenant", async (t) => {
+    const admin = await createUser("admin@example.com", true);
+    const org = await createOrg("Team", "team");
+    const tenant = await createTenant(org.id, "my-tenant");
+    await createEndpoint(tenant.id, "/api/v1");
+    await createEndpoint(tenant.id, "/api/v2");
+
+    const res = await app.request(`/api/admin/tenants/${tenant.id}/endpoints`, {
+      headers: { Cookie: `auth_token=${admin.token}` },
+    });
+    t.equal(res.status, 200);
+    const data = (await res.json()) as unknown[];
+    t.equal(data.length, 2);
+  });
+
+  await t.test("returns 404 for non-existent tenant", async (t) => {
+    const admin = await createUser("admin@example.com", true);
+
+    const res = await app.request("/api/admin/tenants/999/endpoints", {
+      headers: { Cookie: `auth_token=${admin.token}` },
+    });
+    t.equal(res.status, 404);
+  });
+});
+
+await t.test(
+  "PUT /api/admin/tenants/:tenantId/endpoints/:endpointId",
+  async (t) => {
+    await t.test("updates endpoint", async (t) => {
+      const admin = await createUser("admin@example.com", true);
+      const org = await createOrg("Team", "team");
+      const tenant = await createTenant(org.id, "my-tenant");
+      const endpoint = await createEndpoint(tenant.id, "/api/v1");
+
+      const res = await app.request(
+        `/api/admin/tenants/${tenant.id}/endpoints/${endpoint.id}`,
+        {
+          method: "PUT",
+          headers: {
+            Cookie: `auth_token=${admin.token}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ price_usdc: 0.05 }),
+        },
+      );
+      t.equal(res.status, 200);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const data = (await res.json()) as any;
+      t.equal(data.price_usdc, 0.05);
+    });
+
+    await t.test("returns 404 for non-existent endpoint", async (t) => {
+      const admin = await createUser("admin@example.com", true);
+      const org = await createOrg("Team", "team");
+      const tenant = await createTenant(org.id, "my-tenant");
+
+      const res = await app.request(
+        `/api/admin/tenants/${tenant.id}/endpoints/999`,
+        {
+          method: "PUT",
+          headers: {
+            Cookie: `auth_token=${admin.token}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ price_usdc: 0.05 }),
+        },
+      );
+      t.equal(res.status, 404);
+    });
+
+    await t.test("handles regex path pattern", async (t) => {
+      const admin = await createUser("admin@example.com", true);
+      const org = await createOrg("Team", "team");
+      const tenant = await createTenant(org.id, "my-tenant");
+      const endpoint = await createEndpoint(tenant.id, "/api/v1");
+
+      const res = await app.request(
+        `/api/admin/tenants/${tenant.id}/endpoints/${endpoint.id}`,
+        {
+          method: "PUT",
+          headers: {
+            Cookie: `auth_token=${admin.token}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ path: "^/api/v[0-9]+/.*$" }),
+        },
+      );
+      t.equal(res.status, 200);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const data = (await res.json()) as any;
+      t.equal(data.path, "^/api/v[0-9]+/.*$");
+      t.equal(data.path_pattern, "^/api/v[0-9]+/.*$");
+    });
+
+    await t.test("handles path with {param} placeholders", async (t) => {
+      const admin = await createUser("admin@example.com", true);
+      const org = await createOrg("Team", "team");
+      const tenant = await createTenant(org.id, "my-tenant");
+      const endpoint = await createEndpoint(tenant.id, "/api/v1");
+
+      const res = await app.request(
+        `/api/admin/tenants/${tenant.id}/endpoints/${endpoint.id}`,
+        {
+          method: "PUT",
+          headers: {
+            Cookie: `auth_token=${admin.token}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ path: "/users/{userId}/posts/{postId}" }),
+        },
+      );
+      t.equal(res.status, 200);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const data = (await res.json()) as any;
+      t.equal(data.path, "/users/{userId}/posts/{postId}");
+      t.equal(data.path_pattern, "^/users/[^/]+/posts/[^/]+$");
+    });
+  },
+);
+
+await t.test("GET /api/admin/transactions", async (t) => {
+  await t.test("returns paginated transactions", async (t) => {
+    const admin = await createUser("admin@example.com", true);
+    const org = await createOrg("Team", "team");
+    const tenant = await createTenant(org.id, "my-tenant");
+
+    await db
+      .insertInto("transactions")
+      .values({
+        tenant_id: tenant.id,
+        amount_usdc: 0.05,
+        ngx_request_id: "req-1",
+        request_path: "/test",
+      })
+      .execute();
+
+    const res = await app.request("/api/admin/transactions?limit=10&offset=0", {
+      headers: { Cookie: `auth_token=${admin.token}` },
+    });
+    t.equal(res.status, 200);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const data = (await res.json()) as any;
+    t.equal(data.transactions.length, 1);
+    t.equal(data.total, 1);
+    t.equal(data.limit, 10);
+    t.equal(data.offset, 0);
+  });
+});
+
+await t.test("GET /api/admin/nodes", async (t) => {
+  await t.test("returns list of nodes with tenant counts", async (t) => {
+    const admin = await createUser("admin@example.com", true);
+    const node = await createNode("node-1");
+    const org = await createOrg("Team", "team");
+    const tenant = await createTenant(org.id, "my-tenant");
+
+    await db
+      .insertInto("tenant_nodes")
+      .values({ tenant_id: tenant.id, node_id: node.id })
+      .execute();
+
+    const res = await app.request("/api/admin/nodes", {
+      headers: { Cookie: `auth_token=${admin.token}` },
+    });
+    t.equal(res.status, 200);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const data = (await res.json()) as any[];
+    t.equal(data.length, 1);
+    t.equal(data[0].tenant_count, 1);
+  });
+});
+
+await t.test("GET /api/admin/nodes/:id/tenants", async (t) => {
+  await t.test("returns tenants for node", async (t) => {
+    const admin = await createUser("admin@example.com", true);
+    const node = await createNode("node-1");
+    const org = await createOrg("Team", "team");
+    const tenant = await createTenant(org.id, "my-tenant");
+
+    await db
+      .insertInto("tenant_nodes")
+      .values({ tenant_id: tenant.id, node_id: node.id, is_primary: true })
+      .execute();
+
+    const res = await app.request(`/api/admin/nodes/${node.id}/tenants`, {
+      headers: { Cookie: `auth_token=${admin.token}` },
+    });
+    t.equal(res.status, 200);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const data = (await res.json()) as any[];
+    t.equal(data.length, 1);
+    t.equal(data[0].name, "my-tenant");
+    t.equal(data[0].is_primary, true);
+  });
+});
+
+await t.test("GET /api/admin/nodes/:id/health", async (t) => {
+  await t.test("returns dev response in test mode", async (t) => {
+    const admin = await createUser("admin@example.com", true);
+    const node = await createNode("node-1");
+
+    const res = await app.request(`/api/admin/nodes/${node.id}/health`, {
+      headers: { Cookie: `auth_token=${admin.token}` },
+    });
+    t.equal(res.status, 200);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const data = (await res.json()) as any;
+    t.equal(data.healthy, true);
+    t.equal(data.dev, true);
+  });
+});
+
+await t.test("GET /api/admin/stats", async (t) => {
+  await t.test("returns platform stats", async (t) => {
+    const admin = await createUser("admin@example.com", true);
+    await createUser("user@example.com");
+    const org = await createOrg("Team", "team");
+    await createTenant(org.id, "my-tenant");
+    await createNode("node-1");
+
+    const res = await app.request("/api/admin/stats", {
+      headers: { Cookie: `auth_token=${admin.token}` },
+    });
+    t.equal(res.status, 200);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const data = (await res.json()) as any;
+    t.equal(data.users, 2);
+    t.equal(data.organizations, 1);
+    t.equal(data.tenants, 1);
+    t.equal(data.nodes, 1);
+    t.equal(data.transactions, 0);
+  });
+});
+
+await t.test("GET /api/admin/settings", async (t) => {
+  await t.test("returns 404 if no settings", async (t) => {
+    const admin = await createUser("admin@example.com", true);
+
+    const res = await app.request("/api/admin/settings", {
+      headers: { Cookie: `auth_token=${admin.token}` },
+    });
+    t.equal(res.status, 404);
+  });
+
+  await t.test("returns settings", async (t) => {
+    const admin = await createUser("admin@example.com", true);
+    await createAdminSettings();
+
+    const res = await app.request("/api/admin/settings", {
+      headers: { Cookie: `auth_token=${admin.token}` },
+    });
+    t.equal(res.status, 200);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const data = (await res.json()) as any;
+    t.equal(data.minimumBalanceSol, 0.1);
+    t.equal(data.minimumBalanceUsdc, 10);
+    t.equal(data.hasWallet, false);
+  });
+});
+
+await t.test("PUT /api/admin/settings", async (t) => {
+  await t.test("updates settings", async (t) => {
+    const admin = await createUser("admin@example.com", true);
+    await createAdminSettings();
+
+    const res = await app.request("/api/admin/settings", {
+      method: "PUT",
+      headers: {
+        Cookie: `auth_token=${admin.token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ minimum_balance_sol: 0.5 }),
+    });
+    t.equal(res.status, 200);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const data = (await res.json()) as any;
+    t.equal(data.minimumBalanceSol, 0.5);
+  });
+
+  await t.test("returns 404 if no settings row exists", async (t) => {
+    const admin = await createUser("admin@example.com", true);
+
+    const res = await app.request("/api/admin/settings", {
+      method: "PUT",
+      headers: {
+        Cookie: `auth_token=${admin.token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ minimum_balance_sol: 0.5 }),
+    });
+    t.equal(res.status, 404);
+  });
+});
+
+await t.test("GET /api/admin/waitlist", async (t) => {
+  await t.test("returns waitlist entries", async (t) => {
+    const admin = await createUser("admin@example.com", true);
+    await addToWaitlist("user1@example.com");
+    await addToWaitlist("user2@example.com");
+
+    const res = await app.request("/api/admin/waitlist", {
+      headers: { Cookie: `auth_token=${admin.token}` },
+    });
+    t.equal(res.status, 200);
+    const data = (await res.json()) as unknown[];
+    t.equal(data.length, 2);
+  });
+});
+
+await t.test("DELETE /api/admin/waitlist/:id", async (t) => {
+  await t.test("deletes waitlist entry", async (t) => {
+    const admin = await createUser("admin@example.com", true);
+    const entry = await addToWaitlist("user@example.com");
+
+    const res = await app.request(`/api/admin/waitlist/${entry.id}`, {
+      method: "DELETE",
+      headers: { Cookie: `auth_token=${admin.token}` },
+    });
+    t.equal(res.status, 200);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const data = (await res.json()) as any;
+    t.equal(data.deleted, true);
+  });
+
+  await t.test("returns 404 for non-existent entry", async (t) => {
+    const admin = await createUser("admin@example.com", true);
+
+    const res = await app.request("/api/admin/waitlist/999", {
+      method: "DELETE",
+      headers: { Cookie: `auth_token=${admin.token}` },
+    });
+    t.equal(res.status, 404);
+  });
+});
+
+await t.test("GET /api/admin/cert-status", async (t) => {
+  await t.test("returns cert statuses", async (t) => {
+    const admin = await createUser("admin@example.com", true);
+    const node = await createNode("node-1");
+    const org = await createOrg("Team", "team");
+    const tenant = await createTenant(org.id, "my-tenant");
+
+    await db
+      .insertInto("tenant_nodes")
+      .values({
+        tenant_id: tenant.id,
+        node_id: node.id,
+        is_primary: true,
+        cert_status: "active",
+      })
+      .execute();
+
+    const res = await app.request("/api/admin/cert-status", {
+      headers: { Cookie: `auth_token=${admin.token}` },
+    });
+    t.equal(res.status, 200);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const data = (await res.json()) as any[];
+    t.equal(data.length, 1);
+    t.equal(data[0].cert_status, "active");
+  });
+});
+
+await t.test("GET /api/admin/tenants-with-wallets", async (t) => {
+  await t.test("returns only tenants with wallets", async (t) => {
+    const admin = await createUser("admin@example.com", true);
+    const org = await createOrg("Team", "team");
+    const wallet = await createWallet(org.id, "org-wallet");
+    await createTenant(org.id, "with-wallet", { wallet_id: wallet.id });
+    await createTenant(org.id, "no-wallet");
+
+    const res = await app.request("/api/admin/tenants-with-wallets", {
+      headers: { Cookie: `auth_token=${admin.token}` },
+    });
+    t.equal(res.status, 200);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const data = (await res.json()) as any[];
+    t.equal(data.length, 1);
+    t.equal(data[0].name, "with-wallet");
+  });
+});
+
+await t.test("empty results", async (t) => {
+  await t.test("GET /api/admin/users returns empty list", async (t) => {
+    const admin = await createUser("admin@example.com", true);
+    const res = await app.request("/api/admin/users", {
+      headers: { Cookie: `auth_token=${admin.token}` },
+    });
+    t.equal(res.status, 200);
+    const data = (await res.json()) as unknown[];
+    t.equal(data.length, 1);
+  });
+
+  await t.test("GET /api/admin/organizations returns empty list", async (t) => {
+    const admin = await createUser("admin@example.com", true);
+    const res = await app.request("/api/admin/organizations", {
+      headers: { Cookie: `auth_token=${admin.token}` },
+    });
+    t.equal(res.status, 200);
+    const data = (await res.json()) as unknown[];
+    t.equal(data.length, 0);
+  });
+
+  await t.test("GET /api/admin/wallets returns empty list", async (t) => {
+    const admin = await createUser("admin@example.com", true);
+    const res = await app.request("/api/admin/wallets", {
+      headers: { Cookie: `auth_token=${admin.token}` },
+    });
+    t.equal(res.status, 200);
+    const data = (await res.json()) as unknown[];
+    t.equal(data.length, 0);
+  });
+
+  await t.test("GET /api/admin/tenants returns empty list", async (t) => {
+    const admin = await createUser("admin@example.com", true);
+    const res = await app.request("/api/admin/tenants", {
+      headers: { Cookie: `auth_token=${admin.token}` },
+    });
+    t.equal(res.status, 200);
+    const data = (await res.json()) as unknown[];
+    t.equal(data.length, 0);
+  });
+
+  await t.test("GET /api/admin/nodes returns empty list", async (t) => {
+    const admin = await createUser("admin@example.com", true);
+    const res = await app.request("/api/admin/nodes", {
+      headers: { Cookie: `auth_token=${admin.token}` },
+    });
+    t.equal(res.status, 200);
+    const data = (await res.json()) as unknown[];
+    t.equal(data.length, 0);
+  });
+
+  await t.test("GET /api/admin/waitlist returns empty list", async (t) => {
+    const admin = await createUser("admin@example.com", true);
+    const res = await app.request("/api/admin/waitlist", {
+      headers: { Cookie: `auth_token=${admin.token}` },
+    });
+    t.equal(res.status, 200);
+    const data = (await res.json()) as unknown[];
+    t.equal(data.length, 0);
+  });
+
+  await t.test(
+    "GET /api/admin/transactions returns empty with total 0",
+    async (t) => {
+      const admin = await createUser("admin@example.com", true);
+      const res = await app.request("/api/admin/transactions", {
+        headers: { Cookie: `auth_token=${admin.token}` },
+      });
+      t.equal(res.status, 200);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const data = (await res.json()) as any;
+      t.equal(data.transactions.length, 0);
+      t.equal(data.total, 0);
+    },
+  );
+});
+
+await t.test("handles invalid/NaN IDs gracefully", async (t) => {
+  await t.test(
+    "GET /api/admin/users/:id with invalid ID returns 404",
+    async (t) => {
+      const admin = await createUser("admin@example.com", true);
+      const res = await app.request("/api/admin/users/invalid", {
+        headers: { Cookie: `auth_token=${admin.token}` },
+      });
+      t.equal(res.status, 404);
+    },
+  );
+
+  await t.test(
+    "GET /api/admin/organizations/:id with invalid ID returns 404",
+    async (t) => {
+      const admin = await createUser("admin@example.com", true);
+      const res = await app.request("/api/admin/organizations/invalid", {
+        headers: { Cookie: `auth_token=${admin.token}` },
+      });
+      t.equal(res.status, 404);
+    },
+  );
+
+  await t.test(
+    "DELETE /api/admin/users/:id with invalid ID returns 404",
+    async (t) => {
+      const admin = await createUser("admin@example.com", true);
+      const res = await app.request("/api/admin/users/invalid", {
+        method: "DELETE",
+        headers: { Cookie: `auth_token=${admin.token}` },
+      });
+      t.equal(res.status, 404);
+    },
+  );
+
+  await t.test(
+    "GET /api/admin/tenants/:tenantId/endpoints with invalid ID returns 404",
+    async (t) => {
+      const admin = await createUser("admin@example.com", true);
+      const res = await app.request("/api/admin/tenants/invalid/endpoints", {
+        headers: { Cookie: `auth_token=${admin.token}` },
+      });
+      t.equal(res.status, 404);
+    },
+  );
+});
+
+await t.test("GET /api/admin/analytics", async (t) => {
+  await t.test("returns platform analytics", async (t) => {
+    const admin = await createUser("admin@example.com", true);
+    const org = await createOrg("Team", "team");
+    const tenant = await createTenant(org.id, "my-tenant");
+
+    await db
+      .insertInto("transactions")
+      .values({
+        tenant_id: tenant.id,
+        amount_usdc: 0.05,
+        ngx_request_id: "req-1",
+        request_path: "/test",
+      })
+      .execute();
+
+    const res = await app.request("/api/admin/analytics", {
+      headers: { Cookie: `auth_token=${admin.token}` },
+    });
+    t.equal(res.status, 200);
+  });
+});
+
+await t.test("GET /api/admin/tenants/:id/corbits-transactions", async (t) => {
+  await t.test("returns 404 for non-existent tenant", async (t) => {
+    const admin = await createUser("admin@example.com", true);
+    const res = await app.request(
+      "/api/admin/tenants/999/corbits-transactions",
+      {
+        headers: { Cookie: `auth_token=${admin.token}` },
+      },
+    );
+    t.equal(res.status, 404);
+  });
+
+  await t.test(
+    "returns empty transactions when no corbits account",
+    async (t) => {
+      const admin = await createUser("admin@example.com", true);
+      const org = await createOrg("Team", "team");
+      const tenant = await createTenant(org.id, "unknown-tenant");
+
+      const res = await app.request(
+        `/api/admin/tenants/${tenant.id}/corbits-transactions`,
+        {
+          headers: { Cookie: `auth_token=${admin.token}` },
+        },
+      );
+      t.equal(res.status, 200);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const data = (await res.json()) as any;
+      t.equal(data.transactions.length, 0);
+      t.equal(data.error, "No Corbits account");
+    },
+  );
+
+  await t.test(
+    "returns transactions for tenant with corbits account",
+    async (t) => {
+      const admin = await createUser("admin@example.com", true);
+      const org = await createOrg("Team", "team");
+      const tenant = await createTenant(org.id, "elon");
+
+      const res = await app.request(
+        `/api/admin/tenants/${tenant.id}/corbits-transactions`,
+        {
+          headers: { Cookie: `auth_token=${admin.token}` },
+        },
+      );
+      t.equal(res.status, 200);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const data = (await res.json()) as any;
+      t.ok(Array.isArray(data.transactions));
+      t.ok(data.transactions.length > 0);
+    },
+  );
+
+  await t.test("supports pagination parameters", async (t) => {
+    const admin = await createUser("admin@example.com", true);
+    const org = await createOrg("Team", "team");
+    const tenant = await createTenant(org.id, "elon");
+
+    const res = await app.request(
+      `/api/admin/tenants/${tenant.id}/corbits-transactions?limit=5&offset=0`,
+      {
+        headers: { Cookie: `auth_token=${admin.token}` },
+      },
+    );
+    t.equal(res.status, 200);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const data = (await res.json()) as any;
+    t.equal(data.limit, 5);
+    t.equal(data.offset, 0);
+  });
+
+  await t.test("supports force refresh", async (t) => {
+    const admin = await createUser("admin@example.com", true);
+    const org = await createOrg("Team", "team");
+    const tenant = await createTenant(org.id, "elon");
+
+    const res = await app.request(
+      `/api/admin/tenants/${tenant.id}/corbits-transactions?refresh=true`,
+      {
+        headers: { Cookie: `auth_token=${admin.token}` },
+      },
+    );
+    t.equal(res.status, 200);
+  });
+});
+
+await t.test("GET /api/admin/settings/balances", async (t) => {
+  await t.test("returns 404 when no wallet configured", async (t) => {
+    const admin = await createUser("admin@example.com", true);
+    await createAdminSettings();
+
+    const res = await app.request("/api/admin/settings/balances", {
+      headers: { Cookie: `auth_token=${admin.token}` },
+    });
+    t.equal(res.status, 404);
+  });
+
+  await t.test("returns 404 when admin_settings not initialized", async (t) => {
+    const admin = await createUser("admin@example.com", true);
+
+    const res = await app.request("/api/admin/settings/balances", {
+      headers: { Cookie: `auth_token=${admin.token}` },
+    });
+    t.equal(res.status, 404);
+  });
+});
+
+await t.test("GET /api/admin/organizations/:id/analytics", async (t) => {
+  await t.test("returns 400 for invalid organization ID", async (t) => {
+    const admin = await createUser("admin@example.com", true);
+    const res = await app.request(
+      "/api/admin/organizations/invalid/analytics",
+      {
+        headers: { Cookie: `auth_token=${admin.token}` },
+      },
+    );
+    t.equal(res.status, 400);
+  });
+
+  await t.test("returns analytics for valid organization", async (t) => {
+    const admin = await createUser("admin@example.com", true);
+    const org = await createOrg("Team", "team");
+
+    const res = await app.request(
+      `/api/admin/organizations/${org.id}/analytics`,
+      {
+        headers: { Cookie: `auth_token=${admin.token}` },
+      },
+    );
+    t.equal(res.status, 200);
+  });
+});
+
+await t.test("GET /api/admin/tenants/:id/analytics", async (t) => {
+  await t.test("returns 400 for invalid tenant ID", async (t) => {
+    const admin = await createUser("admin@example.com", true);
+    const res = await app.request("/api/admin/tenants/invalid/analytics", {
+      headers: { Cookie: `auth_token=${admin.token}` },
+    });
+    t.equal(res.status, 400);
+  });
+
+  await t.test("returns analytics for valid tenant", async (t) => {
+    const admin = await createUser("admin@example.com", true);
+    const org = await createOrg("Team", "team");
+    const tenant = await createTenant(org.id, "my-tenant");
+
+    const res = await app.request(`/api/admin/tenants/${tenant.id}/analytics`, {
+      headers: { Cookie: `auth_token=${admin.token}` },
+    });
+    t.equal(res.status, 200);
+  });
+});
+
+await t.test(
+  "GET /api/admin/tenants/:tenantId/endpoints/:endpointId/analytics",
+  async (t) => {
+    await t.test("returns 400 for invalid endpoint ID", async (t) => {
+      const admin = await createUser("admin@example.com", true);
+      const res = await app.request(
+        "/api/admin/tenants/1/endpoints/invalid/analytics",
+        {
+          headers: { Cookie: `auth_token=${admin.token}` },
+        },
+      );
+      t.equal(res.status, 400);
+    });
+
+    await t.test("returns analytics for valid endpoint", async (t) => {
+      const admin = await createUser("admin@example.com", true);
+      const org = await createOrg("Team", "team");
+      const tenant = await createTenant(org.id, "my-tenant");
+      const endpoint = await createEndpoint(tenant.id, "/api/v1");
+
+      const res = await app.request(
+        `/api/admin/tenants/${tenant.id}/endpoints/${endpoint.id}/analytics`,
+        {
+          headers: { Cookie: `auth_token=${admin.token}` },
+        },
+      );
+      t.equal(res.status, 200);
+    });
+  },
+);
+
+await t.test(
+  "GET /api/admin/tenants/:tenantId/catch-all/analytics",
+  async (t) => {
+    await t.test("returns 400 for invalid tenant ID", async (t) => {
+      const admin = await createUser("admin@example.com", true);
+      const res = await app.request(
+        "/api/admin/tenants/invalid/catch-all/analytics",
+        {
+          headers: { Cookie: `auth_token=${admin.token}` },
+        },
+      );
+      t.equal(res.status, 400);
+    });
+
+    await t.test("returns analytics for valid tenant", async (t) => {
+      const admin = await createUser("admin@example.com", true);
+      const org = await createOrg("Team", "team");
+      const tenant = await createTenant(org.id, "my-tenant");
+
+      const res = await app.request(
+        `/api/admin/tenants/${tenant.id}/catch-all/analytics`,
+        {
+          headers: { Cookie: `auth_token=${admin.token}` },
+        },
+      );
+      t.equal(res.status, 200);
+    });
+  },
+);
+
+await t.test("GET /api/admin/analytics/earnings", async (t) => {
+  await t.test("returns 400 for missing level", async (t) => {
+    const admin = await createUser("admin@example.com", true);
+    const res = await app.request("/api/admin/analytics/earnings?id=1", {
+      headers: { Cookie: `auth_token=${admin.token}` },
+    });
+    t.equal(res.status, 400);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const data = (await res.json()) as any;
+    t.ok(data.error.includes("level"));
+  });
+
+  await t.test("returns 400 for invalid level", async (t) => {
+    const admin = await createUser("admin@example.com", true);
+    const res = await app.request(
+      "/api/admin/analytics/earnings?level=invalid&id=1",
+      {
+        headers: { Cookie: `auth_token=${admin.token}` },
+      },
+    );
+    t.equal(res.status, 400);
+  });
+
+  await t.test("returns 400 for missing ID", async (t) => {
+    const admin = await createUser("admin@example.com", true);
+    const res = await app.request(
+      "/api/admin/analytics/earnings?level=tenant",
+      {
+        headers: { Cookie: `auth_token=${admin.token}` },
+      },
+    );
+    t.equal(res.status, 400);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const data = (await res.json()) as any;
+    t.ok(data.error.includes("ID"));
+  });
+
+  await t.test("returns 400 for invalid ID", async (t) => {
+    const admin = await createUser("admin@example.com", true);
+    const res = await app.request(
+      "/api/admin/analytics/earnings?level=tenant&id=invalid",
+      {
+        headers: { Cookie: `auth_token=${admin.token}` },
+      },
+    );
+    t.equal(res.status, 400);
+  });
+
+  await t.test("returns 400 for invalid granularity", async (t) => {
+    const admin = await createUser("admin@example.com", true);
+    const res = await app.request(
+      "/api/admin/analytics/earnings?level=tenant&id=1&granularity=invalid",
+      {
+        headers: { Cookie: `auth_token=${admin.token}` },
+      },
+    );
+    t.equal(res.status, 400);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const data = (await res.json()) as any;
+    t.ok(data.error.includes("granularity"));
+  });
+
+  await t.test("returns 400 for invalid periods", async (t) => {
+    const admin = await createUser("admin@example.com", true);
+    const res = await app.request(
+      "/api/admin/analytics/earnings?level=tenant&id=1&periods=0",
+      {
+        headers: { Cookie: `auth_token=${admin.token}` },
+      },
+    );
+    t.equal(res.status, 400);
+  });
+
+  await t.test("returns 400 for periods > 365", async (t) => {
+    const admin = await createUser("admin@example.com", true);
+    const res = await app.request(
+      "/api/admin/analytics/earnings?level=tenant&id=1&periods=500",
+      {
+        headers: { Cookie: `auth_token=${admin.token}` },
+      },
+    );
+    t.equal(res.status, 400);
+  });
+
+  await t.test("accepts valid organization level request", async (t) => {
+    const admin = await createUser("admin@example.com", true);
+    const org = await createOrg("Team", "team");
+
+    const res = await app.request(
+      `/api/admin/analytics/earnings?level=organization&id=${org.id}&granularity=month&periods=6`,
+      {
+        headers: { Cookie: `auth_token=${admin.token}` },
+      },
+    );
+    t.equal(res.status, 200);
+  });
+
+  await t.test("accepts valid tenant level request", async (t) => {
+    const admin = await createUser("admin@example.com", true);
+    const org = await createOrg("Team", "team");
+    const tenant = await createTenant(org.id, "my-tenant");
+
+    const res = await app.request(
+      `/api/admin/analytics/earnings?level=tenant&id=${tenant.id}&granularity=day&periods=30`,
+      {
+        headers: { Cookie: `auth_token=${admin.token}` },
+      },
+    );
+    t.equal(res.status, 200);
+  });
+
+  await t.test("accepts valid endpoint level request", async (t) => {
+    const admin = await createUser("admin@example.com", true);
+    const org = await createOrg("Team", "team");
+    const tenant = await createTenant(org.id, "my-tenant");
+    const endpoint = await createEndpoint(tenant.id, "/api/v1");
+
+    const res = await app.request(
+      `/api/admin/analytics/earnings?level=endpoint&id=${endpoint.id}&granularity=week&periods=12`,
+      {
+        headers: { Cookie: `auth_token=${admin.token}` },
+      },
+    );
+    t.equal(res.status, 200);
+  });
+
+  await t.test("uses default granularity and periods", async (t) => {
+    const admin = await createUser("admin@example.com", true);
+    const org = await createOrg("Team", "team");
+    const tenant = await createTenant(org.id, "my-tenant");
+
+    const res = await app.request(
+      `/api/admin/analytics/earnings?level=tenant&id=${tenant.id}`,
+      {
+        headers: { Cookie: `auth_token=${admin.token}` },
+      },
+    );
+    t.equal(res.status, 200);
+  });
+});

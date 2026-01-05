@@ -193,7 +193,7 @@ endpointsRoutes.delete("/:id", modifyResourceLimiter, async (c) => {
     .updateTable("endpoints")
     .set({
       is_active: false,
-      deleted_at: sql`now()`,
+      deleted_at: new Date(),
     })
     .where("id", "=", id)
     .where("tenant_id", "=", tenantId)
