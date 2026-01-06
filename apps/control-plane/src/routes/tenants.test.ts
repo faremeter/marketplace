@@ -352,6 +352,276 @@ await t.test("DELETE /api/tenants/:id", async (t) => {
       .executeTakeFirst();
     t.equal(check, undefined);
   });
+
+  await t.test("deletes associated transactions", async (t) => {
+    const token = await createAdminUser();
+
+    const tenant = await db
+      .insertInto("tenants")
+      .values({
+        name: "tenant-with-txns",
+        backend_url: "http://backend.com",
+        default_price_usdc: 0.01,
+        default_scheme: "exact",
+      })
+      .returning("id")
+      .executeTakeFirstOrThrow();
+
+    await db
+      .insertInto("transactions")
+      .values([
+        {
+          tenant_id: tenant.id,
+          amount_usdc: 0.01,
+          ngx_request_id: "req-1",
+          request_path: "/test",
+        },
+        {
+          tenant_id: tenant.id,
+          amount_usdc: 0.02,
+          ngx_request_id: "req-2",
+          request_path: "/test2",
+        },
+      ])
+      .execute();
+
+    const txnsBefore = await db
+      .selectFrom("transactions")
+      .select("id")
+      .where("tenant_id", "=", tenant.id)
+      .execute();
+    t.equal(txnsBefore.length, 2);
+
+    const res = await app.request(`/api/tenants/${tenant.id}`, {
+      method: "DELETE",
+      headers: { Cookie: `auth_token=${token}` },
+    });
+
+    t.equal(res.status, 200);
+
+    const txnsAfter = await db
+      .selectFrom("transactions")
+      .select("id")
+      .where("tenant_id", "=", tenant.id)
+      .execute();
+    t.equal(txnsAfter.length, 0);
+  });
+
+  await t.test("deletes associated endpoints", async (t) => {
+    const token = await createAdminUser();
+
+    const tenant = await db
+      .insertInto("tenants")
+      .values({
+        name: "tenant-with-endpoints",
+        backend_url: "http://backend.com",
+        default_price_usdc: 0.01,
+        default_scheme: "exact",
+      })
+      .returning("id")
+      .executeTakeFirstOrThrow();
+
+    await db
+      .insertInto("endpoints")
+      .values([
+        {
+          tenant_id: tenant.id,
+          path_pattern: "/api/v1/*",
+          price_usdc: 0.01,
+        },
+        {
+          tenant_id: tenant.id,
+          path_pattern: "/api/v2/*",
+          price_usdc: 0.02,
+        },
+      ])
+      .execute();
+
+    const endpointsBefore = await db
+      .selectFrom("endpoints")
+      .select("id")
+      .where("tenant_id", "=", tenant.id)
+      .execute();
+    t.equal(endpointsBefore.length, 2);
+
+    const res = await app.request(`/api/tenants/${tenant.id}`, {
+      method: "DELETE",
+      headers: { Cookie: `auth_token=${token}` },
+    });
+
+    t.equal(res.status, 200);
+
+    const endpointsAfter = await db
+      .selectFrom("endpoints")
+      .select("id")
+      .where("tenant_id", "=", tenant.id)
+      .execute();
+    t.equal(endpointsAfter.length, 0);
+  });
+
+  await t.test("does not affect other tenants data", async (t) => {
+    const token = await createAdminUser();
+
+    const tenant1 = await db
+      .insertInto("tenants")
+      .values({
+        name: "tenant-to-delete",
+        backend_url: "http://backend1.com",
+        default_price_usdc: 0.01,
+        default_scheme: "exact",
+      })
+      .returning("id")
+      .executeTakeFirstOrThrow();
+
+    const tenant2 = await db
+      .insertInto("tenants")
+      .values({
+        name: "tenant-to-keep",
+        backend_url: "http://backend2.com",
+        default_price_usdc: 0.01,
+        default_scheme: "exact",
+      })
+      .returning("id")
+      .executeTakeFirstOrThrow();
+
+    await db
+      .insertInto("transactions")
+      .values([
+        {
+          tenant_id: tenant1.id,
+          amount_usdc: 0.01,
+          ngx_request_id: "req-delete",
+          request_path: "/delete",
+        },
+        {
+          tenant_id: tenant2.id,
+          amount_usdc: 0.02,
+          ngx_request_id: "req-keep",
+          request_path: "/keep",
+        },
+      ])
+      .execute();
+
+    await db
+      .insertInto("endpoints")
+      .values([
+        {
+          tenant_id: tenant1.id,
+          path_pattern: "/delete/*",
+          price_usdc: 0.01,
+        },
+        {
+          tenant_id: tenant2.id,
+          path_pattern: "/keep/*",
+          price_usdc: 0.02,
+        },
+      ])
+      .execute();
+
+    const res = await app.request(`/api/tenants/${tenant1.id}`, {
+      method: "DELETE",
+      headers: { Cookie: `auth_token=${token}` },
+    });
+
+    t.equal(res.status, 200);
+
+    const tenant2Txns = await db
+      .selectFrom("transactions")
+      .select("id")
+      .where("tenant_id", "=", tenant2.id)
+      .execute();
+    t.equal(tenant2Txns.length, 1, "other tenant transactions preserved");
+
+    const tenant2Endpoints = await db
+      .selectFrom("endpoints")
+      .select("id")
+      .where("tenant_id", "=", tenant2.id)
+      .execute();
+    t.equal(tenant2Endpoints.length, 1, "other tenant endpoints preserved");
+
+    const tenant2Check = await db
+      .selectFrom("tenants")
+      .select("id")
+      .where("id", "=", tenant2.id)
+      .executeTakeFirst();
+    t.ok(tenant2Check, "other tenant still exists");
+  });
+
+  await t.test("handles tenant with no associated data", async (t) => {
+    const token = await createAdminUser();
+
+    const tenant = await db
+      .insertInto("tenants")
+      .values({
+        name: "empty-tenant",
+        backend_url: "http://backend.com",
+        default_price_usdc: 0.01,
+        default_scheme: "exact",
+      })
+      .returning("id")
+      .executeTakeFirstOrThrow();
+
+    const res = await app.request(`/api/tenants/${tenant.id}`, {
+      method: "DELETE",
+      headers: { Cookie: `auth_token=${token}` },
+    });
+
+    t.equal(res.status, 200);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const data = (await res.json()) as any;
+    t.equal(data.deleted, true);
+  });
+
+  await t.test("deletes all data with many records", async (t) => {
+    const token = await createAdminUser();
+
+    const tenant = await db
+      .insertInto("tenants")
+      .values({
+        name: "tenant-many-records",
+        backend_url: "http://backend.com",
+        default_price_usdc: 0.01,
+        default_scheme: "exact",
+      })
+      .returning("id")
+      .executeTakeFirstOrThrow();
+
+    const txnValues = Array.from({ length: 50 }, (_, i) => ({
+      tenant_id: tenant.id,
+      amount_usdc: 0.01,
+      ngx_request_id: `req-${i}`,
+      request_path: `/path-${i}`,
+    }));
+    await db.insertInto("transactions").values(txnValues).execute();
+
+    const endpointValues = Array.from({ length: 20 }, (_, i) => ({
+      tenant_id: tenant.id,
+      path_pattern: `/api/v${i}/*`,
+      price_usdc: 0.01,
+    }));
+    await db.insertInto("endpoints").values(endpointValues).execute();
+
+    const res = await app.request(`/api/tenants/${tenant.id}`, {
+      method: "DELETE",
+      headers: { Cookie: `auth_token=${token}` },
+    });
+
+    t.equal(res.status, 200);
+
+    const txnsAfter = await db
+      .selectFrom("transactions")
+      .select("id")
+      .where("tenant_id", "=", tenant.id)
+      .execute();
+    t.equal(txnsAfter.length, 0, "all 50 transactions deleted");
+
+    const endpointsAfter = await db
+      .selectFrom("endpoints")
+      .select("id")
+      .where("tenant_id", "=", tenant.id)
+      .execute();
+    t.equal(endpointsAfter.length, 0, "all 20 endpoints deleted");
+  });
 });
 
 await t.test("GET /api/tenants/:id/nodes", async (t) => {
