@@ -164,6 +164,9 @@ tenantsRoutes.delete("/:id", async (c) => {
     .where("tenant_id", "=", id)
     .execute();
 
+  await db.deleteFrom("transactions").where("tenant_id", "=", id).execute();
+  await db.deleteFrom("endpoints").where("tenant_id", "=", id).execute();
+
   const result = await db
     .deleteFrom("tenants")
     .where("id", "=", id)

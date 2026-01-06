@@ -263,6 +263,15 @@ export async function startQueue(config: {
           await cleanupAccount(tenantName);
           await deleteLocalCert(tenantName);
 
+          await db
+            .deleteFrom("transactions")
+            .where("tenant_id", "=", tenantId)
+            .execute();
+          await db
+            .deleteFrom("endpoints")
+            .where("tenant_id", "=", tenantId)
+            .execute();
+
           await db.deleteFrom("tenants").where("id", "=", tenantId).execute();
 
           logger.info(`Tenant ${tenantName} deleted successfully`);
