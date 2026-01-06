@@ -33,7 +33,6 @@ publicRoutes.post(
   },
 );
 
-// Get invitation details (public, no auth required)
 publicRoutes.get("/invitations/:token", optionalAuth, async (c) => {
   const token = c.req.param("token");
   const user = c.get("user");
@@ -68,7 +67,6 @@ publicRoutes.get("/invitations/:token", optionalAuth, async (c) => {
     return c.json({ error: "Invitation has expired" }, 410);
   }
 
-  // Include whether the current user's email matches the invitation
   const emailMatch = user
     ? user.email.toLowerCase() === invitation.email.toLowerCase()
     : null;
@@ -80,7 +78,6 @@ publicRoutes.get("/invitations/:token", optionalAuth, async (c) => {
   });
 });
 
-// Accept invitation (requires auth)
 publicRoutes.post(
   "/invitations/:token/accept",
   createResourceLimiter,
@@ -107,7 +104,6 @@ publicRoutes.post(
       return c.json({ error: "Invitation has expired" }, 410);
     }
 
-    // Check email matches
     if (user.email.toLowerCase() !== invitation.email.toLowerCase()) {
       return c.json(
         {
@@ -118,7 +114,6 @@ publicRoutes.post(
       );
     }
 
-    // Check if already a member
     const existingMembership = await db
       .selectFrom("user_organizations")
       .select("id")
@@ -127,7 +122,6 @@ publicRoutes.post(
       .executeTakeFirst();
 
     if (existingMembership) {
-      // Mark invitation as accepted anyway
       await db
         .updateTable("organization_invitations")
         .set({ accepted_at: new Date() })
@@ -140,7 +134,6 @@ publicRoutes.post(
       );
     }
 
-    // Add user to organization
     await db
       .insertInto("user_organizations")
       .values({
@@ -150,14 +143,12 @@ publicRoutes.post(
       })
       .execute();
 
-    // Mark invitation as accepted
     await db
       .updateTable("organization_invitations")
       .set({ accepted_at: new Date() })
       .where("id", "=", invitation.id)
       .execute();
 
-    // Get the organization details to return
     const org = await db
       .selectFrom("organizations")
       .select(["id", "name", "slug"])

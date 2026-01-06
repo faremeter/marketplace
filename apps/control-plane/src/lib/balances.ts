@@ -170,14 +170,12 @@ export function checkBalancesMeetMinimum(
 ): boolean {
   if (!balances) return false;
 
-  // Check Solana
   if (balances.solana) {
     const sol = parseFloat(balances.solana.native || "0");
     const usdc = parseFloat(balances.solana.usdc || "0");
     if (sol >= minSol && usdc >= minUsdc) return true;
   }
 
-  // Check EVM chains (any chain with sufficient native + USDC)
   for (const chain of ["base", "polygon", "monad"] as const) {
     const chainBalances = balances[chain];
     if (chainBalances) {

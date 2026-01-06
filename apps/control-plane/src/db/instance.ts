@@ -18,7 +18,6 @@ if (isTest) {
     const date = new Date(dateStr);
     if (isNaN(date.getTime())) return null;
 
-    // Map PostgreSQL format patterns to strftime-style output
     const formatMap: Record<string, () => string> = {
       "YYYY-MM-DD": () =>
         `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`,

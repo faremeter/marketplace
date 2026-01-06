@@ -102,7 +102,6 @@ function extractPathsFromSpec(spec: OpenApiSpec): {
     if (path === "/" || path === "/*") continue;
 
     const item = pathItem as PathItem;
-    // Get description from path-level or first operation
     let description: string | null = item.summary || item.description || null;
     if (!description) {
       const methods = [
@@ -152,7 +151,6 @@ function isValidRegex(pattern: string): boolean {
   }
 }
 
-// GET /openapi/spec - Get stored OpenAPI spec
 openapiRoutes.get("/spec", async (c) => {
   const tenantId = parseInt(c.req.param("tenantId") ?? "");
 
@@ -172,7 +170,6 @@ openapiRoutes.get("/spec", async (c) => {
   });
 });
 
-// DELETE /openapi/spec - Remove stored OpenAPI spec
 openapiRoutes.delete("/spec", modifyResourceLimiter, async (c) => {
   const tenantId = parseInt(c.req.param("tenantId") ?? "");
 
@@ -190,7 +187,6 @@ openapiRoutes.delete("/spec", modifyResourceLimiter, async (c) => {
   return c.json({ success: true });
 });
 
-// POST /openapi/import - Import OpenAPI spec and create endpoints
 openapiRoutes.post(
   "/import",
   createResourceLimiter,
@@ -214,14 +210,12 @@ openapiRoutes.post(
       return c.json({ error: "No paths found in spec" }, 400);
     }
 
-    // Store the spec on tenant
     await db
       .updateTable("tenants")
       .set({ openapi_spec: JSON.stringify(spec) })
       .where("id", "=", tenantId)
       .execute();
 
-    // Get existing endpoints to check for duplicates
     const existingEndpoints = await db
       .selectFrom("endpoints")
       .select(["id", "path_pattern"])
@@ -233,7 +227,6 @@ openapiRoutes.post(
       existingEndpoints.map((e) => [e.path_pattern, e.id]),
     );
 
-    // Create or update endpoints for each path
     const created: string[] = [];
     const linked: string[] = [];
 
@@ -241,7 +234,6 @@ openapiRoutes.post(
       const existingId = existingPatternMap.get(pathInfo.pattern);
 
       if (existingId) {
-        // Update existing endpoint with lineage
         await db
           .updateTable("endpoints")
           .set({ openapi_source_paths: [pathInfo.path] })
@@ -249,7 +241,6 @@ openapiRoutes.post(
           .execute();
         linked.push(pathInfo.path);
       } else {
-        // Create new endpoint
         await db
           .insertInto("endpoints")
           .values({
@@ -266,7 +257,6 @@ openapiRoutes.post(
       }
     }
 
-    // Sync to all nodes
     const tenantNodes = await db
       .selectFrom("tenant_nodes")
       .select("node_id")
@@ -289,7 +279,6 @@ openapiRoutes.post(
   },
 );
 
-// GET /openapi/export - Export endpoints as OpenAPI spec
 openapiRoutes.get("/export", async (c) => {
   const tenantId = parseInt(c.req.param("tenantId") ?? "");
   const includeOrphans = c.req.query("include_orphans") === "true";
@@ -318,7 +307,6 @@ openapiRoutes.get("/export", async (c) => {
     .orderBy("priority", "asc")
     .execute();
 
-  // Start with stored spec as base, or create minimal spec
   let baseSpec: OpenApiSpec;
   if (tenant.openapi_spec) {
     baseSpec = tenant.openapi_spec as OpenApiSpec;
@@ -354,7 +342,6 @@ openapiRoutes.get("/export", async (c) => {
           exportedSpec.paths[sourcePath] = {};
         }
 
-        // Add pricing extension at path level
         (exportedSpec.paths[sourcePath] as Record<string, unknown>)[
           "x-402-pricing"
         ] = {
@@ -371,17 +358,13 @@ openapiRoutes.get("/export", async (c) => {
       });
 
       if (includeOrphans) {
-        // Try to convert regex pattern to path-like format
         let displayPath = endpoint.path_pattern;
-        // Remove ^ and $ anchors
         displayPath = displayPath.replace(/^\^/, "").replace(/\$$/, "");
-        // Replace [^/]+ with {param}
         let paramCount = 0;
         displayPath = displayPath.replace(
           /\[\^\/\]\+/g,
           () => `{param${++paramCount}}`,
         );
-        // Replace .* with {wildcard}
         displayPath = displayPath.replace(/\.\*/g, "{wildcard}");
 
         if (!exportedSpec.paths) {
@@ -416,7 +399,6 @@ openapiRoutes.get("/export", async (c) => {
   });
 });
 
-// POST /openapi/validate-pattern - Validate regex pattern against stored spec
 openapiRoutes.post(
   "/validate-pattern",
   arktypeValidator("json", ValidatePatternSchema),
@@ -425,7 +407,6 @@ openapiRoutes.post(
     const body = c.req.valid("json");
     const pattern = body.pattern;
 
-    // Check if pattern is valid regex
     if (!isValidRegex(pattern)) {
       return c.json({
         valid: false,
@@ -457,7 +438,6 @@ openapiRoutes.post(
     const spec = tenant.openapi_spec as OpenApiSpec;
     const specPaths = Object.keys(spec.paths || {});
 
-    // Test pattern against each path in the spec
     const matches: string[] = [];
     for (const path of specPaths) {
       if (testPatternMatch(pattern, path)) {

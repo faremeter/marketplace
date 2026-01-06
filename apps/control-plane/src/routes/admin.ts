@@ -340,11 +340,9 @@ adminRoutes.post(
     }
     const sanitizedName = nameValidation.sanitized;
 
-    // Get or default to master wallet
     let walletId = body.wallet_id;
 
     if (!walletId) {
-      // Try to find master wallet (organization_id = null)
       const masterWallet = await db
         .selectFrom("wallets")
         .select("id")
@@ -431,8 +429,6 @@ adminRoutes.post(
       );
     }
 
-    // Check if tenant can immediately transition to active
-    // (e.g., if no wallet and no nodes)
     await checkAndUpdateTenantStatus(tenant.id);
 
     if (walletId) {
@@ -589,7 +585,6 @@ adminRoutes.put(
       return c.json({ error: "Tenant not found" }, 404);
     }
 
-    // Sync to all nodes the tenant is on
     const tenantNodes = await db
       .selectFrom("tenant_nodes")
       .select("node_id")
@@ -664,14 +659,12 @@ adminRoutes.delete("/tenants/:id", async (c) => {
     );
   }
 
-  // Set status to deleting
   await db
     .updateTable("tenants")
     .set({ status: "deleting" })
     .where("id", "=", id)
     .execute();
 
-  // Enqueue deletion job
   await enqueueTenantDeletion(tenant.id, tenant.name);
 
   return c.json({ success: true });
@@ -898,7 +891,6 @@ adminRoutes.put(
     const updateData: Record<string, unknown> = {};
     if (body.path !== undefined) {
       const inputPath = body.path;
-      // Process path pattern similar to endpoints.ts
       if (inputPath.startsWith("^")) {
         updateData.path = inputPath;
         updateData.path_pattern = inputPath;
@@ -929,7 +921,6 @@ adminRoutes.put(
       return c.json({ error: "Endpoint not found" }, 404);
     }
 
-    // Sync to all nodes the tenant is on
     const tenantNodes = await db
       .selectFrom("tenant_nodes")
       .select("node_id")
@@ -983,7 +974,6 @@ adminRoutes.get("/transactions", async (c) => {
   });
 });
 
-// Get Corbits transactions for a single tenant with pagination
 adminRoutes.get("/tenants/:id/corbits-transactions", async (c) => {
   const tenantId = parseInt(c.req.param("id"));
   const { limit, offset } = parsePagination(
@@ -1003,7 +993,6 @@ adminRoutes.get("/tenants/:id/corbits-transactions", async (c) => {
     return c.json({ error: "Tenant not found" }, 404);
   }
 
-  // Check cache first (unless force refresh)
   const cached = transactionCache.get(tenantId);
   const isCacheFresh =
     cached &&
@@ -1037,12 +1026,10 @@ adminRoutes.get("/tenants/:id/corbits-transactions", async (c) => {
       });
     }
 
-    // Fetch more transactions to cache (up to 100)
     const response = await getTransactionsForAccount(account.id, {
       limit: 100,
     });
 
-    // Update cache
     transactionCache.set(tenantId, {
       transactions: response.data,
       cachedAt: Date.now(),
@@ -1080,7 +1067,6 @@ adminRoutes.get("/tenants/:id/corbits-transactions", async (c) => {
   }
 });
 
-// Get list of tenants with wallets for transaction display
 adminRoutes.get("/tenants-with-wallets", async (c) => {
   const tenants = await db
     .selectFrom("tenants")
@@ -1387,7 +1373,6 @@ adminRoutes.get("/settings/balances", async (c) => {
   }
 });
 
-// Analytics routes
 adminRoutes.get("/organizations/:id/analytics", async (c) => {
   const id = parseInt(c.req.param("id"));
   if (isNaN(id)) {

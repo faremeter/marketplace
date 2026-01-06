@@ -89,7 +89,6 @@ organizationsRoutes.post(
     const user = c.get("user");
     const body = c.req.valid("json");
 
-    // Check org limit
     const orgCount = await db
       .selectFrom("user_organizations")
       .select((eb) => eb.fn.count<number>("id").as("count"))
@@ -525,7 +524,6 @@ organizationsRoutes.put(
 
     let newWalletConfig: WalletConfig | null = null;
     if (body.wallet_id !== undefined) {
-      // Validate wallet belongs to this org
       if (body.wallet_id !== null) {
         const wallet = await db
           .selectFrom("wallets")
@@ -552,7 +550,6 @@ organizationsRoutes.put(
       return c.json({ error: "Tenant not found" }, 404);
     }
 
-    // Sync to all nodes the tenant is on
     const tenantNodes = await db
       .selectFrom("tenant_nodes")
       .select("node_id")
@@ -718,7 +715,6 @@ organizationsRoutes.get("/:id/can-create-proxy", async (c) => {
     });
   }
 
-  // Check each wallet
   for (const wallet of wallets) {
     const cachedAt = wallet.balances_cached_at;
     const isCacheFresh =
@@ -735,7 +731,6 @@ organizationsRoutes.get("/:id/can-create-proxy", async (c) => {
         return c.json({ available: true });
       }
     } else {
-      // Cache is stale or missing, fetch fresh balances
       const config = wallet.wallet_config as WalletConfig | null;
       const addresses = extractAddresses(config);
 
@@ -745,7 +740,6 @@ organizationsRoutes.get("/:id/can-create-proxy", async (c) => {
         const balances = await fetchWalletBalances(addresses);
         const isFunded = checkBalancesMeetMinimum(balances, minSol, minUsdc);
 
-        // Update cache and funding_status
         await db
           .updateTable("wallets")
           .set({
@@ -811,7 +805,6 @@ organizationsRoutes.post(
     }
     const sanitizedName = nameValidation.sanitized;
 
-    // Validate wallet belongs to this org
     const wallet = await db
       .selectFrom("wallets")
       .selectAll()
@@ -826,7 +819,6 @@ organizationsRoutes.post(
       );
     }
 
-    // Find 2 active nodes with least tenant count
     const nodesWithCounts = await db
       .selectFrom("nodes")
       .leftJoin("tenant_nodes", "tenant_nodes.node_id", "nodes.id")
@@ -943,8 +935,6 @@ organizationsRoutes.post(
   },
 );
 
-// Invitation routes
-
 organizationsRoutes.get("/:id/invitations", async (c) => {
   const user = c.get("user");
   const orgId = parseInt(c.req.param("id"));
@@ -1011,7 +1001,6 @@ organizationsRoutes.post(
 
     const email = body.email.trim().toLowerCase();
 
-    // Check if user is already a member
     const existingUser = await db
       .selectFrom("users")
       .select("id")
@@ -1031,7 +1020,6 @@ organizationsRoutes.post(
       }
     }
 
-    // Check for existing pending invitation
     const existingInvitation = await db
       .selectFrom("organization_invitations")
       .select("id")
@@ -1116,8 +1104,6 @@ organizationsRoutes.delete(
     return c.json({ deleted: true });
   },
 );
-
-// Onboarding routes
 
 organizationsRoutes.get("/:id/onboarding-status", async (c) => {
   const user = c.get("user");
@@ -1256,8 +1242,6 @@ organizationsRoutes.post("/:id/complete-onboarding", async (c) => {
 
   return c.json({ success: true });
 });
-
-// Analytics routes
 
 organizationsRoutes.get("/:id/analytics", async (c) => {
   const user = c.get("user");
@@ -1439,7 +1423,6 @@ organizationsRoutes.get("/:id/analytics/earnings", async (c) => {
       return c.json({ error: "Invalid targetId" }, 400);
     }
 
-    // Verify the target belongs to this org
     if (level === "tenant") {
       const tenant = await db
         .selectFrom("tenants")

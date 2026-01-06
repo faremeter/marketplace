@@ -58,7 +58,6 @@ authRoutes.post(
       .returning(["id", "email", "is_admin", "email_verified"])
       .executeTakeFirstOrThrow();
 
-    // Create default organization for the user
     const username = email.split("@")[0] ?? "user";
     const orgName = `${username}'s Team`;
     const baseSlug = username.toLowerCase().replace(/[^a-z0-9]/g, "-");

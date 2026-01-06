@@ -1,6 +1,5 @@
 import { type } from "arktype";
 
-// Constants
 export const MAX_NAME_LENGTH = 100;
 export const MAX_DESCRIPTION_LENGTH = 1024;
 export const MAX_AUTH_HEADER_LENGTH = 256;
@@ -11,7 +10,6 @@ export const MAX_PUBKEY_LENGTH = 256;
 export const MAX_PRICE_USDC = 1000000;
 export const MAX_PRIORITY = 10000;
 
-// Endpoint schemas
 export const CreateEndpointSchema = type({
   path: "string > 0",
   "path_pattern?": "string",
@@ -56,7 +54,6 @@ export const UpdateTenantSchema = type({
   "is_active?": "boolean",
 });
 
-// Node schemas
 export const CreateNodeSchema = type({
   name: `string <= ${MAX_NAME_LENGTH}`,
   internal_ip: `string <= ${MAX_IP_LENGTH}`,
@@ -75,7 +72,6 @@ export const UpdateNodeSchema = type({
   "wireguard_address?": `string <= ${MAX_IP_LENGTH} | null`,
 });
 
-// Wallet schemas
 export const CreateWalletSchema = type({
   name: `string > 0 & string <= ${MAX_NAME_LENGTH}`,
   wallet_config: "unknown",
@@ -107,7 +103,6 @@ export const OrgUpdateTenantSchema = type({
   "is_active?": "boolean",
 });
 
-// Member role schema
 export const AddMemberSchema = type({
   email: "string.email",
   "role?": "'owner' | 'admin' | 'member'",
@@ -117,7 +112,6 @@ export const UpdateMemberSchema = type({
   role: "'owner' | 'admin' | 'member'",
 });
 
-// Admin tenant schemas (for /admin/tenants routes with node_ids)
 export const AdminCreateTenantSchema = type({
   name: "string > 0",
   backend_url: "string",
@@ -149,7 +143,6 @@ export const AdminUpdateEndpointSchema = type({
   "priority?": `0 <= number <= ${MAX_PRIORITY}`,
 });
 
-// Auth schemas
 export const MIN_PASSWORD_LENGTH = 8;
 
 export const SignupSchema = type({
@@ -166,7 +159,6 @@ export const VerifyEmailSchema = type({
   token: "string > 0",
 });
 
-// Organization schemas
 export const CreateOrganizationSchema = type({
   name: `string > 0 & string <= ${MAX_NAME_LENGTH}`,
   "slug?": `string <= ${MAX_NAME_LENGTH}`,
@@ -177,31 +169,26 @@ export const UpdateOrganizationSchema = type({
   "slug?": `string <= ${MAX_NAME_LENGTH}`,
 });
 
-// Tenant node assignment
 export const AssignNodeSchema = type({
   node_id: "number",
   "is_primary?": "boolean",
 });
 
-// Public schemas
 export const WaitlistSchema = type({
   email: "string.email",
 });
 
-// Admin user schema
 export const AdminUpdateUserSchema = type({
   "is_admin?": "boolean",
   "email_verified?": "boolean",
 });
 
-// Admin settings schema
 export const AdminUpdateSettingsSchema = type({
   "wallet_config?": "unknown | null",
   "minimum_balance_sol?": "0.001 <= number <= 1",
   "minimum_balance_usdc?": "0.001 <= number <= 100",
 });
 
-// Internal transaction schema
 export const InternalTransactionSchema = type({
   ngx_request_id: "string > 0",
   tenant_name: "string > 0",
@@ -212,17 +199,14 @@ export const InternalTransactionSchema = type({
   request_path: "string > 0",
 });
 
-// Admin node assignment (for admin route POST /tenants/:id/nodes)
 export const AdminAssignNodeSchema = type({
   node_id: "number",
 });
 
-// OpenAPI import schema
 export const OpenApiImportSchema = type({
   spec: "unknown",
 });
 
-// Pattern validation schema
 export const ValidatePatternSchema = type({
   pattern: "string > 0",
 });

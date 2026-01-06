@@ -27,7 +27,6 @@ async function setCertStatus(
       .where("node_id", "=", nodeId)
       .execute();
 
-    // Check if tenant can transition to active
     await checkAndUpdateTenantStatus(tenant.id);
   }
 }

@@ -20,12 +20,10 @@ export const walletsRoutes = new Hono();
 
 walletsRoutes.use("*", requireAuth);
 
-// List wallets for an organization
 walletsRoutes.get("/organization/:orgId", async (c) => {
   const user = c.get("user");
   const orgId = parseInt(c.req.param("orgId"));
 
-  // Check membership unless admin
   if (!user.is_admin) {
     const membership = await db
       .selectFrom("user_organizations")
@@ -87,7 +85,6 @@ walletsRoutes.get("/organization/:orgId/check-name", async (c) => {
   return c.json({ available: !existing });
 });
 
-// Get single wallet
 walletsRoutes.get("/:id", async (c) => {
   const user = c.get("user");
   const id = parseInt(c.req.param("id"));
@@ -102,7 +99,6 @@ walletsRoutes.get("/:id", async (c) => {
     return c.json({ error: "Wallet not found" }, 404);
   }
 
-  // Check access - admin can see all, user can only see their org's wallets
   if (!user.is_admin && wallet.organization_id) {
     const membership = await db
       .selectFrom("user_organizations")
@@ -116,7 +112,6 @@ walletsRoutes.get("/:id", async (c) => {
     }
   }
 
-  // Non-admin can't see master wallets (org_id = null)
   if (!user.is_admin && wallet.organization_id === null) {
     return c.json({ error: "Wallet not found" }, 404);
   }
@@ -124,7 +119,6 @@ walletsRoutes.get("/:id", async (c) => {
   return c.json(wallet);
 });
 
-// Get wallet balances
 walletsRoutes.get("/:id/balances", async (c) => {
   const user = c.get("user");
   const id = parseInt(c.req.param("id"));
@@ -139,7 +133,6 @@ walletsRoutes.get("/:id/balances", async (c) => {
     return c.json({ error: "Wallet not found" }, 404);
   }
 
-  // Check access
   if (!user.is_admin && wallet.organization_id) {
     const membership = await db
       .selectFrom("user_organizations")
@@ -157,7 +150,6 @@ walletsRoutes.get("/:id/balances", async (c) => {
     return c.json({ error: "Wallet not found" }, 404);
   }
 
-  // Check if cache is fresh
   const cachedAt = wallet.balances_cached_at;
   const isCacheFresh =
     cachedAt &&
@@ -168,12 +160,10 @@ walletsRoutes.get("/:id/balances", async (c) => {
     return c.json(wallet.cached_balances);
   }
 
-  // Fetch fresh balances
   const config = wallet.wallet_config as WalletConfig;
   const addresses = extractAddresses(config);
   const balances = await fetchWalletBalances(addresses);
 
-  // Update cache
   await db
     .updateTable("wallets")
     .set({
@@ -186,7 +176,6 @@ walletsRoutes.get("/:id/balances", async (c) => {
   return c.json(balances);
 });
 
-// Create wallet for an organization
 walletsRoutes.post(
   "/organization/:orgId",
   createResourceLimiter,
@@ -196,7 +185,6 @@ walletsRoutes.post(
     const orgId = parseInt(c.req.param("orgId"));
     const body = c.req.valid("json");
 
-    // Check membership and owner role
     if (!user.is_admin) {
       const membership = await db
         .selectFrom("user_organizations")
@@ -235,7 +223,6 @@ walletsRoutes.post(
       .returningAll()
       .executeTakeFirstOrThrow();
 
-    // Enqueue balance check
     if (addresses.solana) {
       enqueueBalanceCheck(wallet.id, addresses.solana).catch((err) => {
         logger.error(
@@ -248,7 +235,6 @@ walletsRoutes.post(
   },
 );
 
-// Update wallet
 walletsRoutes.put(
   "/:id",
   modifyResourceLimiter,
@@ -268,7 +254,6 @@ walletsRoutes.put(
       return c.json({ error: "Wallet not found" }, 404);
     }
 
-    // Check access
     if (!user.is_admin && wallet.organization_id) {
       const membership = await db
         .selectFrom("user_organizations")
@@ -309,7 +294,6 @@ walletsRoutes.put(
       .returningAll()
       .executeTakeFirstOrThrow();
 
-    // Re-enqueue balance check if config changed
     if (body.wallet_config) {
       const addresses = extractAddresses(body.wallet_config as WalletConfig);
       if (addresses.solana) {
@@ -325,7 +309,6 @@ walletsRoutes.put(
   },
 );
 
-// Delete wallet
 walletsRoutes.delete("/:id", modifyResourceLimiter, async (c) => {
   const user = c.get("user");
   const id = parseInt(c.req.param("id"));
@@ -340,7 +323,6 @@ walletsRoutes.delete("/:id", modifyResourceLimiter, async (c) => {
     return c.json({ error: "Wallet not found" }, 404);
   }
 
-  // Check access
   if (!user.is_admin && wallet.organization_id) {
     const membership = await db
       .selectFrom("user_organizations")
@@ -361,7 +343,6 @@ walletsRoutes.delete("/:id", modifyResourceLimiter, async (c) => {
     return c.json({ error: "Wallet not found" }, 404);
   }
 
-  // Check if wallet is assigned to any tenants
   const tenantsUsingWallet = await db
     .selectFrom("tenants")
     .select("id")
@@ -380,7 +361,6 @@ walletsRoutes.delete("/:id", modifyResourceLimiter, async (c) => {
   return c.json({ success: true });
 });
 
-// Admin routes for master wallet management
 walletsRoutes.get("/admin/master", requireAdmin, async (c) => {
   const masterWallets = await db
     .selectFrom("wallets")

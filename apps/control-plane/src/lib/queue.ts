@@ -453,7 +453,6 @@ export async function startQueue(config: {
         );
 
         try {
-          // Get minimum balance thresholds from admin settings
           const adminSettings = await db
             .selectFrom("admin_settings")
             .select(["minimum_balance_sol", "minimum_balance_usdc"])
@@ -463,7 +462,6 @@ export async function startQueue(config: {
           const minSol = adminSettings?.minimum_balance_sol ?? 0.001;
           const minUsdc = adminSettings?.minimum_balance_usdc ?? 0.01;
 
-          // Fetch wallet balance
           const balances = await fetchWalletBalances({
             solana: solanaAddress,
             evm: null,
@@ -476,14 +474,12 @@ export async function startQueue(config: {
           );
 
           if (solBalance >= minSol && usdcBalance >= minUsdc) {
-            // Update wallet funding_status to 'funded'
             await db
               .updateTable("wallets")
               .set({ funding_status: "funded" })
               .where("id", "=", walletId)
               .execute();
 
-            // Update all tenants using this wallet
             const tenants = await db
               .selectFrom("tenants")
               .select(["id"])
@@ -496,7 +492,6 @@ export async function startQueue(config: {
 
             logger.info(`Wallet ${walletId} marked as funded`);
           } else {
-            // Re-enqueue balance check with delay
             logger.info(
               `Wallet ${walletId} not yet funded, re-enqueueing check`,
             );

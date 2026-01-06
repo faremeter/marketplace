@@ -185,7 +185,6 @@ export async function getTransactionsForAccount(
   for (const addr of addresses) {
     params.append("tracked_address_id", addr.id.toString());
   }
-  // Fetch more to allow for filtering
   params.set("limit", "200");
   params.set("sort", "block_time");
   params.set("order", "desc");
@@ -195,7 +194,6 @@ export async function getTransactionsForAccount(
     `/transactions?${params}`,
   );
 
-  // Filter to USDC only and format amounts
   const usdcTransactions = response.data
     .filter(isUsdcTransaction)
     .map((tx) => ({
