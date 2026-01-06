@@ -46,6 +46,7 @@ export default function TenantsPage() {
   const [tenantToDelete, setTenantToDelete] = useState<Tenant | null>(null);
   const [deletingId, setDeletingId] = useState<number | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [deleteConfirmName, setDeleteConfirmName] = useState("");
 
   const {
     data: tenants,
@@ -70,6 +71,7 @@ export default function TenantsPage() {
   const handleDeleteClick = (tenant: Tenant) => {
     setTenantToDelete(tenant);
     setDeleteError(null);
+    setDeleteConfirmName("");
     setDeleteDialogOpen(true);
   };
 
@@ -329,13 +331,19 @@ export default function TenantsPage() {
         organizationId={currentOrg.id}
       />
 
-      <Dialog.Root open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+      <Dialog.Root
+        open={deleteDialogOpen}
+        onOpenChange={(open) => {
+          setDeleteDialogOpen(open);
+          if (!open) setDeleteConfirmName("");
+        }}
+      >
         <Dialog.Portal>
           <Dialog.Overlay className="fixed inset-0 z-50 bg-black/50" />
           <Dialog.Content className="fixed left-1/2 top-1/2 z-50 w-full max-w-md -translate-x-1/2 -translate-y-1/2 rounded-lg border border-gray-6 bg-gray-2 p-6 shadow-lg">
             <div className="flex items-center justify-between">
-              <Dialog.Title className="text-lg font-semibold text-gray-12">
-                Delete Proxy
+              <Dialog.Title className="text-lg font-semibold text-red-400">
+                Permanently Delete Proxy
               </Dialog.Title>
               <Dialog.Close className="rounded p-1 text-gray-11 hover:bg-gray-4 hover:text-gray-12">
                 <Cross2Icon className="h-4 w-4" />
@@ -343,15 +351,31 @@ export default function TenantsPage() {
             </div>
 
             <Dialog.Description asChild>
-              <div className="mt-4 space-y-3 text-sm text-gray-11">
+              <div className="mt-4 space-y-4 text-sm text-gray-11">
                 <p>
-                  Are you sure you want to delete{" "}
+                  This will permanently delete{" "}
                   <span className="font-medium text-gray-12">
                     {tenantToDelete?.name}
-                  </span>
-                  ?
+                  </span>{" "}
+                  and all associated data. This action cannot be undone.
                 </p>
-                <p>This action cannot be undone.</p>
+                <div>
+                  <label
+                    htmlFor="delete-confirm-name"
+                    className="block text-sm text-gray-11"
+                  >
+                    To confirm, type the proxy name below:
+                  </label>
+                  <input
+                    id="delete-confirm-name"
+                    type="text"
+                    value={deleteConfirmName}
+                    onChange={(e) => setDeleteConfirmName(e.target.value)}
+                    placeholder={tenantToDelete?.name}
+                    className="mt-2 w-full rounded-md border border-gray-6 bg-gray-3 px-3 py-2 text-sm text-gray-12 placeholder:text-gray-8 focus:border-gray-7 focus:outline-none focus:ring-1 focus:ring-gray-7"
+                    autoComplete="off"
+                  />
+                </div>
               </div>
             </Dialog.Description>
 
@@ -371,8 +395,11 @@ export default function TenantsPage() {
               </button>
               <button
                 onClick={handleDeleteConfirm}
-                disabled={deletingId !== null}
-                className="rounded-md bg-red-600 px-3 py-2 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-50"
+                disabled={
+                  deletingId !== null ||
+                  deleteConfirmName !== tenantToDelete?.name
+                }
+                className="rounded-md bg-red-600 px-3 py-2 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {deletingId !== null ? "Deleting..." : "Delete"}
               </button>
