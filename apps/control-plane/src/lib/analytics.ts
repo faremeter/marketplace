@@ -260,6 +260,7 @@ export type Granularity = "day" | "week" | "month";
 export interface PeriodEarnings {
   period: string;
   total_usdc: number;
+  call_count: number;
 }
 
 const GRANULARITY_FORMAT: Record<Granularity, string> = {
@@ -297,6 +298,7 @@ export async function getEarningsByPeriod(
     .select([
       sql<string>`TO_CHAR(created_at, ${format})`.as("period"),
       sql<number>`COALESCE(SUM(amount_usdc), 0)`.as("total_usdc"),
+      sql<number>`COUNT(*)`.as("call_count"),
     ])
     .where(column, "=", id)
     .where("created_at", ">=", startDate)
@@ -307,5 +309,6 @@ export async function getEarningsByPeriod(
   return result.map((r) => ({
     period: r.period,
     total_usdc: Number(r.total_usdc),
+    call_count: Number(r.call_count),
   }));
 }
