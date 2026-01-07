@@ -7,7 +7,8 @@ export const MAX_AUTH_VALUE_LENGTH = 2048;
 export const MAX_PATH_LENGTH = 2048;
 export const MAX_IP_LENGTH = 45;
 export const MAX_PUBKEY_LENGTH = 256;
-export const MAX_PRICE_USDC = 1000000;
+export const MIN_PRICE_USDC = 1; // $0.000001 in micro-USDC (minimum non-free price)
+export const MAX_PRICE_USDC = 100000000; // $100 in micro-USDC
 export const MAX_PRIORITY = 10000;
 
 export const CreateEndpointSchema = type({
