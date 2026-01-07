@@ -161,6 +161,7 @@ export const VerifyEmailSchema = type({
 });
 
 const ORG_NAME_PATTERN = /^[a-zA-Z0-9 -]+$/;
+const MAX_SLUG_LENGTH = 63;
 
 const orgName = type(`string > 0 & string <= ${MAX_NAME_LENGTH}`).narrow(
   (s, ctx) => {
@@ -182,14 +183,29 @@ const orgName = type(`string > 0 & string <= ${MAX_NAME_LENGTH}`).narrow(
   },
 );
 
+const orgSlug = type(`string > 0 & string <= ${MAX_SLUG_LENGTH}`).narrow(
+  (s, ctx) => {
+    if (s.length === 1) {
+      if (!/^[a-z0-9]$/.test(s)) {
+        return ctx.mustBe("a lowercase letter or number");
+      }
+    } else if (!/^[a-z0-9][a-z0-9-]*[a-z0-9]$/.test(s)) {
+      return ctx.mustBe(
+        "lowercase alphanumeric, starting and ending with letter or number",
+      );
+    }
+    return true;
+  },
+);
+
 export const CreateOrganizationSchema = type({
   name: orgName,
-  "slug?": `string <= ${MAX_NAME_LENGTH}`,
+  "slug?": orgSlug.or(type("undefined")),
 });
 
 export const UpdateOrganizationSchema = type({
   "name?": orgName.or(type("undefined")),
-  "slug?": `string <= ${MAX_NAME_LENGTH}`,
+  "slug?": orgSlug.or(type("undefined")),
 });
 
 export const AssignNodeSchema = type({

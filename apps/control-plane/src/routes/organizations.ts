@@ -27,6 +27,7 @@ import {
   updateAccountAddresses,
 } from "../lib/corbits-dash.js";
 import { validateProxyName } from "../lib/proxy-name.js";
+import { slugify } from "../lib/slug.js";
 import {
   getOrganizationEarnings,
   getTenantEarnings,
@@ -45,13 +46,6 @@ import {
 } from "../lib/schemas.js";
 
 export const organizationsRoutes = new Hono();
-
-function slugify(name: string): string {
-  return name
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-|-$/g, "");
-}
 
 organizationsRoutes.use("*", requireAuth);
 
