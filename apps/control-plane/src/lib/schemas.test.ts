@@ -291,6 +291,31 @@ await t.test("CreateOrganizationSchema", async (t) => {
     });
     t.equal(isError(result), true);
   });
+
+  await t.test("accepts name with spaces and hyphens", async (t) => {
+    const result = CreateOrganizationSchema({ name: "My Cool Org-Name" });
+    t.equal(isError(result), false);
+  });
+
+  await t.test("rejects special characters", async (t) => {
+    const result = CreateOrganizationSchema({ name: "My Org!" });
+    t.equal(isError(result), true);
+  });
+
+  await t.test("rejects consecutive spaces", async (t) => {
+    const result = CreateOrganizationSchema({ name: "My  Org" });
+    t.equal(isError(result), true);
+  });
+
+  await t.test("rejects name starting with hyphen", async (t) => {
+    const result = CreateOrganizationSchema({ name: "-My Org" });
+    t.equal(isError(result), true);
+  });
+
+  await t.test("rejects name ending with hyphen", async (t) => {
+    const result = CreateOrganizationSchema({ name: "My Org-" });
+    t.equal(isError(result), true);
+  });
 });
 
 await t.test("CreateWalletSchema", async (t) => {

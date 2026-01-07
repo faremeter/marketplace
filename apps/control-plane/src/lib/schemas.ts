@@ -160,13 +160,35 @@ export const VerifyEmailSchema = type({
   token: "string > 0",
 });
 
+const ORG_NAME_PATTERN = /^[a-zA-Z0-9 -]+$/;
+
+const orgName = type(`string > 0 & string <= ${MAX_NAME_LENGTH}`).narrow(
+  (s, ctx) => {
+    if (!ORG_NAME_PATTERN.test(s)) {
+      return ctx.mustBe(
+        "containing only letters, numbers, spaces, and hyphens",
+      );
+    }
+    if (/ {2}/.test(s)) {
+      return ctx.mustBe("without consecutive spaces");
+    }
+    if (s.startsWith("-")) {
+      return ctx.mustBe("not starting with a hyphen");
+    }
+    if (s.endsWith("-")) {
+      return ctx.mustBe("not ending with a hyphen");
+    }
+    return true;
+  },
+);
+
 export const CreateOrganizationSchema = type({
-  name: `string > 0 & string <= ${MAX_NAME_LENGTH}`,
+  name: orgName,
   "slug?": `string <= ${MAX_NAME_LENGTH}`,
 });
 
 export const UpdateOrganizationSchema = type({
-  "name?": `string > 0 & string <= ${MAX_NAME_LENGTH}`,
+  "name?": orgName.or(type("undefined")),
   "slug?": `string <= ${MAX_NAME_LENGTH}`,
 });
 
