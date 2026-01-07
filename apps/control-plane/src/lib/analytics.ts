@@ -296,14 +296,14 @@ export async function getEarningsByPeriod(
   const result = await db
     .selectFrom("transactions")
     .select([
-      sql<string>`TO_CHAR(created_at, ${format})`.as("period"),
+      sql<string>`TO_CHAR(created_at, ${sql.lit(format)})`.as("period"),
       sql<number>`COALESCE(SUM(amount_usdc), 0)`.as("total_usdc"),
       sql<number>`COUNT(*)`.as("call_count"),
     ])
     .where(column, "=", id)
     .where("created_at", ">=", startDate)
-    .groupBy(sql`TO_CHAR(created_at, ${format})`)
-    .orderBy("period", "asc")
+    .groupBy(sql`1`)
+    .orderBy(sql`1`, "asc")
     .execute();
 
   return result.map((r) => ({
