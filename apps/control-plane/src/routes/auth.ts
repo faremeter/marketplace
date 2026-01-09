@@ -59,7 +59,7 @@ authRoutes.post(
       .executeTakeFirstOrThrow();
 
     const username = email.split("@")[0] ?? "user";
-    const orgName = `${username}'s Team`;
+    const orgName = `${username} Org`;
     const baseSlug = username.toLowerCase().replace(/[^a-z0-9]/g, "-");
     const slug = `${baseSlug}-${crypto.randomBytes(3).toString("hex")}`;
 
