@@ -1,6 +1,9 @@
 "use client";
 
+const AUTO_COLLAPSE_THRESHOLD = 7;
+
 import { useAuth } from "@/lib/auth/context";
+import { titleCase } from "@/lib/format";
 import useSWR from "swr";
 import { api } from "@/lib/api/client";
 import { InlinePriceEdit } from "@/components/shared/inline-price-edit";
@@ -11,8 +14,9 @@ import {
   CopyIcon,
   CheckIcon,
   EyeOpenIcon,
+  ChevronDownIcon,
 } from "@radix-ui/react-icons";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useToast } from "@/components/ui/toast";
 import {
   type EarningsAnalytics,
@@ -72,8 +76,8 @@ export default function EndpointsPage() {
     <div className="space-y-8">
       <div>
         <h1 className="text-2xl font-semibold text-gray-12">Endpoints</h1>
-        <p className="text-sm text-gray-11">
-          API endpoints for {currentOrg.name}
+        <p className="text-sm text-corbits-orange">
+          API endpoints for {titleCase(currentOrg.name)}
         </p>
       </div>
 
@@ -122,6 +126,15 @@ function TenantCard({
   onUpdate: () => void;
 }) {
   const [copied, setCopied] = useState(false);
+  const [isExpanded, setIsExpanded] = useState(false);
+  const storageKey = `endpoints-collapsed-${tenant.id}`;
+  const hasStoredPref =
+    typeof window !== "undefined" && localStorage.getItem(storageKey) !== null;
+  const [isCollapsed, setIsCollapsed] = useState(() => {
+    if (typeof window === "undefined") return false;
+    const stored = localStorage.getItem(storageKey);
+    return stored === "true";
+  });
   const { toast } = useToast();
   const {
     data: endpoints,
@@ -130,6 +143,22 @@ function TenantCard({
   } = useSWR(`/api/tenants/${tenant.id}/endpoints`, api.get<Endpoint[]>, {
     refreshInterval: 5000,
   });
+
+  useEffect(() => {
+    if (
+      !hasStoredPref &&
+      endpoints &&
+      endpoints.length > AUTO_COLLAPSE_THRESHOLD
+    ) {
+      setIsCollapsed(true);
+    }
+  }, [hasStoredPref, endpoints]);
+
+  const toggleCollapsed = () => {
+    const newValue = !isCollapsed;
+    setIsCollapsed(newValue);
+    localStorage.setItem(storageKey, String(newValue));
+  };
 
   const apiEndpoint = `/api/organizations/${orgId}/tenants/${tenant.id}`;
   const proxyUrl = `https://${tenant.name}.api.corbits.dev`;
@@ -143,8 +172,19 @@ function TenantCard({
 
   return (
     <div className="overflow-hidden rounded-lg border border-gray-6 bg-gray-2">
-      <div className="flex items-center justify-between border-b border-gray-6 bg-gray-3 px-4 py-3">
+      <div
+        className={`flex items-center justify-between bg-gray-3 px-4 py-3 ${isCollapsed ? "" : "border-b border-gray-6"}`}
+      >
         <div className="flex items-center gap-3">
+          <button
+            onClick={toggleCollapsed}
+            className="rounded p-1 text-gray-11 hover:bg-gray-4 hover:text-gray-12 transition-colors"
+            title={isCollapsed ? "Expand" : "Collapse"}
+          >
+            <ChevronDownIcon
+              className={`h-4 w-4 transition-transform duration-200 ${isCollapsed ? "-rotate-90" : ""}`}
+            />
+          </button>
           <Link
             href={`/proxies/${tenant.id}`}
             className="text-lg font-medium text-gray-12 hover:text-accent-11 hover:underline"
@@ -153,22 +193,6 @@ function TenantCard({
           </Link>
           <div className="flex items-center rounded-lg border border-gray-6 bg-gray-3/50">
             <div className="flex items-center gap-2 px-3 py-1.5">
-              <div
-                className={`h-2 w-2 rounded-full ${
-                  tenant.status === "active" &&
-                  tenant.is_active &&
-                  tenant.wallet_id &&
-                  tenant.wallet_funding_status === "funded"
-                    ? "bg-green-500 animate-pulse"
-                    : tenant.status === "pending"
-                      ? "bg-yellow-500 animate-pulse"
-                      : tenant.status === "failed" ||
-                          tenant.status === "deleting" ||
-                          !tenant.wallet_id
-                        ? "bg-red-500"
-                        : "bg-gray-500"
-                }`}
-              />
               <code className="text-sm text-gray-11">{proxyUrl}</code>
             </div>
             <button
@@ -202,44 +226,62 @@ function TenantCard({
         </div>
       </div>
 
-      <div className="p-4">
-        {isLoading ? (
-          <div className="flex items-center justify-center py-8">
-            <div className="h-6 w-6 animate-spin rounded-full border-2 border-gray-6 border-t-accent-9" />
-          </div>
-        ) : (
-          <table className="w-full">
-            <thead>
-              <tr className="border-b border-gray-6 text-xs font-medium text-gray-11">
-                <th className="pb-2 text-left">Path</th>
-                <th className="w-20 pb-2 text-right">Price</th>
-                <th className="w-20 pb-2 text-right">Scheme</th>
-                <th className="w-20 pb-2 text-right">Earned</th>
-                <th className="w-24 pb-2 text-right">This Month</th>
-                <th className="w-16 pb-2 text-right">Change</th>
-                <th className="w-16 pb-2 text-right">Calls</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-6">
-              <CatchAllRow
-                tenant={tenant}
-                orgId={orgId}
-                apiEndpoint={apiEndpoint}
-                onUpdate={onUpdate}
-              />
-              {endpoints?.map((endpoint) => (
-                <EndpointRow
-                  key={endpoint.id}
-                  endpoint={endpoint}
-                  tenant={tenant}
-                  orgId={orgId}
-                  onUpdate={() => mutateEndpoints()}
-                />
-              ))}
-            </tbody>
-          </table>
-        )}
-      </div>
+      {!isCollapsed && (
+        <div className="p-4">
+          {isLoading ? (
+            <div className="flex items-center justify-center py-8">
+              <div className="h-6 w-6 animate-spin rounded-full border-2 border-gray-6 border-t-accent-9" />
+            </div>
+          ) : (
+            <>
+              <table className="w-full">
+                <thead>
+                  <tr className="border-b border-gray-6 text-xs font-medium text-gray-11">
+                    <th className="pb-2 text-left">Path</th>
+                    <th className="w-20 pb-2 text-right">Price</th>
+                    <th className="w-20 pb-2 text-right">Scheme</th>
+                    <th className="w-20 pb-2 text-right">Earned</th>
+                    <th className="w-24 pb-2 text-right">This Month</th>
+                    <th className="w-16 pb-2 text-right">Change</th>
+                    <th className="w-16 pb-2 text-right">Calls</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-6">
+                  <CatchAllRow
+                    tenant={tenant}
+                    orgId={orgId}
+                    apiEndpoint={apiEndpoint}
+                    onUpdate={onUpdate}
+                  />
+                  {(isExpanded ? endpoints : endpoints?.slice(0, 5))?.map(
+                    (endpoint) => (
+                      <EndpointRow
+                        key={endpoint.id}
+                        endpoint={endpoint}
+                        tenant={tenant}
+                        orgId={orgId}
+                        onUpdate={() => mutateEndpoints()}
+                      />
+                    ),
+                  )}
+                </tbody>
+              </table>
+              {endpoints && endpoints.length > 5 && (
+                <div className="mt-3 text-center">
+                  <button
+                    onClick={() => setIsExpanded(!isExpanded)}
+                    className="text-xs text-accent-11 hover:text-accent-12 hover:underline"
+                  >
+                    {isExpanded
+                      ? "Show less"
+                      : `Show ${endpoints.length - 5} more endpoints...`}
+                  </button>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -277,7 +319,7 @@ function CatchAllRow({
             fieldName="default_price_usdc"
             label="Default Price"
           />
-          {tenant.default_price_usdc === 0 && (
+          {tenant.default_price_usdc < 0.0000001 && (
             <span className="rounded bg-green-900/50 px-1.5 py-0.5 text-[10px] font-medium text-green-400 border border-green-800">
               Free
             </span>
@@ -350,7 +392,7 @@ function EndpointRow({
             fieldName="price_usdc"
             label="Price"
           />
-          {(endpoint.price_usdc ?? tenant.default_price_usdc) === 0 && (
+          {(endpoint.price_usdc ?? tenant.default_price_usdc) < 0.0000001 && (
             <span className="rounded bg-green-900/50 px-1.5 py-0.5 text-[10px] font-medium text-green-400 border border-green-800">
               Free
             </span>
