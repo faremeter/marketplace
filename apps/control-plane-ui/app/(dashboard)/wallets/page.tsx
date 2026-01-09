@@ -1,7 +1,9 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
+import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth/context";
+import { titleCase } from "@/lib/format";
 import useSWR from "swr";
 import * as Dialog from "@radix-ui/react-dialog";
 import {
@@ -21,7 +23,11 @@ import {
   isValidEvmAddress,
 } from "@/lib/wallet";
 import { useToast } from "@/components/ui/toast";
-import { refreshOnboardingStatus } from "@/lib/hooks/use-onboarding";
+import {
+  refreshOnboardingStatus,
+  useOnboarding,
+} from "@/lib/hooks/use-onboarding";
+import { QRCodeSVG } from "qrcode.react";
 
 interface WalletConfig {
   solana?: {
@@ -127,20 +133,16 @@ function CreateWalletModal({
     };
   }, [name, organizationId]);
 
-  const solanaValid = !solanaAddress || isValidSolanaAddress(solanaAddress);
+  const solanaValid =
+    solanaAddress.trim() && isValidSolanaAddress(solanaAddress);
   const evmValid = !evmAddress || isValidEvmAddress(evmAddress);
-  const hasAtLeastOne = solanaAddress.trim() || evmAddress.trim();
   const canSave =
-    name.trim() &&
-    nameAvailable === true &&
-    solanaValid &&
-    evmValid &&
-    hasAtLeastOne;
+    name.trim() && nameAvailable === true && solanaValid && evmValid;
 
   const handleSave = () => {
     onSave({
       name: name.trim(),
-      solana: solanaAddress.trim() || undefined,
+      solana: solanaAddress.trim(),
       evm: evmAddress.trim() || undefined,
     });
   };
@@ -192,7 +194,7 @@ function CreateWalletModal({
 
             <div className="rounded-lg border border-gray-6 bg-gray-2 p-4">
               <label className="block text-sm font-medium text-gray-12 mb-2">
-                Solana Address
+                Solana Address <span className="text-red-400">*</span>
               </label>
               <input
                 type="text"
@@ -352,20 +354,16 @@ function EditWalletModal({
     };
   }, [name, initialName, organizationId, walletId]);
 
-  const solanaValid = !solanaAddress || isValidSolanaAddress(solanaAddress);
+  const solanaValid =
+    solanaAddress.trim() && isValidSolanaAddress(solanaAddress);
   const evmValid = !evmAddress || isValidEvmAddress(evmAddress);
-  const hasAtLeastOne = solanaAddress.trim() || evmAddress.trim();
   const canSave =
-    name.trim() &&
-    nameAvailable === true &&
-    solanaValid &&
-    evmValid &&
-    hasAtLeastOne;
+    name.trim() && nameAvailable === true && solanaValid && evmValid;
 
   const handleSave = () => {
     onSave({
       name: name.trim(),
-      solana: solanaAddress.trim() || undefined,
+      solana: solanaAddress.trim(),
       evm: evmAddress.trim() || undefined,
     });
   };
@@ -416,7 +414,7 @@ function EditWalletModal({
 
             <div className="rounded-lg border border-gray-6 bg-gray-2 p-4">
               <label className="block text-sm font-medium text-gray-12 mb-2">
-                Solana Address
+                Solana Address <span className="text-red-400">*</span>
               </label>
               <input
                 type="text"
@@ -624,7 +622,11 @@ function WalletCard({
           return (
             <div className="flex items-center gap-2">
               <span className="text-xs text-gray-11 w-16">Solana:</span>
-              <code className="flex-1 rounded border border-gray-6 bg-gray-3 px-2 py-1 font-mono text-xs text-gray-12 truncate">
+              <code
+                onClick={() => copyToClipboard(solana)}
+                className="flex-1 rounded border border-gray-6 bg-gray-3 px-2 py-1 font-mono text-xs text-gray-12 truncate cursor-pointer hover:bg-gray-4"
+                title="Click to copy"
+              >
                 {solana}
               </code>
               <button
@@ -646,7 +648,11 @@ function WalletCard({
           return (
             <div className="flex items-center gap-2">
               <span className="text-xs text-gray-11 w-16">EVM:</span>
-              <code className="flex-1 rounded border border-gray-6 bg-gray-3 px-2 py-1 font-mono text-xs text-gray-12 truncate">
+              <code
+                onClick={() => copyToClipboard(evm)}
+                className="flex-1 rounded border border-gray-6 bg-gray-3 px-2 py-1 font-mono text-xs text-gray-12 truncate cursor-pointer hover:bg-gray-4"
+                title="Click to copy"
+              >
                 {evm}
               </code>
               <button
@@ -720,18 +726,55 @@ function WalletCard({
 }
 
 export default function WalletsPage() {
+  const router = useRouter();
   const { currentOrg, user } = useAuth();
   const { toast } = useToast();
+  const { status: onboardingStatus } = useOnboarding();
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [walletToDelete, setWalletToDelete] = useState<Wallet | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [showInUseDialog, setShowInUseDialog] = useState(false);
+  const [tenantsUsingWallet, setTenantsUsingWallet] = useState<string[]>([]);
+  const [copiedFundingAddress, setCopiedFundingAddress] = useState<
+    string | null
+  >(null);
 
   const currentRole = user?.organizations.find(
     (o) => o.id === currentOrg?.id,
   )?.role;
   const isOwner = currentRole === "owner" || user?.is_admin;
+
+  const [dismissedFundingModal, setDismissedFundingModal] = useState(false);
+  const [isContinuing, setIsContinuing] = useState(false);
+  const [showFundingEditModal, setShowFundingEditModal] = useState(false);
+  const [isSavingFundingEdit, setIsSavingFundingEdit] = useState(false);
+  const [forceShowFundingModal, setForceShowFundingModal] = useState(false);
+  const [fundingFlowActive, setFundingFlowActive] = useState(false);
+
+  // Activate funding flow when wallet exists but not yet funded - stays active until user dismisses
+  useEffect(() => {
+    if (
+      onboardingStatus?.steps.wallet &&
+      !onboardingStatus?.steps.funded &&
+      !fundingFlowActive
+    ) {
+      setFundingFlowActive(true);
+      setDismissedFundingModal(false);
+      setIsContinuing(false);
+    }
+  }, [
+    onboardingStatus?.steps.wallet,
+    onboardingStatus?.steps.funded,
+    fundingFlowActive,
+  ]);
+
+  const copyFundingAddress = async (address: string) => {
+    await navigator.clipboard.writeText(address);
+    setCopiedFundingAddress(address);
+    setTimeout(() => setCopiedFundingAddress(null), 2000);
+  };
 
   const {
     data: wallets,
@@ -741,6 +784,57 @@ export default function WalletsPage() {
     currentOrg ? `/api/wallets/organization/${currentOrg.id}` : null,
     api.get,
   );
+
+  const firstWalletSolanaAddress = wallets?.[0]
+    ? extractAddresses(wallets[0].wallet_config).solana
+    : null;
+
+  const showFundingModal =
+    !dismissedFundingModal &&
+    !walletsLoading &&
+    (forceShowFundingModal || fundingFlowActive);
+
+  const { data: fundingModalBalances } = useSWR<WalletBalances>(
+    showFundingModal && wallets?.[0]
+      ? `/api/wallets/${wallets[0].id}/balances`
+      : null,
+    api.get,
+    { refreshInterval: 5000 },
+  );
+
+  const isSolanaFunded =
+    fundingModalBalances &&
+    (parseFloat(fundingModalBalances.solana.native) > 0 ||
+      parseFloat(fundingModalBalances.solana.usdc) > 0);
+
+  const handleFundingEditSave = async (data: {
+    name: string;
+    solana?: string;
+    evm?: string;
+  }) => {
+    if (!wallets?.[0] || !currentOrg) return;
+    setIsSavingFundingEdit(true);
+    try {
+      const walletConfig = buildAddressOnlyConfig({
+        solana: data.solana,
+        evm: data.evm,
+      });
+      await api.put(`/api/wallets/${wallets[0].id}`, {
+        name: data.name,
+        wallet_config: walletConfig,
+      });
+      await mutateWallets();
+      setShowFundingEditModal(false);
+      setForceShowFundingModal(true);
+    } catch {
+      toast({
+        title: "Error",
+        description: "Failed to update wallet",
+        variant: "error",
+      });
+    }
+    setIsSavingFundingEdit(false);
+  };
 
   const handleCreateWallet = async (data: {
     name: string;
@@ -807,9 +901,22 @@ export default function WalletsPage() {
     }
   };
 
-  const handleDeleteClick = (wallet: Wallet) => {
+  const handleDeleteClick = async (wallet: Wallet) => {
     setWalletToDelete(wallet);
-    setDeleteDialogOpen(true);
+    try {
+      const tenants = await api.get<
+        { id: number; name: string; wallet_id: number | null }[]
+      >(`/api/organizations/${currentOrg?.id}/tenants`);
+      const usingWallet = tenants.filter((t) => t.wallet_id === wallet.id);
+      if (usingWallet.length > 0) {
+        setTenantsUsingWallet(usingWallet.map((t) => t.name));
+        setShowInUseDialog(true);
+      } else {
+        setDeleteDialogOpen(true);
+      }
+    } catch {
+      setDeleteDialogOpen(true);
+    }
   };
 
   const handleDeleteConfirm = async () => {
@@ -850,8 +957,8 @@ export default function WalletsPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-semibold text-gray-12">Wallets</h1>
-          <p className="text-sm text-gray-11">
-            Manage crypto wallets for {currentOrg.name}
+          <p className="text-sm text-corbits-orange">
+            Manage crypto wallets for {titleCase(currentOrg.name)}
           </p>
         </div>
         {isOwner && (
@@ -960,6 +1067,240 @@ export default function WalletsPage() {
           </Dialog.Content>
         </Dialog.Portal>
       </Dialog.Root>
+
+      <Dialog.Root open={showInUseDialog} onOpenChange={setShowInUseDialog}>
+        <Dialog.Portal>
+          <Dialog.Overlay className="fixed inset-0 bg-black/50" />
+          <Dialog.Content className="fixed left-1/2 top-1/2 w-full max-w-md -translate-x-1/2 -translate-y-1/2 rounded-lg border border-gray-6 bg-gray-2 p-6 shadow-lg">
+            <div className="flex items-center justify-between">
+              <Dialog.Title className="text-lg font-semibold text-gray-12">
+                Cannot Delete Wallet
+              </Dialog.Title>
+              <Dialog.Close className="rounded p-1 text-gray-11 hover:bg-gray-4 hover:text-gray-12">
+                <Cross2Icon className="h-4 w-4" />
+              </Dialog.Close>
+            </div>
+            <Dialog.Description asChild>
+              <div className="mt-4 space-y-3 text-sm text-gray-11">
+                <p>
+                  <span className="font-medium text-gray-12">
+                    {walletToDelete?.name}
+                  </span>{" "}
+                  is currently assigned to{" "}
+                  {tenantsUsingWallet.length === 1 ? "a proxy" : "proxies"}:
+                </p>
+                <ul className="list-disc list-inside space-y-1">
+                  {tenantsUsingWallet.map((name) => (
+                    <li key={name} className="text-gray-12">
+                      {name}
+                    </li>
+                  ))}
+                </ul>
+                <p>
+                  Reassign{" "}
+                  {tenantsUsingWallet.length === 1
+                    ? "this proxy"
+                    : "these proxies"}{" "}
+                  to a different wallet before deleting.
+                </p>
+              </div>
+            </Dialog.Description>
+            <div className="mt-6 flex justify-end">
+              <button
+                onClick={() => setShowInUseDialog(false)}
+                className="rounded-md bg-white px-4 py-2 text-sm font-medium text-black transition-colors hover:bg-white/90"
+              >
+                OK
+              </button>
+            </div>
+          </Dialog.Content>
+        </Dialog.Portal>
+      </Dialog.Root>
+
+      <Dialog.Root open={showFundingModal}>
+        <Dialog.Portal>
+          <Dialog.Overlay className="fixed inset-0 bg-black/60 backdrop-blur-sm" />
+          <Dialog.Content
+            className="fixed left-1/2 top-1/2 w-full max-w-lg -translate-x-1/2 -translate-y-1/2 rounded-lg border border-corbits-orange bg-gray-1 p-6 shadow-xl focus:outline-none"
+            onPointerDownOutside={(e) => e.preventDefault()}
+            onEscapeKeyDown={(e) => e.preventDefault()}
+          >
+            <Dialog.Title className="text-lg font-semibold text-gray-12">
+              Fund Your Wallet to Continue
+            </Dialog.Title>
+            <Dialog.Description className="mt-2 text-sm text-gray-11">
+              Send funds to your wallet address below to enable proxy creation.
+              Your balance will update automatically once funds are received.
+            </Dialog.Description>
+
+            <div className="mt-6 space-y-4">
+              {!wallets?.length ? (
+                <div className="rounded-lg border border-yellow-800 bg-yellow-900/20 p-4 text-center">
+                  <p className="text-sm text-yellow-400 mb-3">
+                    No wallet configured
+                  </p>
+                  <button
+                    onClick={() => setShowCreateModal(true)}
+                    className="rounded-md bg-white px-4 py-2 text-sm font-medium text-black transition-colors hover:bg-white/90"
+                  >
+                    Create Wallet
+                  </button>
+                </div>
+              ) : (
+                (() => {
+                  const addresses = extractAddresses(wallets[0].wallet_config);
+                  return (
+                    <>
+                      {addresses.solana ? (
+                        <div className="rounded-lg border border-gray-6 bg-gray-2 p-4">
+                          <div className="flex gap-4">
+                            <div className="flex-shrink-0 rounded-lg bg-white p-2">
+                              <QRCodeSVG
+                                value={addresses.solana}
+                                size={100}
+                                level="M"
+                              />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="flex items-center gap-2 text-sm font-medium text-gray-12 mb-2">
+                                <span>Solana Address</span>
+                                {isSolanaFunded && (
+                                  <CheckCircledIcon className="h-4 w-4 text-green-400" />
+                                )}
+                                <button
+                                  onClick={() => setShowFundingEditModal(true)}
+                                  className="ml-auto text-xs text-gray-11 hover:text-gray-12 focus:outline-none"
+                                >
+                                  Change
+                                </button>
+                              </p>
+                              <div className="flex items-center gap-2">
+                                <code className="flex-1 rounded border border-gray-6 bg-gray-3 px-2 py-1 font-mono text-xs text-gray-12 truncate">
+                                  {addresses.solana}
+                                </code>
+                                <button
+                                  onClick={() =>
+                                    copyFundingAddress(
+                                      addresses.solana as string,
+                                    )
+                                  }
+                                  className="rounded p-1.5 text-gray-11 hover:bg-gray-3 hover:text-gray-12 focus:outline-none"
+                                >
+                                  {copiedFundingAddress === addresses.solana ? (
+                                    <CheckIcon className="h-4 w-4 text-green-400" />
+                                  ) : (
+                                    <CopyIcon className="h-4 w-4" />
+                                  )}
+                                </button>
+                              </div>
+                              <p className="mt-2 text-xs text-gray-9">
+                                Send SOL and USDC to this address
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="rounded-lg border border-yellow-800 bg-yellow-900/20 p-4 text-center">
+                          <p className="text-sm text-yellow-400 mb-3">
+                            No Solana address configured
+                          </p>
+                          <button
+                            onClick={() => setShowFundingEditModal(true)}
+                            className="rounded-md bg-white px-4 py-2 text-sm font-medium text-black transition-colors hover:bg-white/90"
+                          >
+                            Add Solana Address
+                          </button>
+                        </div>
+                      )}
+                    </>
+                  );
+                })()
+              )}
+            </div>
+
+            <div className="mt-6">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  {isSolanaFunded ? (
+                    <>
+                      <CheckCircledIcon className="h-5 w-5 text-green-400" />
+                      <span className="text-sm text-green-400">
+                        Funds received!
+                      </span>
+                    </>
+                  ) : (
+                    <>
+                      <div className="h-4 w-4 animate-spin rounded-full border-2 border-gray-6 border-t-corbits-orange" />
+                      <span className="text-sm text-gray-11">
+                        Waiting for funds...
+                      </span>
+                    </>
+                  )}
+                </div>
+                <button
+                  onClick={() => {
+                    setIsContinuing(true);
+                    import("@hiseb/confetti").then(({ default: confetti }) => {
+                      confetti({
+                        position: {
+                          x: window.innerWidth * 0.5,
+                          y: window.innerHeight * 0.4,
+                        },
+                        count: 150,
+                        velocity: 200,
+                      });
+                    });
+                    setTimeout(() => {
+                      router.push("/proxies");
+                      refreshOnboardingStatus(currentOrg?.id ?? 0);
+                    }, 3000);
+                    setTimeout(() => {
+                      setDismissedFundingModal(true);
+                      setForceShowFundingModal(false);
+                      setFundingFlowActive(false);
+                    }, 4000);
+                  }}
+                  disabled={isContinuing}
+                  className="inline-flex items-center gap-2 rounded-md bg-corbits-orange px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-corbits-orange/90 disabled:opacity-70"
+                >
+                  Continue
+                  {isContinuing ? (
+                    <div className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />
+                  ) : (
+                    <svg
+                      className="h-4 w-4"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke="currentColor"
+                      strokeWidth={2}
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        d="M13 7l5 5m0 0l-5 5m5-5H6"
+                      />
+                    </svg>
+                  )}
+                </button>
+              </div>
+            </div>
+          </Dialog.Content>
+        </Dialog.Portal>
+      </Dialog.Root>
+
+      {wallets?.[0] && (
+        <EditWalletModal
+          open={showFundingEditModal}
+          onOpenChange={setShowFundingEditModal}
+          onSave={handleFundingEditSave}
+          isSaving={isSavingFundingEdit}
+          initialName={wallets[0].name}
+          initialSolana={firstWalletSolanaAddress || ""}
+          initialEvm={extractAddresses(wallets[0].wallet_config).evm || ""}
+          walletId={wallets[0].id}
+          organizationId={currentOrg?.id ?? 0}
+        />
+      )}
     </div>
   );
 }
