@@ -1,5 +1,10 @@
 import { type } from "arktype";
 
+export const MIN_PRICE_USDC = 1; // $0.000001 in micro-USDC
+export const MAX_PRICE_USDC = 100_000_000; // $100 in micro-USDC
+export const MIN_PRICE_USD = MIN_PRICE_USDC / 1_000_000; // $0.000001
+export const MAX_PRICE_USD = MAX_PRICE_USDC / 1_000_000; // $100
+
 // Add new schemes here - this is the single source of truth
 export const SCHEMES = ["exact"] as const;
 
@@ -7,7 +12,10 @@ export const SchemeSchema = type("'exact'");
 
 export type Scheme = (typeof SCHEMES)[number];
 
-export const SCHEME_OPTIONS = SCHEMES.map((s) => ({ value: s, label: s }));
+export const SCHEME_OPTIONS = [
+  ...SCHEMES.map((s) => ({ value: s, label: s, disabled: false })),
+  { value: "dynamic", label: "dynamic", disabled: true },
+];
 
 export const TenantSchema = type({
   id: "number",
