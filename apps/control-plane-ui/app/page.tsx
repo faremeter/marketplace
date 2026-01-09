@@ -238,7 +238,7 @@ export default function LandingPage() {
               />
               <StepCard
                 number="3"
-                title="Start earning"
+                title="Start earning in seconds"
                 description="Clients pay per request. USDC flows directly to your wallet."
               />
             </div>

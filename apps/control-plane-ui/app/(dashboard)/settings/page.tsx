@@ -2,10 +2,12 @@
 
 import { useState } from "react";
 import { useAuth } from "@/lib/auth/context";
+import { titleCase } from "@/lib/format";
 import useSWR from "swr";
 import { api } from "@/lib/api/client";
 import { InviteMemberDialog } from "@/components/settings/invite-member-dialog";
 import { Cross2Icon, CopyIcon, CheckIcon } from "@radix-ui/react-icons";
+import { useToast } from "@/components/ui/toast";
 
 interface OrgMember {
   id: number;
@@ -26,6 +28,10 @@ interface Invitation {
 
 export default function SettingsPage() {
   const { user, currentOrg } = useAuth();
+  const { toast } = useToast();
+  const [activeTab, setActiveTab] = useState<"organization" | "account">(
+    "organization",
+  );
   const [inviteDialogOpen, setInviteDialogOpen] = useState(false);
   const [copiedId, setCopiedId] = useState<number | null>(null);
 
@@ -58,8 +64,17 @@ export default function SettingsPage() {
         `/api/organizations/${currentOrg.id}/invitations/${invitationId}`,
       );
       mutateInvitations();
+      toast({
+        title: "Invitation cancelled",
+        description: "The invitation has been removed.",
+        variant: "success",
+      });
     } catch {
-      // Error handling could be added here
+      toast({
+        title: "Error",
+        description: "Failed to cancel invitation",
+        variant: "error",
+      });
     }
   };
 
@@ -67,41 +82,70 @@ export default function SettingsPage() {
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-semibold text-gray-12">Settings</h1>
-        <p className="text-sm text-gray-11">
+        <p className="text-sm text-corbits-orange">
           {currentOrg
-            ? `Manage settings for ${currentOrg.name}`
+            ? `Manage settings for ${titleCase(currentOrg.name)}`
             : "Account settings"}
         </p>
       </div>
 
+      {currentOrg && (
+        <div className="flex gap-1 border-b border-gray-6">
+          <button
+            onClick={() => setActiveTab("organization")}
+            className={`px-4 py-2 text-sm font-medium transition-colors ${
+              activeTab === "organization"
+                ? "border-b-2 border-corbits-orange text-corbits-orange"
+                : "text-gray-11 hover:text-gray-12"
+            }`}
+          >
+            Organization
+          </button>
+          <button
+            onClick={() => setActiveTab("account")}
+            className={`px-4 py-2 text-sm font-medium transition-colors ${
+              activeTab === "account"
+                ? "border-b-2 border-corbits-orange text-corbits-orange"
+                : "text-gray-11 hover:text-gray-12"
+            }`}
+          >
+            Account
+          </button>
+        </div>
+      )}
+
       <div className="space-y-6">
-        <section className="rounded-lg border border-gray-6 bg-gray-2 p-6">
-          <h2 className="mb-4 text-lg font-medium text-gray-12">
-            Account Information
-          </h2>
-          <div className="space-y-4">
-            <div>
-              <label className="block text-sm text-gray-11">Email</label>
-              <p className="mt-1 text-gray-12">{user?.email}</p>
-            </div>
-            <div>
-              <label className="block text-sm text-gray-11">Account Type</label>
-              <div className="mt-1">
-                {user?.is_admin ? (
-                  <span className="rounded-full border border-amber-800 bg-amber-900/50 px-2 py-0.5 text-xs text-amber-400">
-                    Administrator
-                  </span>
-                ) : (
-                  <span className="rounded-full bg-gray-4 px-2 py-0.5 text-xs text-gray-11">
-                    User
-                  </span>
-                )}
+        {activeTab === "account" && (
+          <section className="rounded-lg border border-gray-6 bg-gray-2 p-6">
+            <h2 className="mb-4 text-lg font-medium text-gray-12">
+              Account Information
+            </h2>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm text-gray-11">Email</label>
+                <p className="mt-1 text-gray-12">{user?.email}</p>
+              </div>
+              <div>
+                <label className="block text-sm text-gray-11">
+                  Account Type
+                </label>
+                <div className="mt-1">
+                  {user?.is_admin ? (
+                    <span className="rounded-full border border-amber-800 bg-amber-900/50 px-2 py-0.5 text-xs text-amber-400">
+                      Administrator
+                    </span>
+                  ) : (
+                    <span className="rounded-full bg-gray-4 px-2 py-0.5 text-xs text-gray-11">
+                      User
+                    </span>
+                  )}
+                </div>
               </div>
             </div>
-          </div>
-        </section>
+          </section>
+        )}
 
-        {currentOrg && (
+        {activeTab === "organization" && currentOrg && (
           <>
             <section className="rounded-lg border border-gray-6 bg-gray-2 p-6">
               <h2 className="mb-4 text-lg font-medium text-gray-12">
@@ -193,11 +237,16 @@ export default function SettingsPage() {
                       <div className="flex items-center gap-2">
                         <button
                           onClick={() => handleCopyInviteLink(invitation)}
-                          className="flex h-8 w-8 items-center justify-center rounded text-gray-11 hover:bg-gray-4 hover:text-gray-12"
+                          className="flex items-center gap-1 rounded px-2 py-1 text-gray-11 hover:bg-gray-4 hover:text-gray-12"
                           title="Copy invite link"
                         >
                           {copiedId === invitation.id ? (
-                            <CheckIcon className="h-4 w-4 text-green-500" />
+                            <>
+                              <CheckIcon className="h-4 w-4 text-green-500" />
+                              <span className="text-xs text-green-500">
+                                Copied!
+                              </span>
+                            </>
                           ) : (
                             <CopyIcon className="h-4 w-4" />
                           )}

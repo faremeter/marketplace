@@ -2,9 +2,11 @@
 
 import { useState } from "react";
 import { useAuth } from "@/lib/auth/context";
+import { titleCase } from "@/lib/format";
 import useSWR from "swr";
 import { api, ApiError } from "@/lib/api/client";
 import Link from "next/link";
+import { useOnboarding } from "@/lib/hooks/use-onboarding";
 import {
   PlusIcon,
   TrashIcon,
@@ -41,12 +43,15 @@ interface Tenant {
 
 export default function TenantsPage() {
   const { currentOrg } = useAuth();
+  const { status: onboardingStatus } = useOnboarding();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [tenantToDelete, setTenantToDelete] = useState<Tenant | null>(null);
   const [deletingId, setDeletingId] = useState<number | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [deleteConfirmName, setDeleteConfirmName] = useState("");
+
+  const isFirstProxy = !onboardingStatus?.steps.proxy;
 
   const {
     data: tenants,
@@ -118,8 +123,8 @@ export default function TenantsPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-semibold text-gray-12">Proxies</h1>
-          <p className="text-sm text-gray-11">
-            Manage x402 proxies for {currentOrg.name}
+          <p className="text-sm text-corbits-orange">
+            Manage x402 proxies for {titleCase(currentOrg.name)}
           </p>
         </div>
         <button
@@ -329,6 +334,8 @@ export default function TenantsPage() {
         onOpenChange={setIsDialogOpen}
         onSuccess={() => mutate()}
         organizationId={currentOrg.id}
+        organizationSlug={currentOrg.slug}
+        isFirstProxy={isFirstProxy}
       />
 
       <Dialog.Root
@@ -354,7 +361,7 @@ export default function TenantsPage() {
               <div className="mt-4 space-y-4 text-sm text-gray-11">
                 <p>
                   This will permanently delete{" "}
-                  <span className="font-medium text-gray-12">
+                  <span className="font-medium text-corbits-orange">
                     {tenantToDelete?.name}
                   </span>{" "}
                   and all associated data. This action cannot be undone.
