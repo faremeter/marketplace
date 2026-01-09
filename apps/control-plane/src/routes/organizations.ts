@@ -1237,6 +1237,26 @@ organizationsRoutes.post("/:id/complete-onboarding", async (c) => {
   return c.json({ success: true });
 });
 
+organizationsRoutes.post("/:id/reset-onboarding", async (c) => {
+  const user = c.get("user");
+  const orgId = parseInt(c.req.param("id"));
+
+  if (!user.is_admin) {
+    return c.json({ error: "Admin access required" }, 403);
+  }
+
+  await db
+    .updateTable("organizations")
+    .set({
+      onboarding_completed: false,
+      onboarding_completed_at: null,
+    })
+    .where("id", "=", orgId)
+    .execute();
+
+  return c.json({ success: true });
+});
+
 organizationsRoutes.get("/:id/analytics", async (c) => {
   const user = c.get("user");
   const orgId = parseInt(c.req.param("id"));

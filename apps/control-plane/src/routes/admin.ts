@@ -169,6 +169,7 @@ adminRoutes.get("/organizations", async (c) => {
       "organizations.name",
       "organizations.slug",
       "organizations.is_admin",
+      "organizations.onboarding_completed",
       "organizations.created_at",
     ])
     .select((eb) => [
