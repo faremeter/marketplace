@@ -1,11 +1,39 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import * as Dialog from "@radix-ui/react-dialog";
 import { Cross2Icon } from "@radix-ui/react-icons";
 import { api, ApiError } from "@/lib/api/client";
 import { useAuth, type Organization } from "@/lib/auth/context";
 import { useToast } from "@/components/ui/toast";
+
+const ORG_NAME_PATTERN = /^[a-zA-Z0-9 -]+$/;
+
+function slugify(name: string): string {
+  return name
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 63);
+}
+
+function validateOrgName(name: string): string | null {
+  if (!ORG_NAME_PATTERN.test(name)) {
+    return "Name can only contain letters, numbers, spaces, and hyphens";
+  }
+  if (/ {2}/.test(name)) {
+    return "Name cannot have consecutive spaces";
+  }
+  if (name.startsWith("-")) {
+    return "Name cannot start with a hyphen";
+  }
+  if (name.endsWith("-")) {
+    return "Name cannot end with a hyphen";
+  }
+  return null;
+}
 
 interface CreateOrgDialogProps {
   open: boolean;
@@ -13,6 +41,7 @@ interface CreateOrgDialogProps {
 }
 
 export function CreateOrgDialog({ open, onOpenChange }: CreateOrgDialogProps) {
+  const router = useRouter();
   const { toast } = useToast();
   const { refresh, setCurrentOrg } = useAuth();
   const [name, setName] = useState("");
@@ -35,8 +64,15 @@ export function CreateOrgDialog({ open, onOpenChange }: CreateOrgDialogProps) {
     e.preventDefault();
     setError("");
 
-    if (!name.trim()) {
+    const trimmedName = name.trim();
+    if (!trimmedName) {
       setError("Name is required");
+      return;
+    }
+
+    const validationError = validateOrgName(trimmedName);
+    if (validationError) {
+      setError(validationError);
       return;
     }
 
@@ -53,6 +89,7 @@ export function CreateOrgDialog({ open, onOpenChange }: CreateOrgDialogProps) {
       });
       await refresh();
       setCurrentOrg(org);
+      router.push("/dashboard");
     } catch (err) {
       if (err instanceof ApiError && err.data) {
         const data = err.data as { error?: string };
@@ -90,10 +127,18 @@ export function CreateOrgDialog({ open, onOpenChange }: CreateOrgDialogProps) {
                 type="text"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                placeholder="My Organization"
+                placeholder="My Great Organization"
                 autoFocus
                 className="w-full rounded-md border border-gray-6 bg-gray-2 px-3 py-2 text-sm text-gray-12 placeholder-gray-9 focus:border-accent-8 focus:outline-none focus:ring-1 focus:ring-accent-8"
               />
+              {name.trim() && slugify(name) && (
+                <p className="mt-2 text-xs text-gray-9">
+                  Your proxy URLs will be:{" "}
+                  <code className="text-gray-11">
+                    *.{slugify(name)}.api.corbits.dev
+                  </code>
+                </p>
+              )}
             </div>
 
             {error && (

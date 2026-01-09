@@ -18,7 +18,7 @@ import {
 } from "@radix-ui/react-icons";
 import useSWR from "swr";
 import { api } from "@/lib/api/client";
-import { SCHEME_OPTIONS } from "@/lib/types/api";
+import { SCHEME_OPTIONS, MIN_PRICE_USD, MAX_PRICE_USD } from "@/lib/types/api";
 import { useToast } from "@/components/ui/toast";
 import { sanitizeProxyName } from "@/lib/proxy-name";
 import {
@@ -818,6 +818,43 @@ export function CreateTenantDialog({
                       <PlusIcon className="h-4 w-4" />
                     </button>
                   </div>
+                  {(() => {
+                    const price = parseFloat(defaultPrice);
+                    if (defaultPrice === "" || isNaN(price)) {
+                      return null;
+                    }
+                    if (price < 0) {
+                      return (
+                        <p className="mt-1.5 text-xs text-red-400">
+                          Price cannot be negative
+                        </p>
+                      );
+                    }
+                    if (price > MAX_PRICE_USD) {
+                      return (
+                        <p className="mt-1.5 text-xs text-red-400">
+                          Max price is ${MAX_PRICE_USD}
+                        </p>
+                      );
+                    }
+                    if (price > 0 && price < MIN_PRICE_USD) {
+                      return (
+                        <p className="mt-1.5 text-xs text-red-400">
+                          Min price is ${MIN_PRICE_USD} (use $0 for free)
+                        </p>
+                      );
+                    }
+                    if (price === 0) {
+                      return (
+                        <p className="mt-1.5 text-xs text-green-400">Free</p>
+                      );
+                    }
+                    return (
+                      <p className="mt-1.5 text-xs text-green-400">
+                        ${price.toFixed(6).replace(/\.?0+$/, "")} per request
+                      </p>
+                    );
+                  })()}
                 </div>
                 <div>
                   <label className="mb-1.5 block text-sm text-gray-11">

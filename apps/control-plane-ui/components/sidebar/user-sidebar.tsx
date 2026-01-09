@@ -7,6 +7,7 @@ import {
   Link2Icon,
   GearIcon,
   ShadowOuterIcon,
+  ExternalLinkIcon,
 } from "@radix-ui/react-icons";
 import { OrgSwitcher } from "./org-switcher";
 import { UserMenu } from "./user-menu";
@@ -42,7 +43,28 @@ export function UserSidebar() {
         <SidebarItem href="/settings" icon={<GearIcon />} label="Settings" />
       </nav>
 
-      <Separator.Root className="h-px bg-white/5" />
+      <div className="px-4 pb-6">
+        <div className="mb-4 flex items-center gap-1 px-3">
+          <a
+            href="https://t.me/+r80b_8WkFJ45NjM5"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1 text-xs text-corbits-orange hover:underline"
+          >
+            Support
+            <ExternalLinkIcon className="h-3 w-3" />
+          </a>
+        </div>
+        <div className="flex items-center gap-1 px-3">
+          <p className="text-xs text-gray-11">Need more?</p>
+          <a
+            href="mailto:sales@corbits.dev"
+            className="text-xs text-corbits-orange hover:underline"
+          >
+            Contact Sales
+          </a>
+        </div>
+      </div>
 
       <div className="p-4">
         <UserMenu />

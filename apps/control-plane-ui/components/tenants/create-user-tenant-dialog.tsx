@@ -16,7 +16,9 @@ import {
   EyeClosedIcon,
 } from "@radix-ui/react-icons";
 import { api, ApiError } from "@/lib/api/client";
-import { SCHEME_OPTIONS } from "@/lib/types/api";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { SCHEME_OPTIONS, MIN_PRICE_USD, MAX_PRICE_USD } from "@/lib/types/api";
 import { useToast } from "@/components/ui/toast";
 import { sanitizeProxyName } from "@/lib/proxy-name";
 import useSWR from "swr";
@@ -41,6 +43,8 @@ interface CreateUserTenantDialogProps {
   onOpenChange: (open: boolean) => void;
   onSuccess: () => void;
   organizationId: number;
+  organizationSlug: string;
+  isFirstProxy?: boolean;
 }
 
 export function CreateUserTenantDialog({
@@ -48,8 +52,33 @@ export function CreateUserTenantDialog({
   onOpenChange,
   onSuccess,
   organizationId,
+  organizationSlug,
+  isFirstProxy = false,
 }: CreateUserTenantDialogProps) {
+  const router = useRouter();
   const { toast } = useToast();
+  const [isCelebrating, setIsCelebrating] = useState(false);
+
+  useEffect(() => {
+    if (isCelebrating) {
+      const timer = setTimeout(() => {
+        import("@hiseb/confetti").then(({ default: confetti }) => {
+          const positions = [
+            { x: window.innerWidth * 0.5, y: window.innerHeight * 0.4 },
+            { x: window.innerWidth * 0.3, y: window.innerHeight * 0.5 },
+            { x: window.innerWidth * 0.7, y: window.innerHeight * 0.5 },
+          ];
+          positions.forEach((position, i) => {
+            setTimeout(
+              () => confetti({ position, count: 80, velocity: 180 }),
+              i * 150,
+            );
+          });
+        });
+      }, 300);
+      return () => clearTimeout(timer);
+    }
+  }, [isCelebrating]);
 
   const { data: wallets } = useSWR<Wallet[]>(
     open ? `/api/wallets/organization/${organizationId}` : null,
@@ -167,9 +196,11 @@ export function CreateUserTenantDialog({
     setError("");
     setNameAvailable(null);
     setIsCheckingName(false);
+    setIsCelebrating(false);
   };
 
   const handleOpenChange = (newOpen: boolean) => {
+    if (isSubmitting || isCelebrating) return;
     if (!newOpen) {
       attemptClose();
       return;
@@ -245,16 +276,21 @@ export function CreateUserTenantDialog({
       setError("Wallet is required");
       return;
     }
-    if (price <= 0) {
-      setError("Price must be greater than 0");
+    if (price < 0) {
+      setError("Price cannot be negative");
       return;
     }
-    if (price > 100) {
-      setError("Price must be $100 or less");
+    if (price > 0 && price < MIN_PRICE_USD) {
+      setError(`Minimum price is $${MIN_PRICE_USD} (use $0 for free)`);
+      return;
+    }
+    if (price > MAX_PRICE_USD) {
+      setError(`Price must be $${MAX_PRICE_USD} or less`);
       return;
     }
 
     setIsSubmitting(true);
+    const submitStartTime = Date.now();
 
     // Recheck name availability before submitting
     try {
@@ -284,15 +320,26 @@ export function CreateUserTenantDialog({
         ),
         default_scheme: defaultScheme,
       });
-      resetForm();
-      onOpenChange(false);
       toast({
         title: "Proxy created",
         description: `${name.trim()} has been created successfully.`,
         variant: "success",
       });
       refreshOnboardingStatus(organizationId);
-      onSuccess();
+
+      if (isFirstProxy) {
+        const elapsed = Date.now() - submitStartTime;
+        const remainingDelay = Math.max(0, 2000 - elapsed);
+        setTimeout(() => {
+          setIsSubmitting(false);
+          setIsCelebrating(true);
+        }, remainingDelay);
+      } else {
+        setIsSubmitting(false);
+        resetForm();
+        onOpenChange(false);
+        onSuccess();
+      }
     } catch (err) {
       if (err instanceof ApiError && err.data) {
         const data = err.data as { error?: string };
@@ -300,7 +347,6 @@ export function CreateUserTenantDialog({
       } else {
         setError(err instanceof Error ? err.message : "Failed to create proxy");
       }
-    } finally {
       setIsSubmitting(false);
     }
   };
@@ -312,177 +358,520 @@ export function CreateUserTenantDialog({
         <Dialog.Content
           className="fixed left-1/2 top-1/2 z-50 max-h-[85vh] w-full max-w-lg -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-lg border border-gray-6 bg-gray-1 p-6 shadow-xl"
           onInteractOutside={(e) => {
-            if (isDirty()) {
+            if (isSubmitting || isCelebrating || isDirty()) {
               e.preventDefault();
-              setShowDiscardConfirm(true);
+              if (!isSubmitting && !isCelebrating && isDirty()) {
+                setShowDiscardConfirm(true);
+              }
             }
           }}
           onEscapeKeyDown={(e) => {
-            if (isDirty()) {
+            if (isSubmitting || isCelebrating || isDirty()) {
               e.preventDefault();
-              setShowDiscardConfirm(true);
+              if (!isSubmitting && !isCelebrating && isDirty()) {
+                setShowDiscardConfirm(true);
+              }
             }
           }}
         >
-          <div className="mb-6 flex items-center justify-between">
-            <Dialog.Title className="text-lg font-semibold text-gray-12">
-              New Proxy
-            </Dialog.Title>
-            <button
-              type="button"
-              onClick={attemptClose}
-              className="rounded p-1 text-gray-11 hover:bg-gray-4 hover:text-gray-12"
-            >
-              <Cross2Icon className="h-4 w-4" />
-            </button>
-          </div>
-
-          {/* URL Preview */}
-          <div className="mb-6 rounded-md border border-gray-6 bg-gray-2 px-4 py-3 text-center">
-            <p className="text-xs text-gray-11 mb-1">
-              Your proxy will be available at
-            </p>
-            <div className="flex items-center justify-center gap-2">
-              <code className="font-mono text-sm">
-                {name.trim() ? (
-                  <span className="text-gray-12">
-                    {sanitizeProxyName(name) || "<name>"}.api.corbits.dev
-                  </span>
-                ) : (
-                  <>
-                    <span className="text-gray-9">&lt;name&gt;</span>
-                    <span className="text-gray-12">.api.corbits.dev</span>
-                  </>
-                )}
-              </code>
-              {name.trim() && (
-                <>
-                  {isCheckingName ? (
-                    <div className="h-4 w-4 animate-spin rounded-full border-2 border-gray-6 border-t-gray-11" />
-                  ) : nameAvailable === true ? (
-                    <CheckCircledIcon className="h-4 w-4 text-green-500" />
-                  ) : nameAvailable === false ? (
-                    <CrossCircledIcon className="h-4 w-4 text-red-500" />
-                  ) : null}
-                </>
-              )}
-            </div>
-            {name.trim() && nameAvailable === false && !isCheckingName && (
-              <p className="mt-1 text-xs text-red-400">
-                This name is already taken
+          {isCelebrating ? (
+            <div className="flex flex-col items-center justify-center py-8 text-center rounded-lg border border-corbits-orange bg-corbits-orange/5 -m-6 p-6">
+              <div className="mb-4 text-5xl">🎉</div>
+              <h2 className="text-xl font-semibold text-gray-12">
+                You&apos;re all set!
+              </h2>
+              <p className="mt-2 text-sm text-gray-11 max-w-xs">
+                Your API is ready to accept payments. Check out the docs to
+                learn more about integrating with your clients.
               </p>
-            )}
-          </div>
-
-          <form onSubmit={handleSubmit} className="space-y-6">
-            {/* Basic Info */}
-            <section>
-              <h3 className="mb-3 text-xs font-medium uppercase tracking-wider text-gray-11">
-                Basic Info
-              </h3>
-              <div className="space-y-3">
-                <div>
-                  <label className="mb-1.5 block text-sm text-gray-11">
-                    Proxy Name <span className="text-red-400">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    placeholder="my-api-proxy"
-                    className="w-full rounded-md border border-gray-6 bg-gray-2 px-3 py-2 text-sm text-gray-12 placeholder-gray-9 focus:border-accent-8 focus:outline-none focus:ring-1 focus:ring-accent-8"
-                  />
-                </div>
-                <div>
-                  <label className="mb-1.5 block text-sm text-gray-11">
-                    PayTo Wallet <span className="text-red-400">*</span>
-                  </label>
-                  <Select.Root
-                    value={walletId?.toString()}
-                    onValueChange={(value) => setWalletId(Number(value))}
+              <div className="mt-6 flex justify-center gap-3">
+                <a
+                  href="https://docs.corbits.dev"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="rounded-md border border-gray-6 px-4 py-2 text-sm text-gray-11 transition-colors hover:bg-gray-3 hover:text-gray-12"
+                >
+                  View Docs
+                </a>
+                <button
+                  onClick={async () => {
+                    await api.post(
+                      `/api/organizations/${organizationId}/complete-onboarding`,
+                      {},
+                    );
+                    refreshOnboardingStatus(organizationId);
+                    router.push("/dashboard");
+                    setTimeout(() => {
+                      resetForm();
+                      setIsCelebrating(false);
+                      onOpenChange(false);
+                      onSuccess();
+                    }, 1000);
+                  }}
+                  className="inline-flex items-center justify-center gap-2 rounded-md bg-corbits-orange px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-corbits-orange/90"
+                >
+                  Finish
+                  <svg
+                    className="h-4 w-4"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                    strokeWidth={2}
                   >
-                    <Select.Trigger className="flex w-full items-center justify-between rounded-md border border-gray-6 bg-gray-2 px-3 py-2 text-sm text-gray-12 focus:border-accent-8 focus:outline-none focus:ring-1 focus:ring-accent-8">
-                      <Select.Value placeholder="Select a wallet" />
-                      <Select.Icon>
-                        <ChevronDownIcon className="h-4 w-4 text-gray-11" />
-                      </Select.Icon>
-                    </Select.Trigger>
-                    <Select.Portal>
-                      <Select.Content
-                        className="overflow-hidden rounded-md border border-gray-6 bg-gray-2 shadow-lg"
-                        position="popper"
-                        sideOffset={4}
-                      >
-                        <Select.Viewport className="p-1">
-                          {!wallets?.length && (
-                            <div className="px-3 py-2 text-sm text-gray-11">
-                              No wallets available
-                            </div>
-                          )}
-                          {wallets?.map((wallet) => {
-                            const isUnfunded =
-                              wallet.funding_status !== "funded";
-                            return (
-                              <Select.Item
-                                key={wallet.id}
-                                value={wallet.id.toString()}
-                                disabled={isUnfunded}
-                                className="relative flex w-full cursor-pointer select-none items-center justify-between gap-4 rounded px-8 py-2 text-sm outline-none hover:bg-gray-4 data-[highlighted]:bg-gray-4 data-[disabled]:cursor-not-allowed data-[disabled]:opacity-50 data-[disabled]:hover:bg-transparent"
-                              >
-                                <Select.ItemIndicator className="absolute left-2 inline-flex items-center">
-                                  <CheckIcon className="h-4 w-4 text-accent-11" />
-                                </Select.ItemIndicator>
-                                <Select.ItemText>{wallet.name}</Select.ItemText>
-                                {isUnfunded && (
-                                  <span className="rounded-full border border-yellow-800 bg-yellow-900/30 px-2 py-0.5 text-xs text-yellow-400">
-                                    unfunded
-                                  </span>
-                                )}
-                              </Select.Item>
-                            );
-                          })}
-                        </Select.Viewport>
-                      </Select.Content>
-                    </Select.Portal>
-                  </Select.Root>
-                  {!wallets?.length && (
-                    <p className="mt-1 text-xs text-gray-9">
-                      No wallets available. Create a wallet first.
-                    </p>
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      d="M13 7l5 5m0 0l-5 5m5-5H6"
+                    />
+                  </svg>
+                </button>
+              </div>
+            </div>
+          ) : (
+            <>
+              <div className="mb-6 flex items-center justify-between">
+                <Dialog.Title className="text-lg font-semibold text-gray-12">
+                  New Proxy
+                </Dialog.Title>
+                <button
+                  type="button"
+                  onClick={attemptClose}
+                  className="rounded p-1 text-gray-11 hover:bg-gray-4 hover:text-gray-12"
+                >
+                  <Cross2Icon className="h-4 w-4" />
+                </button>
+              </div>
+
+              {/* URL Preview */}
+              <div className="mb-6 rounded-md border border-gray-6 bg-gray-2 px-4 py-3 text-center">
+                <p className="text-xs text-gray-11 mb-1">
+                  Your proxy will be available at
+                </p>
+                <div className="flex items-center justify-center gap-2">
+                  <code className="font-mono text-sm">
+                    {name.trim() ? (
+                      <span className="text-gray-12">
+                        {sanitizeProxyName(name) || "<name>"}.{organizationSlug}
+                        .api.corbits.dev
+                      </span>
+                    ) : (
+                      <>
+                        <span className="text-gray-9">&lt;name&gt;</span>
+                        <span className="text-gray-12">
+                          .{organizationSlug}.api.corbits.dev
+                        </span>
+                      </>
+                    )}
+                  </code>
+                  {name.trim() && (
+                    <>
+                      {isCheckingName ? (
+                        <div className="h-4 w-4 animate-spin rounded-full border-2 border-gray-6 border-t-gray-11" />
+                      ) : nameAvailable === true ? (
+                        <CheckCircledIcon className="h-4 w-4 text-green-500" />
+                      ) : nameAvailable === false ? (
+                        <CrossCircledIcon className="h-4 w-4 text-red-500" />
+                      ) : null}
+                    </>
                   )}
                 </div>
+                {name.trim() && nameAvailable === false && !isCheckingName && (
+                  <p className="mt-1 text-xs text-red-400">
+                    This name is already taken
+                  </p>
+                )}
               </div>
-            </section>
 
-            {/* Backend */}
-            <section>
-              <h3 className="mb-3 text-xs font-medium uppercase tracking-wider text-gray-11">
-                Backend
-              </h3>
-              <div className="space-y-3">
-                <div>
-                  <label className="mb-1.5 block text-sm text-gray-11">
-                    Backend URL <span className="text-red-400">*</span>
-                  </label>
-                  <input
-                    type="url"
-                    value={backendUrl}
-                    onChange={(e) => setBackendUrl(e.target.value)}
-                    placeholder="https://api.example.com"
-                    className="w-full rounded-md border border-gray-6 bg-gray-2 px-3 py-2 text-sm text-gray-12 placeholder-gray-9 focus:border-accent-8 focus:outline-none focus:ring-1 focus:ring-accent-8"
-                  />
-                </div>
-                <div className="space-y-3">
+              <form onSubmit={handleSubmit} className="space-y-6">
+                {/* Basic Info */}
+                <section>
+                  <h3 className="mb-3 text-xs font-medium uppercase tracking-wider text-gray-11">
+                    Basic Info
+                  </h3>
+                  <div className="space-y-3">
+                    <div>
+                      <label className="mb-1.5 block text-sm text-gray-11">
+                        Proxy Name <span className="text-red-400">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        value={name}
+                        onChange={(e) => setName(e.target.value)}
+                        placeholder="my-api-proxy"
+                        className="w-full rounded-md border border-gray-6 bg-gray-2 px-3 py-2 text-sm text-gray-12 placeholder-gray-9 focus:border-accent-8 focus:outline-none focus:ring-1 focus:ring-accent-8"
+                      />
+                    </div>
+                    <div>
+                      <label className="mb-1.5 block text-sm text-gray-11">
+                        PayTo Wallet <span className="text-red-400">*</span>
+                      </label>
+                      <Select.Root
+                        value={walletId?.toString()}
+                        onValueChange={(value) => setWalletId(Number(value))}
+                      >
+                        <Select.Trigger className="flex w-full items-center justify-between rounded-md border border-gray-6 bg-gray-2 px-3 py-2 text-sm text-gray-12 focus:border-accent-8 focus:outline-none focus:ring-1 focus:ring-accent-8">
+                          <Select.Value placeholder="Select a wallet" />
+                          <Select.Icon>
+                            <ChevronDownIcon className="h-4 w-4 text-gray-11" />
+                          </Select.Icon>
+                        </Select.Trigger>
+                        <Select.Portal>
+                          <Select.Content
+                            className="overflow-hidden rounded-md border border-gray-6 bg-gray-2 shadow-lg"
+                            position="popper"
+                            sideOffset={4}
+                          >
+                            <Select.Viewport className="p-1">
+                              {!wallets?.length && (
+                                <div className="px-3 py-2 text-sm text-gray-11">
+                                  No wallets available
+                                </div>
+                              )}
+                              {wallets?.map((wallet) => {
+                                const isUnfunded =
+                                  wallet.funding_status !== "funded";
+                                return (
+                                  <Select.Item
+                                    key={wallet.id}
+                                    value={wallet.id.toString()}
+                                    disabled={isUnfunded}
+                                    className="relative flex w-full cursor-pointer select-none items-center justify-between gap-4 rounded px-8 py-2 text-sm outline-none hover:bg-gray-4 data-[highlighted]:bg-gray-4 data-[disabled]:cursor-not-allowed data-[disabled]:opacity-50 data-[disabled]:hover:bg-transparent"
+                                  >
+                                    <Select.ItemIndicator className="absolute left-2 inline-flex items-center">
+                                      <CheckIcon className="h-4 w-4 text-accent-11" />
+                                    </Select.ItemIndicator>
+                                    <Select.ItemText>
+                                      {wallet.name}
+                                    </Select.ItemText>
+                                    {isUnfunded && (
+                                      <span className="rounded-full border border-yellow-800 bg-yellow-900/30 px-2 py-0.5 text-xs text-yellow-400">
+                                        unfunded
+                                      </span>
+                                    )}
+                                  </Select.Item>
+                                );
+                              })}
+                              <div className="mt-1 border-t border-gray-6 pt-1">
+                                <Link
+                                  href="/wallets"
+                                  onClick={() => onOpenChange(false)}
+                                  className="flex w-full items-center gap-2 rounded px-3 py-2 text-sm text-accent-11 hover:bg-gray-4"
+                                >
+                                  <PlusIcon className="h-4 w-4" />
+                                  Create new wallet
+                                </Link>
+                              </div>
+                            </Select.Viewport>
+                          </Select.Content>
+                        </Select.Portal>
+                      </Select.Root>
+                      {!wallets?.length && (
+                        <p className="mt-1 text-xs text-gray-9">
+                          No wallets available. Create a wallet first.
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                </section>
+
+                {/* Backend */}
+                <section>
+                  <h3 className="mb-3 text-xs font-medium uppercase tracking-wider text-gray-11">
+                    Backend
+                  </h3>
+                  <div className="space-y-3">
+                    <div>
+                      <label className="mb-1.5 block text-sm text-gray-11">
+                        Backend URL <span className="text-red-400">*</span>
+                      </label>
+                      <input
+                        type="url"
+                        value={backendUrl}
+                        onChange={(e) => setBackendUrl(e.target.value)}
+                        placeholder="https://api.example.com"
+                        className="w-full rounded-md border border-gray-6 bg-gray-2 px-3 py-2 text-sm text-gray-12 placeholder-gray-9 focus:border-accent-8 focus:outline-none focus:ring-1 focus:ring-accent-8"
+                      />
+                    </div>
+                    <div className="space-y-3">
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="mb-1.5 block text-sm text-gray-11">
+                            Auth Header
+                          </label>
+                          <Select.Root
+                            value={headerType}
+                            onValueChange={(value) =>
+                              setHeaderType(value as typeof headerType)
+                            }
+                          >
+                            <Select.Trigger className="flex w-full items-center justify-between rounded-md border border-gray-6 bg-gray-2 px-3 py-2 text-sm text-gray-12 focus:border-accent-8 focus:outline-none focus:ring-1 focus:ring-accent-8">
+                              <Select.Value />
+                              <Select.Icon>
+                                <ChevronDownIcon className="h-4 w-4 text-gray-11" />
+                              </Select.Icon>
+                            </Select.Trigger>
+                            <Select.Portal>
+                              <Select.Content
+                                className="overflow-hidden rounded-md border border-gray-6 bg-gray-2 shadow-lg"
+                                position="popper"
+                                sideOffset={4}
+                              >
+                                <Select.Viewport className="p-1">
+                                  {[
+                                    "Authorization",
+                                    "X-API-Key",
+                                    "X-Auth-Token",
+                                    "Api-Key",
+                                    "custom",
+                                  ].map((opt) => (
+                                    <Select.Item
+                                      key={opt}
+                                      value={opt}
+                                      className="relative flex cursor-pointer select-none items-center rounded px-8 py-2 text-sm outline-none hover:bg-gray-4 data-[highlighted]:bg-gray-4"
+                                    >
+                                      <Select.ItemIndicator className="absolute left-2 inline-flex items-center">
+                                        <CheckIcon className="h-4 w-4 text-accent-11" />
+                                      </Select.ItemIndicator>
+                                      <Select.ItemText>
+                                        {opt === "custom" ? "Custom" : opt}
+                                      </Select.ItemText>
+                                    </Select.Item>
+                                  ))}
+                                </Select.Viewport>
+                              </Select.Content>
+                            </Select.Portal>
+                          </Select.Root>
+                        </div>
+                        <div>
+                          <label className="mb-1.5 block text-sm text-gray-11">
+                            Value Format
+                          </label>
+                          <Select.Root
+                            value={valueFormat}
+                            onValueChange={(value) =>
+                              setValueFormat(value as typeof valueFormat)
+                            }
+                          >
+                            <Select.Trigger className="flex w-full items-center justify-between rounded-md border border-gray-6 bg-gray-2 px-3 py-2 text-sm text-gray-12 focus:border-accent-8 focus:outline-none focus:ring-1 focus:ring-accent-8">
+                              <Select.Value>
+                                {valueFormat === "bearer"
+                                  ? "Bearer"
+                                  : valueFormat === "basic"
+                                    ? "Basic"
+                                    : valueFormat === "none"
+                                      ? "None (raw)"
+                                      : "Custom"}
+                              </Select.Value>
+                              <Select.Icon>
+                                <ChevronDownIcon className="h-4 w-4 text-gray-11" />
+                              </Select.Icon>
+                            </Select.Trigger>
+                            <Select.Portal>
+                              <Select.Content
+                                className="overflow-hidden rounded-md border border-gray-6 bg-gray-2 shadow-lg"
+                                position="popper"
+                                sideOffset={4}
+                              >
+                                <Select.Viewport className="p-1">
+                                  {[
+                                    { value: "bearer", label: "Bearer" },
+                                    { value: "basic", label: "Basic" },
+                                    { value: "none", label: "None (raw)" },
+                                    { value: "custom", label: "Custom" },
+                                  ].map((opt) => (
+                                    <Select.Item
+                                      key={opt.value}
+                                      value={opt.value}
+                                      className="relative flex cursor-pointer select-none items-center rounded px-8 py-2 text-sm outline-none hover:bg-gray-4 data-[highlighted]:bg-gray-4"
+                                    >
+                                      <Select.ItemIndicator className="absolute left-2 inline-flex items-center">
+                                        <CheckIcon className="h-4 w-4 text-accent-11" />
+                                      </Select.ItemIndicator>
+                                      <Select.ItemText>
+                                        {opt.label}
+                                      </Select.ItemText>
+                                    </Select.Item>
+                                  ))}
+                                </Select.Viewport>
+                              </Select.Content>
+                            </Select.Portal>
+                          </Select.Root>
+                        </div>
+                      </div>
+                      {headerType === "custom" && (
+                        <div>
+                          <label className="mb-1.5 block text-sm text-gray-11">
+                            Custom Header Name
+                          </label>
+                          <input
+                            type="text"
+                            value={customHeader}
+                            onChange={(e) => setCustomHeader(e.target.value)}
+                            placeholder="X-Custom-Auth"
+                            className="w-full rounded-md border border-gray-6 bg-gray-2 px-3 py-2 text-sm text-gray-12 placeholder-gray-9 focus:border-accent-8 focus:outline-none focus:ring-1 focus:ring-accent-8"
+                          />
+                        </div>
+                      )}
+                      {valueFormat === "custom" && (
+                        <div>
+                          <label className="mb-1.5 block text-sm text-gray-11">
+                            Custom Prefix
+                          </label>
+                          <input
+                            type="text"
+                            value={customPrefix}
+                            onChange={(e) => setCustomPrefix(e.target.value)}
+                            placeholder="Token"
+                            className="w-full rounded-md border border-gray-6 bg-gray-2 px-3 py-2 text-sm text-gray-12 placeholder-gray-9 focus:border-accent-8 focus:outline-none focus:ring-1 focus:ring-accent-8"
+                          />
+                        </div>
+                      )}
+                      <div>
+                        <label className="mb-1.5 block text-sm text-gray-11">
+                          Token / API Key
+                        </label>
+                        <div className="relative">
+                          <input
+                            type={showAuthValue ? "text" : "password"}
+                            value={authToken}
+                            onChange={(e) => setAuthToken(e.target.value)}
+                            placeholder="Your secret token or API key"
+                            className="w-full rounded-md border border-gray-6 bg-gray-2 px-3 py-2 pr-9 text-sm text-gray-12 placeholder-gray-9 focus:border-accent-8 focus:outline-none focus:ring-1 focus:ring-accent-8"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setShowAuthValue(!showAuthValue)}
+                            className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-gray-11 hover:text-gray-12"
+                          >
+                            {showAuthValue ? (
+                              <EyeOpenIcon className="h-4 w-4" />
+                            ) : (
+                              <EyeClosedIcon className="h-4 w-4" />
+                            )}
+                          </button>
+                        </div>
+                        {getFinalAuthHeader() && (
+                          <p className="mt-1.5 text-xs text-gray-9">
+                            Final header:{" "}
+                            <code className="text-gray-11">
+                              {getFinalAuthHeader()}:{" "}
+                              {composeFinalValue(
+                                valueFormat,
+                                customPrefix,
+                                maskToken(authToken),
+                              )}
+                            </code>
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </section>
+
+                {/* Pricing */}
+                <section>
+                  <h3 className="mb-3 text-xs font-medium uppercase tracking-wider text-gray-11">
+                    Pricing
+                  </h3>
                   <div className="grid grid-cols-2 gap-3">
                     <div>
                       <label className="mb-1.5 block text-sm text-gray-11">
-                        Auth Header
+                        Default Price
+                      </label>
+                      <div className="flex items-center gap-0 rounded-md border border-gray-6 bg-gray-2">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const val = Math.max(
+                              0,
+                              parseFloat(defaultPrice) - 0.01,
+                            );
+                            setDefaultPrice(
+                              val.toFixed(6).replace(/\.?0+$/, "") || "0",
+                            );
+                          }}
+                          className="flex h-9 w-9 items-center justify-center text-gray-11 hover:bg-gray-3 hover:text-gray-12 transition-colors rounded-l-md"
+                        >
+                          <MinusIcon className="h-4 w-4" />
+                        </button>
+                        <div className="flex flex-1 items-center">
+                          <input
+                            type="text"
+                            inputMode="decimal"
+                            value={defaultPrice}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              if (val === "" || /^\d*\.?\d*$/.test(val)) {
+                                setDefaultPrice(val);
+                              }
+                            }}
+                            className="w-full bg-transparent py-2 text-center text-sm text-gray-12 focus:outline-none"
+                          />
+                          <span className="pr-2 text-xs text-gray-11">
+                            USDC
+                          </span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const val = parseFloat(defaultPrice || "0") + 0.01;
+                            setDefaultPrice(
+                              val.toFixed(6).replace(/\.?0+$/, ""),
+                            );
+                          }}
+                          className="flex h-9 w-9 items-center justify-center text-gray-11 hover:bg-gray-3 hover:text-gray-12 transition-colors rounded-r-md"
+                        >
+                          <PlusIcon className="h-4 w-4" />
+                        </button>
+                      </div>
+                      {(() => {
+                        const price = parseFloat(defaultPrice);
+                        if (defaultPrice === "" || isNaN(price)) {
+                          return null;
+                        }
+                        if (price < 0) {
+                          return (
+                            <p className="mt-1.5 text-xs text-red-400">
+                              Price cannot be negative
+                            </p>
+                          );
+                        }
+                        if (price > MAX_PRICE_USD) {
+                          return (
+                            <p className="mt-1.5 text-xs text-red-400">
+                              Max price is ${MAX_PRICE_USD}
+                            </p>
+                          );
+                        }
+                        if (price > 0 && price < MIN_PRICE_USD) {
+                          return (
+                            <p className="mt-1.5 text-xs text-red-400">
+                              Min price is ${MIN_PRICE_USD} (use $0 for free)
+                            </p>
+                          );
+                        }
+                        if (price === 0) {
+                          return (
+                            <p className="mt-1.5 text-xs text-green-400">
+                              Free
+                            </p>
+                          );
+                        }
+                        return (
+                          <p className="mt-1.5 text-xs text-green-400">
+                            ${price.toFixed(6).replace(/\.?0+$/, "")} per
+                            request
+                          </p>
+                        );
+                      })()}
+                    </div>
+                    <div>
+                      <label className="mb-1.5 block text-sm text-gray-11">
+                        Scheme
                       </label>
                       <Select.Root
-                        value={headerType}
-                        onValueChange={(value) =>
-                          setHeaderType(value as typeof headerType)
-                        }
+                        value={defaultScheme}
+                        onValueChange={setDefaultScheme}
                       >
                         <Select.Trigger className="flex w-full items-center justify-between rounded-md border border-gray-6 bg-gray-2 px-3 py-2 text-sm text-gray-12 focus:border-accent-8 focus:outline-none focus:ring-1 focus:ring-accent-8">
                           <Select.Value />
@@ -497,77 +886,22 @@ export function CreateUserTenantDialog({
                             sideOffset={4}
                           >
                             <Select.Viewport className="p-1">
-                              {[
-                                "Authorization",
-                                "X-API-Key",
-                                "X-Auth-Token",
-                                "Api-Key",
-                                "custom",
-                              ].map((opt) => (
-                                <Select.Item
-                                  key={opt}
-                                  value={opt}
-                                  className="relative flex cursor-pointer select-none items-center rounded px-8 py-2 text-sm outline-none hover:bg-gray-4 data-[highlighted]:bg-gray-4"
-                                >
-                                  <Select.ItemIndicator className="absolute left-2 inline-flex items-center">
-                                    <CheckIcon className="h-4 w-4 text-accent-11" />
-                                  </Select.ItemIndicator>
-                                  <Select.ItemText>
-                                    {opt === "custom" ? "Custom" : opt}
-                                  </Select.ItemText>
-                                </Select.Item>
-                              ))}
-                            </Select.Viewport>
-                          </Select.Content>
-                        </Select.Portal>
-                      </Select.Root>
-                    </div>
-                    <div>
-                      <label className="mb-1.5 block text-sm text-gray-11">
-                        Value Format
-                      </label>
-                      <Select.Root
-                        value={valueFormat}
-                        onValueChange={(value) =>
-                          setValueFormat(value as typeof valueFormat)
-                        }
-                      >
-                        <Select.Trigger className="flex w-full items-center justify-between rounded-md border border-gray-6 bg-gray-2 px-3 py-2 text-sm text-gray-12 focus:border-accent-8 focus:outline-none focus:ring-1 focus:ring-accent-8">
-                          <Select.Value>
-                            {valueFormat === "bearer"
-                              ? "Bearer"
-                              : valueFormat === "basic"
-                                ? "Basic"
-                                : valueFormat === "none"
-                                  ? "None (raw)"
-                                  : "Custom"}
-                          </Select.Value>
-                          <Select.Icon>
-                            <ChevronDownIcon className="h-4 w-4 text-gray-11" />
-                          </Select.Icon>
-                        </Select.Trigger>
-                        <Select.Portal>
-                          <Select.Content
-                            className="overflow-hidden rounded-md border border-gray-6 bg-gray-2 shadow-lg"
-                            position="popper"
-                            sideOffset={4}
-                          >
-                            <Select.Viewport className="p-1">
-                              {[
-                                { value: "bearer", label: "Bearer" },
-                                { value: "basic", label: "Basic" },
-                                { value: "none", label: "None (raw)" },
-                                { value: "custom", label: "Custom" },
-                              ].map((opt) => (
+                              {SCHEME_OPTIONS.map((opt) => (
                                 <Select.Item
                                   key={opt.value}
                                   value={opt.value}
-                                  className="relative flex cursor-pointer select-none items-center rounded px-8 py-2 text-sm outline-none hover:bg-gray-4 data-[highlighted]:bg-gray-4"
+                                  disabled={opt.disabled}
+                                  className="relative flex cursor-pointer select-none items-center justify-between rounded px-8 py-2 text-sm outline-none hover:bg-gray-4 data-[highlighted]:bg-gray-4 data-[disabled]:cursor-not-allowed data-[disabled]:text-gray-8 data-[disabled]:hover:bg-transparent"
                                 >
                                   <Select.ItemIndicator className="absolute left-2 inline-flex items-center">
                                     <CheckIcon className="h-4 w-4 text-accent-11" />
                                   </Select.ItemIndicator>
                                   <Select.ItemText>{opt.label}</Select.ItemText>
+                                  {opt.disabled && (
+                                    <span className="ml-2 text-[10px] text-corbits-orange">
+                                      Coming Soon!
+                                    </span>
+                                  )}
                                 </Select.Item>
                               ))}
                             </Select.Viewport>
@@ -576,214 +910,50 @@ export function CreateUserTenantDialog({
                       </Select.Root>
                     </div>
                   </div>
-                  {headerType === "custom" && (
-                    <div>
-                      <label className="mb-1.5 block text-sm text-gray-11">
-                        Custom Header Name
-                      </label>
-                      <input
-                        type="text"
-                        value={customHeader}
-                        onChange={(e) => setCustomHeader(e.target.value)}
-                        placeholder="X-Custom-Auth"
-                        className="w-full rounded-md border border-gray-6 bg-gray-2 px-3 py-2 text-sm text-gray-12 placeholder-gray-9 focus:border-accent-8 focus:outline-none focus:ring-1 focus:ring-accent-8"
-                      />
-                    </div>
-                  )}
-                  {valueFormat === "custom" && (
-                    <div>
-                      <label className="mb-1.5 block text-sm text-gray-11">
-                        Custom Prefix
-                      </label>
-                      <input
-                        type="text"
-                        value={customPrefix}
-                        onChange={(e) => setCustomPrefix(e.target.value)}
-                        placeholder="Token"
-                        className="w-full rounded-md border border-gray-6 bg-gray-2 px-3 py-2 text-sm text-gray-12 placeholder-gray-9 focus:border-accent-8 focus:outline-none focus:ring-1 focus:ring-accent-8"
-                      />
-                    </div>
-                  )}
-                  <div>
-                    <label className="mb-1.5 block text-sm text-gray-11">
-                      Token / API Key
-                    </label>
-                    <div className="relative">
-                      <input
-                        type={showAuthValue ? "text" : "password"}
-                        value={authToken}
-                        onChange={(e) => setAuthToken(e.target.value)}
-                        placeholder="Your secret token or API key"
-                        className="w-full rounded-md border border-gray-6 bg-gray-2 px-3 py-2 pr-9 text-sm text-gray-12 placeholder-gray-9 focus:border-accent-8 focus:outline-none focus:ring-1 focus:ring-accent-8"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setShowAuthValue(!showAuthValue)}
-                        className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-gray-11 hover:text-gray-12"
-                      >
-                        {showAuthValue ? (
-                          <EyeOpenIcon className="h-4 w-4" />
-                        ) : (
-                          <EyeClosedIcon className="h-4 w-4" />
-                        )}
-                      </button>
-                    </div>
-                    {getFinalAuthHeader() && (
-                      <p className="mt-1.5 text-xs text-gray-9">
-                        Final header:{" "}
-                        <code className="text-gray-11">
-                          {getFinalAuthHeader()}:{" "}
-                          {composeFinalValue(
-                            valueFormat,
-                            customPrefix,
-                            maskToken(authToken),
-                          )}
-                        </code>
-                      </p>
-                    )}
+                </section>
+
+                {error && (
+                  <div className="rounded-md border border-red-800 bg-red-900/20 px-3 py-2 text-sm text-red-400">
+                    {error}
                   </div>
-                </div>
-              </div>
-            </section>
-
-            {/* Pricing */}
-            <section>
-              <h3 className="mb-3 text-xs font-medium uppercase tracking-wider text-gray-11">
-                Pricing
-              </h3>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="mb-1.5 block text-sm text-gray-11">
-                    Default Price
-                  </label>
-                  <div className="flex items-center gap-0 rounded-md border border-gray-6 bg-gray-2">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const val = Math.max(
-                          0,
-                          parseFloat(defaultPrice) - 0.01,
-                        );
-                        setDefaultPrice(
-                          val.toFixed(6).replace(/\.?0+$/, "") || "0",
-                        );
-                      }}
-                      className="flex h-9 w-9 items-center justify-center text-gray-11 hover:bg-gray-3 hover:text-gray-12 transition-colors rounded-l-md"
-                    >
-                      <MinusIcon className="h-4 w-4" />
-                    </button>
-                    <div className="flex flex-1 items-center">
-                      <input
-                        type="text"
-                        inputMode="decimal"
-                        value={defaultPrice}
-                        onChange={(e) => {
-                          const val = e.target.value;
-                          if (val === "" || /^\d*\.?\d*$/.test(val)) {
-                            setDefaultPrice(val);
-                          }
-                        }}
-                        className="w-full bg-transparent py-2 text-center text-sm text-gray-12 focus:outline-none"
-                      />
-                      <span className="pr-2 text-xs text-gray-11">USDC</span>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const val = parseFloat(defaultPrice || "0") + 0.01;
-                        setDefaultPrice(val.toFixed(6).replace(/\.?0+$/, ""));
-                      }}
-                      className="flex h-9 w-9 items-center justify-center text-gray-11 hover:bg-gray-3 hover:text-gray-12 transition-colors rounded-r-md"
-                    >
-                      <PlusIcon className="h-4 w-4" />
-                    </button>
-                  </div>
-                </div>
-                <div>
-                  <label className="mb-1.5 block text-sm text-gray-11">
-                    Scheme
-                  </label>
-                  <Select.Root
-                    value={defaultScheme}
-                    onValueChange={setDefaultScheme}
-                  >
-                    <Select.Trigger className="flex w-full items-center justify-between rounded-md border border-gray-6 bg-gray-2 px-3 py-2 text-sm text-gray-12 focus:border-accent-8 focus:outline-none focus:ring-1 focus:ring-accent-8">
-                      <Select.Value />
-                      <Select.Icon>
-                        <ChevronDownIcon className="h-4 w-4 text-gray-11" />
-                      </Select.Icon>
-                    </Select.Trigger>
-                    <Select.Portal>
-                      <Select.Content
-                        className="overflow-hidden rounded-md border border-gray-6 bg-gray-2 shadow-lg"
-                        position="popper"
-                        sideOffset={4}
-                      >
-                        <Select.Viewport className="p-1">
-                          {SCHEME_OPTIONS.map((opt) => (
-                            <Select.Item
-                              key={opt.value}
-                              value={opt.value}
-                              className="relative flex cursor-pointer select-none items-center rounded px-8 py-2 text-sm outline-none hover:bg-gray-4 data-[highlighted]:bg-gray-4"
-                            >
-                              <Select.ItemIndicator className="absolute left-2 inline-flex items-center">
-                                <CheckIcon className="h-4 w-4 text-accent-11" />
-                              </Select.ItemIndicator>
-                              <Select.ItemText>{opt.label}</Select.ItemText>
-                            </Select.Item>
-                          ))}
-                        </Select.Viewport>
-                      </Select.Content>
-                    </Select.Portal>
-                  </Select.Root>
-                </div>
-              </div>
-            </section>
-
-            {error && (
-              <div className="rounded-md border border-red-800 bg-red-900/20 px-3 py-2 text-sm text-red-400">
-                {error}
-              </div>
-            )}
-
-            <div className="flex justify-end gap-3 pt-2">
-              <button
-                type="button"
-                onClick={attemptClose}
-                className="rounded-md border border-gray-6 px-4 py-2 text-sm text-gray-11 hover:bg-gray-3"
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                disabled={isSubmitting}
-                className="inline-flex items-center justify-center gap-2 rounded-md bg-white px-4 py-2 text-sm font-medium text-black shadow-button transition-colors hover:bg-white/90 disabled:cursor-not-allowed disabled:opacity-70"
-              >
-                {isSubmitting && (
-                  <svg
-                    className="h-4 w-4 animate-spin"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                  >
-                    <circle
-                      className="opacity-25"
-                      cx="12"
-                      cy="12"
-                      r="10"
-                      stroke="currentColor"
-                      strokeWidth="4"
-                    />
-                    <path
-                      className="opacity-75"
-                      fill="currentColor"
-                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                    />
-                  </svg>
                 )}
-                {isSubmitting ? "Creating..." : "Create Proxy"}
-              </button>
-            </div>
-          </form>
+
+                <div className="flex justify-end gap-3 pt-2">
+                  <button
+                    type="button"
+                    onClick={attemptClose}
+                    className="rounded-md border border-gray-6 px-4 py-2 text-sm text-gray-11 hover:bg-gray-3"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isSubmitting}
+                    className="inline-flex items-center justify-center gap-2 rounded-md bg-corbits-orange px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-corbits-orange/90 disabled:cursor-not-allowed disabled:opacity-70"
+                  >
+                    {isSubmitting ? "Creating..." : "Create Proxy"}
+                    {isSubmitting ? (
+                      <div className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />
+                    ) : (
+                      <svg
+                        className="h-4 w-4"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        stroke="currentColor"
+                        strokeWidth={2}
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          d="M13 7l5 5m0 0l-5 5m5-5H6"
+                        />
+                      </svg>
+                    )}
+                  </button>
+                </div>
+              </form>
+            </>
+          )}
 
           <AlertDialog.Root
             open={showDiscardConfirm}
