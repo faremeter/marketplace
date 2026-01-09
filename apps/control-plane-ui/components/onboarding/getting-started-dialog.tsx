@@ -29,7 +29,6 @@ interface GettingStartedDialogProps {
   allComplete: boolean;
   onComplete: () => void;
   onDontShowAgain: () => void;
-  firstProxyId: number | null;
 }
 
 export function GettingStartedDialog({
@@ -39,7 +38,6 @@ export function GettingStartedDialog({
   allComplete,
   onComplete,
   onDontShowAgain,
-  firstProxyId,
 }: GettingStartedDialogProps) {
   const onboardingSteps: OnboardingStep[] = [
     {
@@ -65,16 +63,6 @@ export function GettingStartedDialog({
       completed: steps.proxy,
       href: "/proxies",
       action: "Go to Proxies",
-    },
-    {
-      id: "endpoint",
-      title: "Create an Endpoint",
-      description: "Define pricing for your API endpoints",
-      completed: steps.endpoint,
-      href: firstProxyId
-        ? `/proxies/${firstProxyId}?tab=endpoints`
-        : "/endpoints",
-      action: "Go to Endpoints",
     },
   ];
 

@@ -1,12 +1,11 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import {
   CheckCircledIcon,
   CircleIcon,
   Cross2Icon,
 } from "@radix-ui/react-icons";
-import * as Dialog from "@radix-ui/react-dialog";
 import Link from "next/link";
 
 interface OnboardingChecklistProps {
@@ -17,45 +16,13 @@ interface OnboardingChecklistProps {
     endpoint: boolean;
   };
   allComplete: boolean;
-  onComplete: () => void;
-  firstProxyId: number | null;
 }
 
 export function OnboardingChecklist({
   steps,
   allComplete,
-  onComplete,
-  firstProxyId,
 }: OnboardingChecklistProps) {
   const [isMinimized, setIsMinimized] = useState(false);
-  const [showCompletionDialog, setShowCompletionDialog] = useState(false);
-
-  useEffect(() => {
-    if (showCompletionDialog) {
-      import("@hiseb/confetti").then(({ default: confetti }) => {
-        const positions = [
-          { x: window.innerWidth * 0.5, y: window.innerHeight * 0.4 },
-          { x: window.innerWidth * 0.3, y: window.innerHeight * 0.5 },
-          { x: window.innerWidth * 0.7, y: window.innerHeight * 0.5 },
-        ];
-        positions.forEach((position, i) => {
-          setTimeout(
-            () => confetti({ position, count: 80, velocity: 180 }),
-            i * 150,
-          );
-        });
-      });
-    }
-  }, [showCompletionDialog]);
-
-  const handleFinishClick = () => {
-    setShowCompletionDialog(true);
-  };
-
-  const handleDismiss = () => {
-    setShowCompletionDialog(false);
-    onComplete();
-  };
 
   const checklistItems = [
     {
@@ -76,17 +43,11 @@ export function OnboardingChecklist({
       completed: steps.proxy,
       href: "/proxies",
     },
-    {
-      id: "endpoint",
-      label: "Create an endpoint",
-      completed: steps.endpoint,
-      href: firstProxyId
-        ? `/proxies/${firstProxyId}?tab=endpoints`
-        : "/endpoints",
-    },
   ];
 
-  const completedCount = Object.values(steps).filter(Boolean).length;
+  const completedCount = [steps.wallet, steps.funded, steps.proxy].filter(
+    Boolean,
+  ).length;
 
   if (isMinimized) {
     return (
@@ -94,7 +55,7 @@ export function OnboardingChecklist({
         onClick={() => setIsMinimized(false)}
         className="fixed bottom-4 right-4 z-50 rounded-lg border border-gray-6 bg-gray-2 px-4 py-2 text-sm text-gray-12 shadow-lg hover:bg-gray-3"
       >
-        Getting Started ({completedCount}/4)
+        Getting Started ({completedCount}/3)
       </button>
     );
   }
@@ -150,56 +111,7 @@ export function OnboardingChecklist({
             </Link>
           );
         })}
-        {allComplete && (
-          <div className="flex items-center justify-between px-4 py-3">
-            <div className="flex items-center gap-3">
-              <span className="text-base">🎉</span>
-              <span className="text-sm text-gray-12">All done!</span>
-            </div>
-            <button
-              onClick={handleFinishClick}
-              className="rounded-md border border-gray-6 px-4 py-1.5 text-sm text-gray-11 transition-colors hover:bg-gray-3 hover:text-gray-12"
-            >
-              Finish
-            </button>
-          </div>
-        )}
       </div>
-
-      <Dialog.Root
-        open={showCompletionDialog}
-        onOpenChange={setShowCompletionDialog}
-      >
-        <Dialog.Portal>
-          <Dialog.Overlay className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm" />
-          <Dialog.Content className="fixed left-1/2 top-1/2 z-50 w-full max-w-sm -translate-x-1/2 -translate-y-1/2 rounded-lg border border-gray-6 bg-gray-1 p-6 text-center shadow-xl">
-            <div className="mb-4 text-4xl">🎉</div>
-            <Dialog.Title className="text-xl font-semibold text-gray-12">
-              You&apos;re all set!
-            </Dialog.Title>
-            <Dialog.Description className="mt-2 text-sm text-gray-11">
-              Your API is ready to accept payments. Check out the docs to learn
-              more about integrating with your clients.
-            </Dialog.Description>
-            <div className="mt-6 flex flex-col gap-3">
-              <a
-                href="https://docs.corbits.dev"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="rounded-md bg-white px-4 py-2 text-sm font-medium text-black shadow-button transition-colors hover:bg-white/90"
-              >
-                View Documentation
-              </a>
-              <button
-                onClick={handleDismiss}
-                className="rounded-md border border-gray-6 px-4 py-2 text-sm text-gray-11 transition-colors hover:bg-gray-3 hover:text-gray-12"
-              >
-                Got it
-              </button>
-            </div>
-          </Dialog.Content>
-        </Dialog.Portal>
-      </Dialog.Root>
     </div>
   );
 }
