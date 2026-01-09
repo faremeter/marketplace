@@ -1,6 +1,12 @@
 "use client";
 
-import { createContext, useContext, useState, useCallback } from "react";
+import {
+  createContext,
+  useContext,
+  useState,
+  useCallback,
+  useEffect,
+} from "react";
 import * as Toast from "@radix-ui/react-toast";
 import { Cross2Icon, CheckCircledIcon } from "@radix-ui/react-icons";
 
@@ -9,13 +15,16 @@ interface ToastData {
   title: string;
   description?: string;
   variant?: "default" | "success" | "error";
+  createdAt: number;
 }
 
 interface ToastContextValue {
-  toast: (data: Omit<ToastData, "id">) => void;
+  toast: (data: Omit<ToastData, "id" | "createdAt">) => void;
 }
 
 const ToastContext = createContext<ToastContextValue | null>(null);
+
+const TOAST_DURATION = 5000;
 
 export function useToast() {
   const context = useContext(ToastContext);
@@ -28,14 +37,28 @@ export function useToast() {
 export function ToastProvider({ children }: { children: React.ReactNode }) {
   const [toasts, setToasts] = useState<ToastData[]>([]);
 
-  const toast = useCallback((data: Omit<ToastData, "id">) => {
+  const toast = useCallback((data: Omit<ToastData, "id" | "createdAt">) => {
     const id = Math.random().toString(36).slice(2);
-    setToasts((prev) => [...prev, { ...data, id }]);
+    setToasts((prev) => [...prev, { ...data, id, createdAt: Date.now() }]);
   }, []);
 
   const removeToast = useCallback((id: string) => {
     setToasts((prev) => prev.filter((t) => t.id !== id));
   }, []);
+
+  // Auto-remove toasts after duration
+  useEffect(() => {
+    if (toasts.length === 0) return;
+
+    const timer = setInterval(() => {
+      const now = Date.now();
+      setToasts((prev) =>
+        prev.filter((t) => now - t.createdAt < TOAST_DURATION),
+      );
+    }, 100);
+
+    return () => clearInterval(timer);
+  }, [toasts.length]);
 
   return (
     <ToastContext.Provider value={{ toast }}>
@@ -46,7 +69,6 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
             key={t.id}
             open={true}
             onOpenChange={(open) => !open && removeToast(t.id)}
-            duration={4000}
             className={`rounded-lg border p-4 shadow-lg ${
               t.variant === "success"
                 ? "border-green-800 bg-green-900/80"
