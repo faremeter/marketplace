@@ -94,8 +94,11 @@ export default function DashboardPage() {
     <div className="space-y-6">
       <div>
         <h1 className="text-xl font-medium text-white">Dashboard</h1>
-        <p className="text-[13px] text-corbits-orange">
-          Welcome back, {titleCase(user?.email.split("@")[0] ?? "")}
+        <p className="text-[13px] text-gray-11">
+          Welcome back,{" "}
+          <span className="text-corbits-orange">
+            {titleCase(user?.email.split("@")[0] ?? "")}
+          </span>
         </p>
       </div>
 

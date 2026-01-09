@@ -82,10 +82,17 @@ export default function SettingsPage() {
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-semibold text-gray-12">Settings</h1>
-        <p className="text-sm text-corbits-orange">
-          {currentOrg
-            ? `Manage settings for ${titleCase(currentOrg.name)}`
-            : "Account settings"}
+        <p className="text-sm text-gray-11">
+          {currentOrg ? (
+            <>
+              Manage settings for{" "}
+              <span className="text-corbits-orange">
+                {titleCase(currentOrg.name)}
+              </span>
+            </>
+          ) : (
+            "Account settings"
+          )}
         </p>
       </div>
 

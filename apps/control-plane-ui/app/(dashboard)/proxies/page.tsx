@@ -123,8 +123,11 @@ export default function TenantsPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-semibold text-gray-12">Proxies</h1>
-          <p className="text-sm text-corbits-orange">
-            Manage x402 proxies for {titleCase(currentOrg.name)}
+          <p className="text-sm text-gray-11">
+            Manage x402 proxies for{" "}
+            <span className="text-corbits-orange">
+              {titleCase(currentOrg.name)}
+            </span>
           </p>
         </div>
         <button
