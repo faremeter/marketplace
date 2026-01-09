@@ -11,6 +11,7 @@ import {
 } from "@radix-ui/react-icons";
 import { api } from "@/lib/api/client";
 import { useToast } from "@/components/ui/toast";
+import { MIN_PRICE_USD, MAX_PRICE_USD } from "@/lib/types/api";
 
 interface InlinePriceEditProps {
   priceUsdc: number;
@@ -128,6 +129,41 @@ export function InlinePriceEdit({
                   <PlusIcon className="h-3 w-3" />
                 </button>
               </div>
+              {(() => {
+                const priceVal = parseFloat(price);
+                if (price === "" || isNaN(priceVal)) {
+                  return null;
+                }
+                if (priceVal < 0) {
+                  return (
+                    <p className="mt-1 text-xs text-red-400">
+                      Price cannot be negative
+                    </p>
+                  );
+                }
+                if (priceVal > MAX_PRICE_USD) {
+                  return (
+                    <p className="mt-1 text-xs text-red-400">
+                      Max price is ${MAX_PRICE_USD}
+                    </p>
+                  );
+                }
+                if (priceVal > 0 && priceVal < MIN_PRICE_USD) {
+                  return (
+                    <p className="mt-1 text-xs text-red-400">
+                      Min price is ${MIN_PRICE_USD} (use $0 for free)
+                    </p>
+                  );
+                }
+                if (priceVal === 0) {
+                  return <p className="mt-1 text-xs text-green-400">Free</p>;
+                }
+                return (
+                  <p className="mt-1 text-xs text-green-400">
+                    ${priceVal.toFixed(6).replace(/\.?0+$/, "")} per request
+                  </p>
+                );
+              })()}
             </div>
             <div className="flex justify-end gap-2">
               <button
@@ -139,7 +175,14 @@ export function InlinePriceEdit({
               </button>
               <button
                 onClick={handleSave}
-                disabled={isSaving}
+                disabled={
+                  isSaving ||
+                  price === "" ||
+                  isNaN(parseFloat(price)) ||
+                  parseFloat(price) < 0 ||
+                  parseFloat(price) > MAX_PRICE_USD ||
+                  (parseFloat(price) > 0 && parseFloat(price) < MIN_PRICE_USD)
+                }
                 className="inline-flex items-center gap-1 rounded bg-accent-9 px-2 py-1 text-xs text-white hover:bg-accent-10 disabled:opacity-50"
               >
                 <CheckIcon className="h-3 w-3" />

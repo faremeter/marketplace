@@ -123,7 +123,7 @@ export function InlineAuthEdit({
           }`}
         >
           <Pencil1Icon className="h-3 w-3" />
-          {hasAuth ? authHeader : "Add auth"}
+          {hasAuth ? "Edit" : "Add"}
         </button>
       </Popover.Trigger>
       <Popover.Portal>
