@@ -40,22 +40,31 @@ if not config.config then
     return ngx.exit(400)
 end
 
-ngx.shared.tenants:flush_all()
-
+local tenant_entries = {}
 local count = 0
 for domain, tenant_config in pairs(config.config) do
     local key = tenant_config.domain or domain
     if key then
-        ngx.shared.tenants:set(key, cjson.encode(tenant_config))
+        tenant_entries[key] = cjson.encode(tenant_config)
         count = count + 1
     end
+end
+
+ngx.shared.tenants:flush_all()
+for key, value in pairs(tenant_entries) do
+    ngx.shared.tenants:set(key, value)
 end
 
 local config_file = io.open("/etc/nginx/tenant-config.json", "w")
 if config_file then
     config_file:write(body)
     config_file:close()
-    os.execute("sudo /usr/local/bin/regen-tenant-nginx")
+    local regen_result = os.execute("sudo /usr/local/bin/regen-tenant-nginx")
+    if regen_result ~= 0 then
+        ngx.log(ngx.ERR, "regen-tenant-nginx failed with exit code: ", regen_result)
+    end
+else
+    ngx.log(ngx.ERR, "Failed to write tenant-config.json")
 end
 
 ngx.header["Content-Type"] = "application/json"
