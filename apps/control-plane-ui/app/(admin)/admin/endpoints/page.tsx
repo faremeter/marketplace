@@ -1,9 +1,10 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import useSWR from "swr";
 import { api } from "@/lib/api/client";
 import { OrgSection } from "@/components/admin/collapsible-org-section";
+import { MagnifyingGlassIcon } from "@radix-ui/react-icons";
 
 interface Organization {
   id: number;
@@ -30,6 +31,8 @@ interface Tenant {
 }
 
 export default function AdminEndpointsPage() {
+  const [search, setSearch] = useState("");
+
   const { data: organizations, isLoading: orgsLoading } = useSWR(
     "/api/admin/organizations",
     api.get<Organization[]>,
@@ -43,9 +46,20 @@ export default function AdminEndpointsPage() {
 
   const isLoading = orgsLoading || tenantsLoading;
 
-  // Group tenants by organization
+  // Group tenants by organization, filtered by search
   const groupedData = useMemo(() => {
     if (!organizations || !tenants) return [];
+
+    const searchLower = search.toLowerCase();
+
+    // Filter tenants by search (matches tenant name or org name)
+    const filteredTenants = search
+      ? tenants.filter(
+          (t) =>
+            t.name.toLowerCase().includes(searchLower) ||
+            t.organization_name?.toLowerCase().includes(searchLower),
+        )
+      : tenants;
 
     const tenantsByOrgId = new Map<number | null, Tenant[]>();
 
@@ -57,7 +71,7 @@ export default function AdminEndpointsPage() {
     tenantsByOrgId.set(null, []);
 
     // Group tenants
-    for (const tenant of tenants) {
+    for (const tenant of filteredTenants) {
       const orgId = tenant.organization_id;
       const existing = tenantsByOrgId.get(orgId) ?? [];
       existing.push(tenant);
@@ -99,15 +113,27 @@ export default function AdminEndpointsPage() {
     }
 
     return result;
-  }, [organizations, tenants]);
+  }, [organizations, tenants, search]);
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold text-gray-12">All Endpoints</h1>
-        <p className="text-sm text-gray-11">
-          View and manage endpoints across all organizations
-        </p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-semibold text-gray-12">All Endpoints</h1>
+          <p className="text-sm text-gray-11">
+            View and manage endpoints across all organizations
+          </p>
+        </div>
+        <div className="relative">
+          <MagnifyingGlassIcon className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-11" />
+          <input
+            type="text"
+            placeholder="Search tenants or orgs..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="w-64 rounded-md border border-gray-6 bg-gray-3 py-2 pl-9 pr-3 text-sm text-gray-12 placeholder:text-gray-11 focus:border-accent-8 focus:outline-none"
+          />
+        </div>
       </div>
 
       {isLoading ? (
@@ -130,7 +156,9 @@ export default function AdminEndpointsPage() {
       ) : (
         <div className="rounded-lg border border-gray-6 bg-gray-2 p-6 text-center">
           <p className="text-sm text-gray-11">
-            No organizations with tenants found.
+            {search
+              ? "No matching tenants or organizations found."
+              : "No organizations with tenants found."}
           </p>
         </div>
       )}

@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import useSWR from "swr";
 import { api } from "@/lib/api/client";
 import { WalletOrgSection } from "@/components/admin/wallet-org-section";
+import { MagnifyingGlassIcon } from "@radix-ui/react-icons";
 
 interface WalletConfig {
   solana?: {
@@ -40,6 +41,7 @@ type TabType = "org" | "master";
 
 export default function AdminWalletsPage() {
   const [activeTab, setActiveTab] = useState<TabType>("org");
+  const [search, setSearch] = useState("");
 
   const { data: organizations, isLoading: orgsLoading } = useSWR(
     "/api/admin/organizations",
@@ -54,10 +56,22 @@ export default function AdminWalletsPage() {
 
   const isLoading = orgsLoading || walletsLoading;
 
-  const { orgWalletGroups, masterWallets } = useMemo(() => {
+  const {
+    orgWalletGroups,
+    masterWallets,
+    filteredOrgWalletGroups,
+    filteredMasterWallets,
+  } = useMemo(() => {
     if (!organizations || !wallets) {
-      return { orgWalletGroups: [], masterWallets: [] };
+      return {
+        orgWalletGroups: [],
+        masterWallets: [],
+        filteredOrgWalletGroups: [],
+        filteredMasterWallets: [],
+      };
     }
+
+    const searchLower = search.toLowerCase();
 
     const walletsByOrgId = new Map<number | null, Wallet[]>();
 
@@ -78,6 +92,7 @@ export default function AdminWalletsPage() {
     }
 
     const result: { org: Organization; wallets: Wallet[] }[] = [];
+    const filteredResult: { org: Organization; wallets: Wallet[] }[] = [];
     const sortedOrgs = [...organizations].sort((a, b) =>
       a.name.localeCompare(b.name),
     );
@@ -86,21 +101,59 @@ export default function AdminWalletsPage() {
       const orgWallets = walletsByOrgId.get(org.id) ?? [];
       if (orgWallets.length > 0) {
         result.push({ org, wallets: orgWallets });
+
+        // Apply search filter
+        if (search) {
+          if (org.name.toLowerCase().includes(searchLower)) {
+            // Org matches, include all wallets
+            filteredResult.push({ org, wallets: orgWallets });
+          } else {
+            // Only include matching wallets
+            const matchingWallets = orgWallets.filter((w) =>
+              w.name.toLowerCase().includes(searchLower),
+            );
+            if (matchingWallets.length > 0) {
+              filteredResult.push({ org, wallets: matchingWallets });
+            }
+          }
+        } else {
+          filteredResult.push({ org, wallets: orgWallets });
+        }
       }
     }
 
     const master = walletsByOrgId.get(null) ?? [];
+    const filteredMaster = search
+      ? master.filter((w) => w.name.toLowerCase().includes(searchLower))
+      : master;
 
-    return { orgWalletGroups: result, masterWallets: master };
-  }, [organizations, wallets]);
+    return {
+      orgWalletGroups: result,
+      masterWallets: master,
+      filteredOrgWalletGroups: filteredResult,
+      filteredMasterWallets: filteredMaster,
+    };
+  }, [organizations, wallets, search]);
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold text-gray-12">All Wallets</h1>
-        <p className="text-sm text-gray-11">
-          View and manage wallets across all organizations
-        </p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-semibold text-gray-12">All Wallets</h1>
+          <p className="text-sm text-gray-11">
+            View and manage wallets across all organizations
+          </p>
+        </div>
+        <div className="relative">
+          <MagnifyingGlassIcon className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-11" />
+          <input
+            type="text"
+            placeholder="Search wallets or orgs..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="w-64 rounded-md border border-gray-6 bg-gray-3 py-2 pl-9 pr-3 text-sm text-gray-12 placeholder:text-gray-11 focus:border-accent-8 focus:outline-none"
+          />
+        </div>
       </div>
 
       <div className="flex gap-1 border-b border-gray-6">
@@ -141,9 +194,9 @@ export default function AdminWalletsPage() {
           <div className="h-8 w-8 animate-spin rounded-full border-2 border-gray-6 border-t-accent-9" />
         </div>
       ) : activeTab === "org" ? (
-        orgWalletGroups.length > 0 ? (
+        filteredOrgWalletGroups.length > 0 ? (
           <div className="space-y-8">
-            {orgWalletGroups.map(({ org, wallets: orgWallets }) => (
+            {filteredOrgWalletGroups.map(({ org, wallets: orgWallets }) => (
               <WalletOrgSection
                 key={org.id}
                 org={org}
@@ -155,11 +208,13 @@ export default function AdminWalletsPage() {
         ) : (
           <div className="rounded-lg border border-gray-6 bg-gray-2 p-6 text-center">
             <p className="text-sm text-gray-11">
-              No organizations with wallets found.
+              {search
+                ? "No matching wallets or organizations found."
+                : "No organizations with wallets found."}
             </p>
           </div>
         )
-      ) : masterWallets.length > 0 ? (
+      ) : filteredMasterWallets.length > 0 ? (
         <div className="space-y-8">
           <WalletOrgSection
             org={{
@@ -169,7 +224,7 @@ export default function AdminWalletsPage() {
               is_admin: true,
               created_at: "",
             }}
-            wallets={masterWallets}
+            wallets={filteredMasterWallets}
             onWalletUpdate={() => mutateWallets()}
             isMaster
           />
@@ -177,7 +232,9 @@ export default function AdminWalletsPage() {
       ) : (
         <div className="rounded-lg border border-gray-6 bg-gray-2 p-6 text-center">
           <p className="text-sm text-gray-11">
-            No master wallets found. Configure master wallets in Settings.
+            {search
+              ? "No matching master wallets found."
+              : "No master wallets found. Configure master wallets in Settings."}
           </p>
         </div>
       )}

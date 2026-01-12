@@ -1,10 +1,14 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import useSWR from "swr";
 import { api } from "@/lib/api/client";
 import * as Dialog from "@radix-ui/react-dialog";
-import { Cross2Icon, PieChartIcon } from "@radix-ui/react-icons";
+import {
+  Cross2Icon,
+  PieChartIcon,
+  MagnifyingGlassIcon,
+} from "@radix-ui/react-icons";
 import {
   type EarningsAnalytics,
   formatUSDC,
@@ -35,6 +39,8 @@ interface Endpoint {
 }
 
 export default function OrgAnalyticsPage() {
+  const [search, setSearch] = useState("");
+
   const { data: organizations, isLoading: orgsLoading } = useSWR(
     "/api/admin/organizations",
     api.get<Organization[]>,
@@ -47,41 +53,80 @@ export default function OrgAnalyticsPage() {
 
   const isLoading = orgsLoading || tenantsLoading;
 
-  const tenantsByOrg = tenants?.reduce(
-    (acc, tenant) => {
-      const orgId = tenant.organization_id;
-      if (!acc[orgId]) acc[orgId] = [];
-      acc[orgId].push(tenant);
-      return acc;
-    },
-    {} as Record<number, Tenant[]>,
-  );
+  // Filter and group data based on search
+  const filteredData = useMemo(() => {
+    if (!organizations || !tenants) return [];
+
+    const searchLower = search.toLowerCase();
+
+    // Group tenants by org, filtering by search
+    const result: { org: Organization; tenants: Tenant[] }[] = [];
+
+    for (const org of organizations) {
+      const orgTenants = tenants.filter((t) => t.organization_id === org.id);
+
+      if (search) {
+        // If org name matches, include all its tenants
+        if (org.name.toLowerCase().includes(searchLower)) {
+          if (orgTenants.length > 0) {
+            result.push({ org, tenants: orgTenants });
+          }
+        } else {
+          // Otherwise, only include tenants that match
+          const matchingTenants = orgTenants.filter((t) =>
+            t.name.toLowerCase().includes(searchLower),
+          );
+          if (matchingTenants.length > 0) {
+            result.push({ org, tenants: matchingTenants });
+          }
+        }
+      } else {
+        if (orgTenants.length > 0) {
+          result.push({ org, tenants: orgTenants });
+        }
+      }
+    }
+
+    return result;
+  }, [organizations, tenants, search]);
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold text-gray-12">Org Analytics</h1>
-        <p className="text-sm text-gray-11">
-          Organization earnings breakdown by proxy
-        </p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-semibold text-gray-12">Org Analytics</h1>
+          <p className="text-sm text-gray-11">
+            Organization earnings breakdown by proxy
+          </p>
+        </div>
+        <div className="relative">
+          <MagnifyingGlassIcon className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-11" />
+          <input
+            type="text"
+            placeholder="Search tenants or orgs..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="w-64 rounded-md border border-gray-6 bg-gray-3 py-2 pl-9 pr-3 text-sm text-gray-12 placeholder:text-gray-11 focus:border-accent-8 focus:outline-none"
+          />
+        </div>
       </div>
 
       {isLoading ? (
         <div className="flex items-center justify-center py-12">
           <div className="h-8 w-8 animate-spin rounded-full border-2 border-gray-6 border-t-accent-9" />
         </div>
-      ) : organizations && organizations.length > 0 ? (
+      ) : filteredData.length > 0 ? (
         <div className="space-y-6">
-          {organizations.map((org) => (
-            <OrgSection
-              key={org.id}
-              org={org}
-              tenants={tenantsByOrg?.[org.id] ?? []}
-            />
+          {filteredData.map(({ org, tenants: orgTenants }) => (
+            <OrgSection key={org.id} org={org} tenants={orgTenants} />
           ))}
         </div>
       ) : (
-        <p className="text-sm text-gray-11">No organizations found.</p>
+        <p className="text-sm text-gray-11">
+          {search
+            ? "No matching tenants or organizations found."
+            : "No organizations found."}
+        </p>
       )}
     </div>
   );
