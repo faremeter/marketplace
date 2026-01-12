@@ -27,3 +27,16 @@ export function validateSlug(slug: string): boolean {
   if (slug.length === 1) return /^[a-z0-9]$/.test(slug);
   return /^[a-z0-9][a-z0-9-]*[a-z0-9]$/.test(slug);
 }
+
+/**
+ * Generates a random 4-character suffix for slug deduplication.
+ * Uses lowercase letters and digits (a-z, 0-9).
+ */
+export function generateSlugSuffix(): string {
+  const chars = "abcdefghijklmnopqrstuvwxyz0123456789";
+  let suffix = "";
+  for (let i = 0; i < 4; i++) {
+    suffix += chars[Math.floor(Math.random() * chars.length)];
+  }
+  return suffix;
+}

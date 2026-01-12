@@ -1,6 +1,8 @@
 import { type } from "arktype";
 
 export const MAX_NAME_LENGTH = 100;
+export const MIN_ORG_NAME_LENGTH = 4;
+export const MAX_ORG_NAME_LENGTH = 58; // 63 (DNS limit) - 5 (for "-xxxx" suffix)
 export const MAX_DESCRIPTION_LENGTH = 1024;
 export const MAX_AUTH_HEADER_LENGTH = 256;
 export const MAX_AUTH_VALUE_LENGTH = 2048;
@@ -163,40 +165,34 @@ export const VerifyEmailSchema = type({
 const ORG_NAME_PATTERN = /^[a-zA-Z0-9 -]+$/;
 const MAX_SLUG_LENGTH = 63;
 
-const orgName = type(`string > 0 & string <= ${MAX_NAME_LENGTH}`).narrow(
-  (s, ctx) => {
-    if (!ORG_NAME_PATTERN.test(s)) {
-      return ctx.mustBe(
-        "containing only letters, numbers, spaces, and hyphens",
-      );
-    }
-    if (/ {2}/.test(s)) {
-      return ctx.mustBe("without consecutive spaces");
-    }
-    if (s.startsWith("-")) {
-      return ctx.mustBe("not starting with a hyphen");
-    }
-    if (s.endsWith("-")) {
-      return ctx.mustBe("not ending with a hyphen");
-    }
-    return true;
-  },
-);
+const orgName = type(
+  `string >= ${MIN_ORG_NAME_LENGTH} & string <= ${MAX_ORG_NAME_LENGTH}`,
+).narrow((s, ctx) => {
+  if (!ORG_NAME_PATTERN.test(s)) {
+    return ctx.mustBe("containing only letters, numbers, spaces, and hyphens");
+  }
+  if (/ {2}/.test(s)) {
+    return ctx.mustBe("without consecutive spaces");
+  }
+  if (s.startsWith("-")) {
+    return ctx.mustBe("not starting with a hyphen");
+  }
+  if (s.endsWith("-")) {
+    return ctx.mustBe("not ending with a hyphen");
+  }
+  return true;
+});
 
-const orgSlug = type(`string > 0 & string <= ${MAX_SLUG_LENGTH}`).narrow(
-  (s, ctx) => {
-    if (s.length === 1) {
-      if (!/^[a-z0-9]$/.test(s)) {
-        return ctx.mustBe("a lowercase letter or number");
-      }
-    } else if (!/^[a-z0-9][a-z0-9-]*[a-z0-9]$/.test(s)) {
-      return ctx.mustBe(
-        "lowercase alphanumeric, starting and ending with letter or number",
-      );
-    }
-    return true;
-  },
-);
+const orgSlug = type(
+  `string >= ${MIN_ORG_NAME_LENGTH} & string <= ${MAX_ORG_NAME_LENGTH}`,
+).narrow((s, ctx) => {
+  if (!/^[a-z0-9][a-z0-9-]*[a-z0-9]$/.test(s)) {
+    return ctx.mustBe(
+      "lowercase alphanumeric, starting and ending with letter or number",
+    );
+  }
+  return true;
+});
 
 export const CreateOrganizationSchema = type({
   name: orgName,

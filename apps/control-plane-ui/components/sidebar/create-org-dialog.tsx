@@ -1,14 +1,16 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import * as Dialog from "@radix-ui/react-dialog";
-import { Cross2Icon } from "@radix-ui/react-icons";
+import { Cross2Icon, ExclamationTriangleIcon } from "@radix-ui/react-icons";
 import { api, ApiError } from "@/lib/api/client";
 import { useAuth, type Organization } from "@/lib/auth/context";
 import { useToast } from "@/components/ui/toast";
 
 const ORG_NAME_PATTERN = /^[a-zA-Z0-9 -]+$/;
+const MIN_ORG_NAME_LENGTH = 4;
+const MAX_ORG_NAME_LENGTH = 58;
 
 function slugify(name: string): string {
   return name
@@ -20,6 +22,12 @@ function slugify(name: string): string {
 }
 
 function validateOrgName(name: string): string | null {
+  if (name.length < MIN_ORG_NAME_LENGTH) {
+    return `Name must be at least ${MIN_ORG_NAME_LENGTH} characters`;
+  }
+  if (name.length > MAX_ORG_NAME_LENGTH) {
+    return `Name must be at most ${MAX_ORG_NAME_LENGTH} characters`;
+  }
   if (!ORG_NAME_PATTERN.test(name)) {
     return "Name can only contain letters, numbers, spaces, and hyphens";
   }
@@ -47,10 +55,60 @@ export function CreateOrgDialog({ open, onOpenChange }: CreateOrgDialogProps) {
   const [name, setName] = useState("");
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [slugTaken, setSlugTaken] = useState(false);
+  const [suggestedSlug, setSuggestedSlug] = useState<string | null>(null);
+  const [isCheckingSlug, setIsCheckingSlug] = useState(false);
+
+  const checkSlugAvailability = useCallback(async (slug: string) => {
+    if (!slug) {
+      setSlugTaken(false);
+      setSuggestedSlug(null);
+      return;
+    }
+
+    setIsCheckingSlug(true);
+    try {
+      const result = await api.get<{
+        available: boolean;
+        slug?: string;
+        suggested?: string;
+      }>(`/api/organizations/check-slug?slug=${encodeURIComponent(slug)}`);
+
+      if (result.available) {
+        setSlugTaken(false);
+        setSuggestedSlug(null);
+      } else {
+        setSlugTaken(true);
+        setSuggestedSlug(result.suggested || null);
+      }
+    } catch {
+      setSlugTaken(false);
+      setSuggestedSlug(null);
+    } finally {
+      setIsCheckingSlug(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    const slug = slugify(name);
+    if (!slug || slug.length < MIN_ORG_NAME_LENGTH) {
+      setSlugTaken(false);
+      setSuggestedSlug(null);
+      return;
+    }
+
+    const timer = setTimeout(() => {
+      checkSlugAvailability(slug);
+    }, 300);
+
+    return () => clearTimeout(timer);
+  }, [name, checkSlugAvailability]);
 
   const resetForm = () => {
     setName("");
     setError("");
+    setSlugTaken(false);
+    setSuggestedSlug(null);
   };
 
   const handleOpenChange = (newOpen: boolean) => {
@@ -80,6 +138,7 @@ export function CreateOrgDialog({ open, onOpenChange }: CreateOrgDialogProps) {
     try {
       const org = await api.post<Organization>("/api/organizations", {
         name: name.trim(),
+        slug: slugTaken && suggestedSlug ? suggestedSlug : undefined,
       });
       handleOpenChange(false);
       toast({
@@ -132,12 +191,29 @@ export function CreateOrgDialog({ open, onOpenChange }: CreateOrgDialogProps) {
                 className="w-full rounded-md border border-gray-6 bg-gray-2 px-3 py-2 text-sm text-gray-12 placeholder-gray-9 focus:border-accent-8 focus:outline-none focus:ring-1 focus:ring-accent-8"
               />
               {name.trim() && slugify(name) && (
-                <p className="mt-2 text-xs text-gray-9">
-                  Your proxy URLs will be:{" "}
-                  <code className="text-gray-11">
-                    *.{slugify(name)}.api.corbits.dev
-                  </code>
-                </p>
+                <div className="mt-2 space-y-2">
+                  {slugTaken && (
+                    <div className="flex items-center gap-1.5 text-xs text-amber-400">
+                      <ExclamationTriangleIcon className="h-3 w-3" />
+                      <span>That name is already taken</span>
+                    </div>
+                  )}
+                  <p className="flex items-center gap-1.5 text-xs text-gray-9">
+                    {isCheckingSlug && (
+                      <span className="inline-block h-3 w-3 animate-spin rounded-full border border-gray-6 border-t-gray-11" />
+                    )}
+                    <span>
+                      Your proxy URLs will be:{" "}
+                      <code className="text-gray-11">
+                        *.
+                        {slugTaken && suggestedSlug
+                          ? suggestedSlug
+                          : slugify(name)}
+                        .api.corbits.dev
+                      </code>
+                    </span>
+                  </p>
+                </div>
               )}
             </div>
 

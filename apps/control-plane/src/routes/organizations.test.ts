@@ -90,6 +90,61 @@ await t.test("GET /api/organizations", async (t) => {
   });
 });
 
+await t.test("GET /api/organizations/check-slug", async (t) => {
+  await t.test("returns 401 without auth", async (t) => {
+    const res = await app.request("/api/organizations/check-slug?slug=test");
+    t.equal(res.status, 401);
+  });
+
+  await t.test("returns 400 without slug param", async (t) => {
+    const user = await createUser("check@example.com");
+    const res = await app.request("/api/organizations/check-slug", {
+      headers: { Cookie: `auth_token=${user.token}` },
+    });
+    t.equal(res.status, 400);
+  });
+
+  await t.test("returns available true for unused slug", async (t) => {
+    const user = await createUser("avail@example.com");
+    const res = await app.request(
+      "/api/organizations/check-slug?slug=fresh-slug",
+      {
+        headers: { Cookie: `auth_token=${user.token}` },
+      },
+    );
+    t.equal(res.status, 200);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const data = (await res.json()) as any;
+    t.equal(data.available, true);
+    t.equal(data.slug, "fresh-slug");
+  });
+
+  await t.test(
+    "returns available false with suggested slug for taken slug",
+    async (t) => {
+      const user = await createUser("taken@example.com");
+      await createOrg("Taken Org", "taken-slug");
+
+      const res = await app.request(
+        "/api/organizations/check-slug?slug=taken-slug",
+        {
+          headers: { Cookie: `auth_token=${user.token}` },
+        },
+      );
+      t.equal(res.status, 200);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const data = (await res.json()) as any;
+      t.equal(data.available, false);
+      t.ok(data.suggested);
+      t.ok(data.suggested.startsWith("taken-slug-"));
+      // Verify suffix is 4 chars
+      const suffix = data.suggested.replace("taken-slug-", "");
+      t.equal(suffix.length, 4);
+      t.ok(/^[a-z0-9]+$/.test(suffix));
+    },
+  );
+});
+
 await t.test("POST /api/organizations", async (t) => {
   await t.test("creates organization", async (t) => {
     const user = await createUser("creator@example.com");
@@ -129,25 +184,32 @@ await t.test("POST /api/organizations", async (t) => {
     t.equal(data.slug, "my-custom-slug");
   });
 
-  await t.test("handles duplicate slug by appending timestamp", async (t) => {
-    const user = await createUser("dup@example.com");
-    await createOrg("Existing", "existing-slug");
+  await t.test(
+    "handles duplicate slug by appending random suffix",
+    async (t) => {
+      const user = await createUser("dup@example.com");
+      await createOrg("Existing", "existing-slug");
 
-    const res = await app.request("/api/organizations", {
-      method: "POST",
-      headers: {
-        Cookie: `auth_token=${user.token}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ name: "New Org", slug: "existing-slug" }),
-    });
+      const res = await app.request("/api/organizations", {
+        method: "POST",
+        headers: {
+          Cookie: `auth_token=${user.token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ name: "New Org", slug: "existing-slug" }),
+      });
 
-    t.equal(res.status, 201);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data = (await res.json()) as any;
-    t.ok(data.slug.startsWith("existing-slug-"));
-    t.not(data.slug, "existing-slug");
-  });
+      t.equal(res.status, 201);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const data = (await res.json()) as any;
+      t.ok(data.slug.startsWith("existing-slug-"));
+      t.not(data.slug, "existing-slug");
+      // Verify suffix is 4 chars (random suffix format)
+      const suffix = data.slug.replace("existing-slug-", "");
+      t.equal(suffix.length, 4);
+      t.ok(/^[a-z0-9]+$/.test(suffix));
+    },
+  );
 
   await t.test("enforces org limit per user", async (t) => {
     const user = await createUser("limit@example.com");
@@ -170,6 +232,110 @@ await t.test("POST /api/organizations", async (t) => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const data = (await res.json()) as any;
     t.ok(data.error.includes("5 organizations"));
+  });
+
+  await t.test("rejects name shorter than 4 chars", async (t) => {
+    const user = await createUser("short@example.com");
+    const res = await app.request("/api/organizations", {
+      method: "POST",
+      headers: {
+        Cookie: `auth_token=${user.token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ name: "abc" }),
+    });
+    t.equal(res.status, 400);
+  });
+
+  await t.test("rejects name longer than 58 chars", async (t) => {
+    const user = await createUser("long@example.com");
+    const res = await app.request("/api/organizations", {
+      method: "POST",
+      headers: {
+        Cookie: `auth_token=${user.token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ name: "a".repeat(59) }),
+    });
+    t.equal(res.status, 400);
+  });
+
+  await t.test("rejects name with apostrophe", async (t) => {
+    const user = await createUser("apostrophe@example.com");
+    const res = await app.request("/api/organizations", {
+      method: "POST",
+      headers: {
+        Cookie: `auth_token=${user.token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ name: "John's Org" }),
+    });
+    t.equal(res.status, 400);
+  });
+
+  await t.test("rejects name with consecutive spaces", async (t) => {
+    const user = await createUser("spaces@example.com");
+    const res = await app.request("/api/organizations", {
+      method: "POST",
+      headers: {
+        Cookie: `auth_token=${user.token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ name: "My  Org" }),
+    });
+    t.equal(res.status, 400);
+  });
+
+  await t.test("rejects name starting with hyphen", async (t) => {
+    const user = await createUser("starthyphen@example.com");
+    const res = await app.request("/api/organizations", {
+      method: "POST",
+      headers: {
+        Cookie: `auth_token=${user.token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ name: "-My Org" }),
+    });
+    t.equal(res.status, 400);
+  });
+
+  await t.test("rejects name ending with hyphen", async (t) => {
+    const user = await createUser("endhyphen@example.com");
+    const res = await app.request("/api/organizations", {
+      method: "POST",
+      headers: {
+        Cookie: `auth_token=${user.token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ name: "My Org-" }),
+    });
+    t.equal(res.status, 400);
+  });
+
+  await t.test("rejects invalid custom slug", async (t) => {
+    const user = await createUser("badslug@example.com");
+    const res = await app.request("/api/organizations", {
+      method: "POST",
+      headers: {
+        Cookie: `auth_token=${user.token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ name: "Valid Name", slug: "Invalid_Slug!" }),
+    });
+    t.equal(res.status, 400);
+  });
+
+  await t.test("rejects slug shorter than 4 chars", async (t) => {
+    const user = await createUser("shortslug@example.com");
+    const res = await app.request("/api/organizations", {
+      method: "POST",
+      headers: {
+        Cookie: `auth_token=${user.token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ name: "Valid Name", slug: "abc" }),
+    });
+    t.equal(res.status, 400);
   });
 });
 

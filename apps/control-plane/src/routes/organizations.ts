@@ -27,7 +27,7 @@ import {
   updateAccountAddresses,
 } from "../lib/corbits-dash.js";
 import { validateProxyName } from "../lib/proxy-name.js";
-import { slugify } from "../lib/slug.js";
+import { slugify, generateSlugSuffix } from "../lib/slug.js";
 import { toDomainInfo } from "../lib/domain.js";
 import {
   getOrganizationEarnings,
@@ -76,6 +76,27 @@ organizationsRoutes.get("/", async (c) => {
 
 const MAX_ORGS_PER_USER = 5;
 
+organizationsRoutes.get("/check-slug", async (c) => {
+  const slug = c.req.query("slug");
+
+  if (!slug) {
+    return c.json({ error: "slug query parameter is required" }, 400);
+  }
+
+  const existing = await db
+    .selectFrom("organizations")
+    .select("id")
+    .where("slug", "=", slug)
+    .executeTakeFirst();
+
+  if (!existing) {
+    return c.json({ available: true, slug });
+  }
+
+  const suggested = `${slug}-${generateSlugSuffix()}`;
+  return c.json({ available: false, suggested });
+});
+
 organizationsRoutes.post(
   "/",
   createResourceLimiter,
@@ -102,14 +123,18 @@ organizationsRoutes.post(
 
     let slug = body.slug || slugify(body.name);
 
-    const existingSlug = await db
-      .selectFrom("organizations")
-      .select("id")
-      .where("slug", "=", slug)
-      .executeTakeFirst();
+    const maxRetries = 5;
+    for (let i = 0; i < maxRetries; i++) {
+      const existingSlug = await db
+        .selectFrom("organizations")
+        .select("id")
+        .where("slug", "=", slug)
+        .executeTakeFirst();
 
-    if (existingSlug) {
-      slug = `${slug}-${Date.now()}`;
+      if (!existingSlug) break;
+
+      const baseSlug = body.slug || slugify(body.name);
+      slug = `${baseSlug}-${generateSlugSuffix()}`;
     }
 
     const org = await db
