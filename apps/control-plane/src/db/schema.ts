@@ -82,6 +82,7 @@ export interface TenantsTable {
   upstream_auth_value: string | null;
   openapi_spec: ColumnType<unknown, string | undefined, string> | null;
   is_active: ColumnType<boolean, boolean | undefined, boolean>;
+  org_slug: string | null;
   created_at: AutoDateColumn;
 }
 

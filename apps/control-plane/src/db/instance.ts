@@ -172,7 +172,7 @@ export async function setupTestSchema(): Promise<void> {
     .createTable("tenants")
     .ifNotExists()
     .addColumn("id", "integer", (col) => col.primaryKey().autoIncrement())
-    .addColumn("name", "text", (col) => col.notNull().unique())
+    .addColumn("name", "text", (col) => col.notNull())
     .addColumn("backend_url", "text", (col) => col.notNull())
     .addColumn("organization_id", "integer", (col) =>
       col.references("organizations.id").onDelete("set null"),
@@ -187,6 +187,7 @@ export async function setupTestSchema(): Promise<void> {
     .addColumn("upstream_auth_value", "text")
     .addColumn("openapi_spec", "text")
     .addColumn("is_active", "integer", (col) => col.defaultTo(1))
+    .addColumn("org_slug", "text")
     .addColumn("created_at", "text", (col) =>
       col.defaultTo(sql`CURRENT_TIMESTAMP`).notNull(),
     )
