@@ -166,3 +166,17 @@ export function buildAddressOnlyConfig(addresses: {
   }
   return result;
 }
+
+export function hasSolanaAddress(config: WalletConfig): boolean {
+  return !!config?.solana?.["mainnet-beta"]?.address;
+}
+
+export function isWalletUsable(
+  config: WalletConfig,
+  fundingStatus: string,
+): boolean {
+  if (hasSolanaAddress(config)) {
+    return fundingStatus === "funded";
+  }
+  return true;
+}
