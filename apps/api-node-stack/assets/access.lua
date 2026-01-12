@@ -139,8 +139,8 @@ if tenant_config.upstream_auth_header then
     ngx.req.set_header(tenant_config.upstream_auth_header, tenant_config.upstream_auth_value)
 end
 
-local price = tenant_config.default_price_usdc
-local scheme = tenant_config.default_scheme
+local price = tenant_config.default_price_usdc or 0
+local scheme = tenant_config.default_scheme or "exact"
 local matched_endpoint_id = nil
 if tenant_config.endpoints then
     for _, endpoint in ipairs(tenant_config.endpoints) do
