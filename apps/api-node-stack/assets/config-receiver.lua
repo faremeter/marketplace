@@ -43,10 +43,10 @@ end
 ngx.shared.tenants:flush_all()
 
 local count = 0
-for api_key, tenant_config in pairs(config.config) do
-    local tenant_name = tenant_config.name
-    if tenant_name then
-        ngx.shared.tenants:set(tenant_name, cjson.encode(tenant_config))
+for domain, tenant_config in pairs(config.config) do
+    local key = tenant_config.domain or domain
+    if key then
+        ngx.shared.tenants:set(key, cjson.encode(tenant_config))
         count = count + 1
     end
 end

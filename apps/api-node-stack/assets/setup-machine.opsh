@@ -183,18 +183,49 @@ BASE
 
 # Get list of tenants from config file if it exists
 if [ -f "$CONFIG_FILE" ] && [ -s "$CONFIG_FILE" ]; then
-    TENANTS=$(jq -r '.config // {} | keys[]' "$CONFIG_FILE" 2>/dev/null || echo "")
+    JQ_FILTER='.config // {} | to_entries[] | "\(.key)|\(.value.domain // \"\")"'
+    TENANT_ENTRIES=$(jq -r "$JQ_FILTER" "$CONFIG_FILE" 2>/dev/null || echo "")
 
-    for tenant in $TENANTS; do
-        CERT_PATH="/etc/letsencrypt/live/${tenant}.test.api.corbits.dev"
-        if [ -d "$CERT_PATH" ]; then
-            cat <<EOF >> "$OUTPUT_FILE"
+    if [ -n "$TENANT_ENTRIES" ]; then
+        while IFS='|' read -r tenant_key tenant_domain; do
+            if [ -z "$tenant_key" ]; then
+                continue
+            fi
 
-# TLS server block for tenant: ${tenant}
+            domain="$tenant_domain"
+            if [ -z "$domain" ] || [ "$domain" = "null" ]; then
+                domain="$tenant_key"
+            fi
+
+            if [ -z "$domain" ]; then
+                continue
+            fi
+
+            CERT_PATH="/etc/letsencrypt/live/${domain}"
+            if [ -d "$CERT_PATH" ]; then
+                SERVER_NAMES="$domain"
+
+                domain_io="${domain/.corbits.dev/.corbits.io}"
+                if [ "$domain_io" != "$domain" ]; then
+                    SERVER_NAMES="$SERVER_NAMES $domain_io"
+                fi
+
+                if [[ "$domain" == *.api.corbits.dev ]]; then
+                    domain_test="${domain/.api.corbits.dev/.test.api.corbits.dev}"
+                    SERVER_NAMES="$SERVER_NAMES $domain_test"
+                    domain_test_io="${domain_test/.corbits.dev/.corbits.io}"
+                    if [ "$domain_test_io" != "$domain_test" ]; then
+                        SERVER_NAMES="$SERVER_NAMES $domain_test_io"
+                    fi
+                fi
+
+                cat <<EOF >> "$OUTPUT_FILE"
+
+# TLS server block for domain: ${domain}
 server {
     listen 443 ssl;
     http2 on;
-    server_name ${tenant}.test.api.corbits.dev ${tenant}.test.api.corbits.io ${tenant}.api.corbits.dev ${tenant}.api.corbits.io;
+    server_name ${SERVER_NAMES};
 
     ssl_certificate ${CERT_PATH}/fullchain.pem;
     ssl_certificate_key ${CERT_PATH}/privkey.pem;
@@ -210,8 +241,9 @@ server {
     include ${CONF_DIR}/*.conf;
 }
 EOF
-        fi
-    done
+            fi
+        done <<< "$TENANT_ENTRIES"
+    fi
 fi
 
 # Reload nginx

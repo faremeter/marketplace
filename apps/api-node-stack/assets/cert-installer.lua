@@ -1,5 +1,26 @@
 local cjson = require("cjson")
 
+local function normalize_domain(domain)
+    if type(domain) ~= "string" then
+        return nil
+    end
+    domain = domain:lower()
+    if not domain:match("^[a-z0-9%.%-]+$") then
+        return nil
+    end
+    return domain
+end
+
+local function normalize_tenant_name(name)
+    if type(name) ~= "string" then
+        return nil
+    end
+    if not name:match("^[a-zA-Z0-9%-]+$") then
+        return nil
+    end
+    return name
+end
+
 ngx.req.read_body()
 local body = ngx.req.get_body_data()
 
@@ -10,28 +31,42 @@ if not body then
 end
 
 local ok, data = pcall(cjson.decode, body)
-if not ok or not data.tenant_name or not data.fullchain or not data.privkey then
+if not ok or type(data) ~= "table" then
     ngx.status = 400
-    ngx.say(cjson.encode({success = false, error = "Missing required fields"}))
+    ngx.say(cjson.encode({success = false, error = "Invalid JSON payload"}))
     return ngx.exit(400)
 end
 
-local tenant_name = data.tenant_name
+local tenant_name = normalize_tenant_name(data.tenant_name)
+local domain = normalize_domain(data.domain)
 
--- Validate tenant name (alphanumeric and hyphens only)
-if not tenant_name:match("^[a-zA-Z0-9%-]+$") then
+if not domain then
+    if tenant_name then
+        domain = tenant_name .. ".test.api.corbits.dev"
+    else
+        ngx.status = 400
+        ngx.say(cjson.encode({success = false, error = "Missing domain"}))
+        return ngx.exit(400)
+    end
+end
+
+if not tenant_name and data.tenant_name ~= nil then
     ngx.status = 400
     ngx.say(cjson.encode({success = false, error = "Invalid tenant_name format"}))
     return ngx.exit(400)
 end
 
-local domain = tenant_name .. ".test.api.corbits.dev"
+if not data.fullchain or not data.privkey then
+    ngx.status = 400
+    ngx.say(cjson.encode({success = false, error = "Missing certificate data"}))
+    return ngx.exit(400)
+end
 
--- Base64 encode certs to pass safely through shell
+tenant_name = tenant_name or domain
+
 local fullchain_b64 = ngx.encode_base64(data.fullchain)
 local privkey_b64 = ngx.encode_base64(data.privkey)
 
--- Run install script with base64-encoded certs
 local cmd = string.format(
     "sudo /usr/local/bin/install-tenant-cert '%s' '%s' '%s' 2>&1; echo EXIT_CODE:$?",
     domain,
@@ -42,7 +77,6 @@ local handle = io.popen(cmd)
 local result = handle:read("*a")
 handle:close()
 
--- Parse exit code from output
 local exit_code = tonumber(result:match("EXIT_CODE:(%d+)")) or 1
 result = result:gsub("EXIT_CODE:%d+%s*$", "")
 

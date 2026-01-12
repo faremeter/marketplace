@@ -28,9 +28,12 @@ if not config.config then
 end
 
 local count = 0
-for tenant_name, tenant_config in pairs(config.config) do
-    ngx.shared.tenants:set(tenant_name, cjson.encode(tenant_config))
-    count = count + 1
+for domain, tenant_config in pairs(config.config) do
+    local key = tenant_config.domain or domain
+    if key then
+        ngx.shared.tenants:set(key, cjson.encode(tenant_config))
+        count = count + 1
+    end
 end
 
 ngx.log(ngx.INFO, "Loaded ", count, " tenants from config file")

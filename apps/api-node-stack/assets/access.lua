@@ -2,6 +2,33 @@ local httpc = require("resty.http").new()
 local cjson = require("cjson")
 
 local FACILITATOR_URL = "https://facilitator.corbits.dev"
+local BASE_DOMAIN = "api.corbits.dev"
+local ALT_BASE_DOMAIN = "api.corbits.io"
+
+local function canonicalize_tenant_domain(host)
+    if not host then
+        return nil
+    end
+
+    host = string.lower(host)
+    local escaped_base = BASE_DOMAIN:gsub("%.", "%%.")
+    local escaped_alt = ALT_BASE_DOMAIN:gsub("%.", "%%.")
+    local patterns = {
+        "^(.+)%.test%." .. escaped_base .. "$",
+        "^(.+)%." .. escaped_base .. "$",
+        "^(.+)%.test%." .. escaped_alt .. "$",
+        "^(.+)%." .. escaped_alt .. "$"
+    }
+
+    for _, pattern in ipairs(patterns) do
+        local prefix = string.match(host, pattern)
+        if prefix then
+            return prefix .. "." .. BASE_DOMAIN
+        end
+    end
+
+    return nil
+end
 
 local function get_control_plane_addrs()
     local cached = ngx.shared.tenants:get("_control_plane_addrs")
@@ -58,16 +85,15 @@ ngx.req.read_body()
 local req_body = ngx.req.get_body_data()
 local req_headers = ngx.req.get_headers()
 
-local tenant_name = string.match(ngx.var.host, "^([^.]+)%.test%.api%.corbits%.") or
-                    string.match(ngx.var.host, "^([^.]+)%.api%.corbits%.")
-if not tenant_name then
+local tenant_domain = canonicalize_tenant_domain(ngx.var.host)
+if not tenant_domain then
     ngx.status = 400
     ngx.header["Content-Type"] = "application/json"
     ngx.say(cjson.encode({error = "Invalid hostname format"}))
     return ngx.exit(400)
 end
 
-local tenant_json = ngx.shared.tenants:get(tenant_name)
+local tenant_json = ngx.shared.tenants:get(tenant_domain)
 if not tenant_json then
     ngx.status = 404
     ngx.header["Content-Type"] = "application/json"
@@ -90,6 +116,11 @@ if not tenant_config.backend_url then
     ngx.say(cjson.encode({error = "Tenant missing backend_url"}))
     return ngx.exit(500)
 end
+
+tenant_config.domain = tenant_config.domain or tenant_domain
+local proxy_name = tenant_config.proxy_name or tenant_config.name or tenant_domain
+local tenant_org_slug = tenant_config.org_slug
+if tenant_org_slug == cjson.null then tenant_org_slug = nil end
 
 local backend_url = tenant_config.backend_url:gsub("/$", "")
 local base_url, backend_query = string.match(backend_url, "^([^?]+)%??(.*)")
@@ -120,13 +151,11 @@ if tenant_config.endpoints then
         local matched = false
 
         if string.sub(pattern, 1, 1) == "^" then
-            -- Regex match (pattern starts with ^)
             local ok, regex = pcall(ngx.re.match, ngx.var.uri, pattern)
             if ok and regex then
                 matched = true
             end
         else
-            -- Prefix match (literal path)
             if string.sub(ngx.var.uri, 1, #pattern) == pattern then
                 matched = true
             end
@@ -147,10 +176,11 @@ if tenant_config.endpoints then
 end
 
 if scheme == "free" or price == 0 then
-    ngx.log(ngx.INFO, "Free endpoint: ", tenant_name, " ", ngx.var.uri)
+    ngx.log(ngx.INFO, "Free endpoint: ", proxy_name, " ", ngx.var.uri)
     local free_ngx_request_id = ngx.var.request_id
     local free_request_path = ngx.var.uri
-    local free_tenant_name = tenant_name
+    local free_tenant_name = proxy_name
+    local free_org_slug = tenant_org_slug
     local free_endpoint_id = matched_endpoint_id
     ngx.timer.at(0, function(premature)
         if premature then return end
@@ -158,6 +188,7 @@ if scheme == "free" or price == 0 then
             ngx_request_id = free_ngx_request_id,
             tx_hash = cjson.null,
             tenant_name = free_tenant_name,
+            org_slug = free_org_slug or cjson.null,
             endpoint_id = free_endpoint_id or cjson.null,
             amount_usdc = 0,
             network = cjson.null,
@@ -190,7 +221,6 @@ local accepts_body = {
     accepts = {}
 }
 
--- Add Solana mainnet
 if wallet.solana and wallet.solana["mainnet-beta"] and wallet.solana["mainnet-beta"].address and wallet.solana["mainnet-beta"].address ~= "" then
     table.insert(accepts_body.accepts, {
         network = "solana-mainnet-beta",
@@ -216,7 +246,6 @@ if wallet.solana and wallet.solana["mainnet-beta"] and wallet.solana["mainnet-be
     })
 end
 
--- Add Base
 if wallet.evm and wallet.evm.base and wallet.evm.base.address and wallet.evm.base.address ~= "" then
     table.insert(accepts_body.accepts, {
         scheme = scheme,
@@ -231,7 +260,6 @@ if wallet.evm and wallet.evm.base and wallet.evm.base.address and wallet.evm.bas
     })
 end
 
--- Add Polygon
 if wallet.evm and wallet.evm.polygon and wallet.evm.polygon.address and wallet.evm.polygon.address ~= "" then
     table.insert(accepts_body.accepts, {
         scheme = scheme,
@@ -257,7 +285,6 @@ if wallet.evm and wallet.evm.polygon and wallet.evm.polygon.address and wallet.e
     })
 end
 
--- Add Monad
 if wallet.evm and wallet.evm.monad and wallet.evm.monad.address and wallet.evm.monad.address ~= "" then
     table.insert(accepts_body.accepts, {
         scheme = scheme,
@@ -395,16 +422,16 @@ if settle_res.status ~= 200 or not settle_response.success then
 end
 
 ngx.log(ngx.INFO, "Payment settled successfully: ", settle_response.txHash or "unknown")
-ngx.log(ngx.INFO, "Tenant: ", tenant_name, " Request: ", ngx.req.get_method(), " ", ngx.var.uri)
+ngx.log(ngx.INFO, "Tenant: ", proxy_name, " Request: ", ngx.req.get_method(), " ", ngx.var.uri)
 
--- Record transaction asynchronously (only if we have a tx_hash)
 local tx_hash = settle_response.txHash
 if tx_hash then
     local tx_ngx_request_id = ngx.var.request_id
     local tx_network = matching_req.network
     local tx_amount = tonumber(price) or 0
     local tx_request_path = ngx.var.uri
-    local tx_tenant_name = tenant_name
+    local tx_tenant_name = proxy_name
+    local tx_org_slug = tenant_org_slug
     local tx_endpoint_id = matched_endpoint_id
     ngx.timer.at(0, function(premature)
         if premature then return end
@@ -412,6 +439,7 @@ if tx_hash then
             ngx_request_id = tx_ngx_request_id,
             tx_hash = tx_hash,
             tenant_name = tx_tenant_name,
+            org_slug = tx_org_slug or cjson.null,
             endpoint_id = tx_endpoint_id or cjson.null,
             amount_usdc = tx_amount,
             network = tx_network,

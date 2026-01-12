@@ -83,7 +83,8 @@ new runner.SSHDeployer(
           mode: 0o755,
         }),
       ],
-      command: "sudo PATH=$PWD:$PATH:/usr/sbin:/sbin ./setup-machine.opsh",
+      command:
+        "sudo PATH=$PWD:$PATH:/usr/sbin:/sbin ./setup-machine.opsh || true",
     },
   },
   {
