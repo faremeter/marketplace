@@ -198,9 +198,6 @@ export default function TenantsPage() {
             <thead className="sticky top-0 z-10 bg-gray-3">
               <tr>
                 <th className="px-4 py-3 text-left text-sm font-medium text-gray-11">
-                  ID
-                </th>
-                <th className="px-4 py-3 text-left text-sm font-medium text-gray-11">
                   Name
                 </th>
                 <th className="px-4 py-3 text-left text-sm font-medium text-gray-11">
@@ -219,9 +216,6 @@ export default function TenantsPage() {
                   Status
                 </th>
                 <th className="px-4 py-3 text-left text-sm font-medium text-gray-11">
-                  Created
-                </th>
-                <th className="px-4 py-3 text-left text-sm font-medium text-gray-11">
                   Actions
                 </th>
               </tr>
@@ -232,9 +226,6 @@ export default function TenantsPage() {
                 const apiEndpoint = `/api/organizations/${currentOrg.id}/tenants/${tenant.id}`;
                 return (
                   <tr key={tenant.id} className="hover:bg-gray-3">
-                    <td className="px-4 py-3 text-sm text-gray-11">
-                      {tenant.id}
-                    </td>
                     <td className="px-4 py-3">
                       <Link
                         href={`/proxies/${tenant.id}`}
@@ -287,9 +278,6 @@ export default function TenantsPage() {
                       >
                         {status.label}
                       </span>
-                    </td>
-                    <td className="px-4 py-3 text-sm text-gray-11">
-                      {new Date(tenant.created_at).toLocaleDateString()}
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-1">
