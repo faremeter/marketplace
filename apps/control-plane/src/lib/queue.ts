@@ -583,9 +583,7 @@ export async function startQueue(config: {
       let unfundedCount = 0;
 
       for (const wallet of fundedWallets) {
-        const config = wallet.wallet_config
-          ? JSON.parse(wallet.wallet_config as string)
-          : null;
+        const config = wallet.wallet_config as Record<string, unknown> | null;
         const addresses = extractAddresses(config);
 
         if (!addresses.solana) {
