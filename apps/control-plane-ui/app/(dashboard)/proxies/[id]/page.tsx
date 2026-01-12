@@ -13,6 +13,7 @@ import {
   ExternalLinkIcon,
 } from "@radix-ui/react-icons";
 import * as Tabs from "@radix-ui/react-tabs";
+import * as RadixTooltip from "@radix-ui/react-tooltip";
 import {
   BarChart,
   Bar,
@@ -76,11 +77,13 @@ interface DailyCallData {
 function getStatus(tenant: Tenant): {
   label: string;
   color: string;
+  tooltip: string;
 } {
   if (tenant.status === "deleting") {
     return {
       label: "Deleting",
       color: "bg-red-900/50 text-red-400 border-red-800",
+      tooltip: "This proxy is being deleted",
     };
   }
 
@@ -88,6 +91,7 @@ function getStatus(tenant: Tenant): {
     return {
       label: "Pending",
       color: "bg-yellow-900/50 text-yellow-400 border-yellow-800",
+      tooltip: "Proxy setup failed, retrying",
     };
   }
 
@@ -100,6 +104,7 @@ function getStatus(tenant: Tenant): {
       return {
         label: "Funding",
         color: "bg-yellow-900/50 text-yellow-400 border-yellow-800",
+        tooltip: "Waiting for wallet funding to complete",
       };
     }
 
@@ -107,12 +112,14 @@ function getStatus(tenant: Tenant): {
       return {
         label: "Provisioning",
         color: "bg-yellow-900/50 text-yellow-400 border-yellow-800",
+        tooltip: "SSL certificate is being provisioned",
       };
     }
 
     return {
       label: "Initializing",
       color: "bg-yellow-900/50 text-yellow-400 border-yellow-800",
+      tooltip: "Proxy is being initialized",
     };
   }
 
@@ -120,6 +127,7 @@ function getStatus(tenant: Tenant): {
     return {
       label: "No Wallet",
       color: "bg-red-900/50 text-red-400 border-red-800",
+      tooltip: "Assign a wallet to enable this proxy",
     };
   }
 
@@ -127,6 +135,7 @@ function getStatus(tenant: Tenant): {
     return {
       label: "Unfunded",
       color: "bg-yellow-900/50 text-yellow-400 border-yellow-800",
+      tooltip: "Wallet needs funding to process payments",
     };
   }
 
@@ -134,16 +143,18 @@ function getStatus(tenant: Tenant): {
     return {
       label: "Inactive",
       color: "bg-gray-800/50 text-gray-400 border-gray-700",
+      tooltip: "Proxy is disabled, enable it in settings",
     };
   }
 
   return {
     label: "Ready",
     color: "bg-green-900/50 text-green-400 border-green-800",
+    tooltip: "Proxy is live and accepting requests",
   };
 }
 
-type TabType = "overview" | "endpoints";
+type TabType = "overview" | "endpoints" | "settings";
 
 export default function ProxyDetailPage() {
   const params = useParams();
@@ -153,7 +164,11 @@ export default function ProxyDetailPage() {
   const router = useRouter();
   const tabParam = searchParams.get("tab");
   const activeTab: TabType =
-    tabParam === "endpoints" ? "endpoints" : "overview";
+    tabParam === "endpoints"
+      ? "endpoints"
+      : tabParam === "settings"
+        ? "settings"
+        : "overview";
   const [copied, setCopied] = useState(false);
   const { toast } = useToast();
 
@@ -254,8 +269,9 @@ export default function ProxyDetailPage() {
   const apiEndpoint = `/api/organizations/${currentOrg.id}/tenants/${tenant.id}`;
 
   const tabs: { id: TabType; label: string }[] = [
-    { id: "overview", label: "Overview" },
+    { id: "overview", label: "Analytics" },
     { id: "endpoints", label: "Endpoints" },
+    { id: "settings", label: "Settings" },
   ];
 
   return (
@@ -314,13 +330,26 @@ export default function ProxyDetailPage() {
             </a>
           </div>
         </div>
-        {status.label !== "Ready" && (
-          <span
-            className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-medium ${status.color}`}
-          >
-            {status.label}
-          </span>
-        )}
+        <RadixTooltip.Provider>
+          <RadixTooltip.Root>
+            <RadixTooltip.Trigger asChild>
+              <span
+                className={`inline-flex cursor-help rounded-full border px-2.5 py-1 text-xs font-medium ${status.color}`}
+              >
+                {status.label}
+              </span>
+            </RadixTooltip.Trigger>
+            <RadixTooltip.Portal>
+              <RadixTooltip.Content
+                className="rounded-md bg-gray-1 px-3 py-2 text-xs text-gray-11 shadow-lg border border-gray-6"
+                sideOffset={5}
+              >
+                {status.tooltip}
+                <RadixTooltip.Arrow className="fill-gray-1" />
+              </RadixTooltip.Content>
+            </RadixTooltip.Portal>
+          </RadixTooltip.Root>
+        </RadixTooltip.Provider>
       </div>
 
       <div className="border-b border-gray-6">
@@ -482,22 +511,28 @@ export default function ProxyDetailPage() {
                 </div>
               </Tabs.Content>
             </Tabs.Root>
+          </div>
+        )}
 
+        {activeTab === "endpoints" && (
+          <EndpointsTab
+            tenantId={tenantId}
+            orgId={currentOrg.id}
+            defaultPriceUsdc={tenant.default_price_usdc}
+            defaultScheme={tenant.default_scheme}
+            hasOpenApiSpec={specData?.hasSpec ?? false}
+            onSpecChange={() => mutateSpec()}
+            onDefaultsChange={() => mutateTenants()}
+          />
+        )}
+
+        {activeTab === "settings" && (
+          <div className="space-y-6">
             <div className="rounded-lg border border-gray-6 bg-gray-2 p-6">
               <h3 className="mb-4 text-sm font-medium uppercase tracking-wider text-gray-11">
-                Proxy Information
+                Proxy Settings
               </h3>
               <dl className="grid grid-cols-2 gap-4 text-sm">
-                <div>
-                  <dt className="text-gray-11">Status</dt>
-                  <dd className="mt-1">
-                    <span
-                      className={`inline-flex rounded-full border px-2 py-0.5 text-xs ${status.color}`}
-                    >
-                      {status.label}
-                    </span>
-                  </dd>
-                </div>
                 <div>
                   <dt className="text-gray-11">Active</dt>
                   <dd className="mt-1">
@@ -571,18 +606,6 @@ export default function ProxyDetailPage() {
               </dl>
             </div>
           </div>
-        )}
-
-        {activeTab === "endpoints" && (
-          <EndpointsTab
-            tenantId={tenantId}
-            orgId={currentOrg.id}
-            defaultPriceUsdc={tenant.default_price_usdc}
-            defaultScheme={tenant.default_scheme}
-            hasOpenApiSpec={specData?.hasSpec ?? false}
-            onSpecChange={() => mutateSpec()}
-            onDefaultsChange={() => mutateTenants()}
-          />
         )}
       </div>
     </div>
