@@ -3,27 +3,20 @@
 import { useState } from "react";
 import { useAuth } from "@/lib/auth/context";
 import useSWR from "swr";
-import { api, ApiError } from "@/lib/api/client";
+import { api } from "@/lib/api/client";
 import Link from "next/link";
 import { useOnboarding } from "@/lib/hooks/use-onboarding";
 import {
   PlusIcon,
-  TrashIcon,
-  Cross2Icon,
   ExclamationTriangleIcon,
   EyeOpenIcon,
 } from "@radix-ui/react-icons";
-import * as Dialog from "@radix-ui/react-dialog";
 import { InlineUrlEdit } from "@/components/shared/inline-url-edit";
 import { InlineAuthEdit } from "@/components/shared/inline-auth-edit";
 import { InlineActiveToggle } from "@/components/shared/inline-active-toggle";
 import { InlineWalletSelect } from "@/components/shared/inline-wallet-select";
 import { CreateUserTenantDialog } from "@/components/tenants/create-user-tenant-dialog";
-import {
-  type TenantNode,
-  getTenantStatus,
-  isDeleteDisabled,
-} from "@/lib/tenant-status";
+import { type TenantNode, getTenantStatus } from "@/lib/tenant-status";
 
 interface Tenant {
   id: number;
@@ -44,11 +37,6 @@ export default function TenantsPage() {
   const { currentOrg } = useAuth();
   const { status: onboardingStatus } = useOnboarding();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
-  const [tenantToDelete, setTenantToDelete] = useState<Tenant | null>(null);
-  const [deletingId, setDeletingId] = useState<number | null>(null);
-  const [deleteError, setDeleteError] = useState<string | null>(null);
-  const [deleteConfirmName, setDeleteConfirmName] = useState("");
 
   const isFirstProxy =
     !onboardingStatus?.onboarding_completed && !onboardingStatus?.steps.proxy;
@@ -72,38 +60,6 @@ export default function TenantsPage() {
       minimumUsdc?: number;
     }>,
   );
-
-  const handleDeleteClick = (tenant: Tenant) => {
-    setTenantToDelete(tenant);
-    setDeleteError(null);
-    setDeleteConfirmName("");
-    setDeleteDialogOpen(true);
-  };
-
-  const handleDeleteConfirm = async () => {
-    if (!tenantToDelete || !currentOrg) return;
-
-    setDeletingId(tenantToDelete.id);
-    setDeleteError(null);
-
-    try {
-      await api.delete(
-        `/api/organizations/${currentOrg.id}/tenants/${tenantToDelete.id}`,
-      );
-      setDeleteDialogOpen(false);
-      setTenantToDelete(null);
-      mutate();
-    } catch (err) {
-      if (err instanceof ApiError && err.data) {
-        const data = err.data as { error?: string };
-        setDeleteError(data.error || "Failed to delete proxy");
-      } else {
-        setDeleteError("Failed to delete proxy");
-      }
-    } finally {
-      setDeletingId(null);
-    }
-  };
 
   if (!currentOrg) {
     return (
@@ -277,26 +233,13 @@ export default function TenantsPage() {
                       </span>
                     </td>
                     <td className="px-4 py-3">
-                      <div className="flex items-center gap-1">
-                        <Link
-                          href={`/proxies/${tenant.id}`}
-                          className="rounded p-1.5 text-gray-11 hover:bg-gray-4 hover:text-gray-12"
-                          title="View details"
-                        >
-                          <EyeOpenIcon className="h-4 w-4" />
-                        </Link>
-                        <button
-                          onClick={() => handleDeleteClick(tenant)}
-                          disabled={isDeleteDisabled(
-                            tenant,
-                            deletingId === tenant.id,
-                          )}
-                          className="rounded p-1.5 text-gray-11 hover:bg-red-900/30 hover:text-red-400 disabled:opacity-50"
-                          title="Delete proxy"
-                        >
-                          <TrashIcon className="h-4 w-4" />
-                        </button>
-                      </div>
+                      <Link
+                        href={`/proxies/${tenant.id}`}
+                        className="rounded p-1.5 text-gray-11 hover:bg-gray-4 hover:text-gray-12"
+                        title="View details"
+                      >
+                        <EyeOpenIcon className="h-4 w-4" />
+                      </Link>
                     </td>
                   </tr>
                 );
@@ -326,83 +269,6 @@ export default function TenantsPage() {
         organizationSlug={currentOrg.slug}
         isFirstProxy={isFirstProxy}
       />
-
-      <Dialog.Root
-        open={deleteDialogOpen}
-        onOpenChange={(open) => {
-          setDeleteDialogOpen(open);
-          if (!open) setDeleteConfirmName("");
-        }}
-      >
-        <Dialog.Portal>
-          <Dialog.Overlay className="fixed inset-0 z-50 bg-black/50" />
-          <Dialog.Content className="fixed left-1/2 top-1/2 z-50 w-full max-w-md -translate-x-1/2 -translate-y-1/2 rounded-lg border border-gray-6 bg-gray-2 p-6 shadow-lg">
-            <div className="flex items-center justify-between">
-              <Dialog.Title className="text-lg font-semibold text-red-400">
-                Permanently Delete Proxy
-              </Dialog.Title>
-              <Dialog.Close className="rounded p-1 text-gray-11 hover:bg-gray-4 hover:text-gray-12">
-                <Cross2Icon className="h-4 w-4" />
-              </Dialog.Close>
-            </div>
-
-            <Dialog.Description asChild>
-              <div className="mt-4 space-y-4 text-sm text-gray-11">
-                <p>
-                  This will permanently delete{" "}
-                  <span className="font-medium text-corbits-orange">
-                    {tenantToDelete?.name}
-                  </span>{" "}
-                  and all associated data. This action cannot be undone.
-                </p>
-                <div>
-                  <label
-                    htmlFor="delete-confirm-name"
-                    className="block text-sm text-gray-11"
-                  >
-                    To confirm, type the proxy name below:
-                  </label>
-                  <input
-                    id="delete-confirm-name"
-                    type="text"
-                    value={deleteConfirmName}
-                    onChange={(e) => setDeleteConfirmName(e.target.value)}
-                    placeholder={tenantToDelete?.name}
-                    className="mt-2 w-full rounded-md border border-gray-6 bg-gray-3 px-3 py-2 text-sm text-gray-12 placeholder:text-gray-8 focus:border-gray-7 focus:outline-none focus:ring-1 focus:ring-gray-7"
-                    autoComplete="off"
-                  />
-                </div>
-              </div>
-            </Dialog.Description>
-
-            {deleteError && (
-              <div className="mt-4 flex items-start gap-2 rounded-lg border border-red-800 bg-red-900/20 p-3">
-                <ExclamationTriangleIcon className="h-4 w-4 flex-shrink-0 text-red-400" />
-                <p className="text-sm text-red-300">{deleteError}</p>
-              </div>
-            )}
-
-            <div className="mt-6 flex justify-end gap-3">
-              <button
-                onClick={() => setDeleteDialogOpen(false)}
-                className="rounded-md px-3 py-2 text-sm font-medium text-gray-11 hover:bg-gray-4 hover:text-gray-12"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleDeleteConfirm}
-                disabled={
-                  deletingId !== null ||
-                  deleteConfirmName !== tenantToDelete?.name
-                }
-                className="rounded-md bg-red-600 px-3 py-2 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {deletingId !== null ? "Deleting..." : "Delete"}
-              </button>
-            </div>
-          </Dialog.Content>
-        </Dialog.Portal>
-      </Dialog.Root>
     </div>
   );
 }
