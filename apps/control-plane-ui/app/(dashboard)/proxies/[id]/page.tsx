@@ -4,14 +4,16 @@ import { useState, useMemo } from "react";
 import { useParams, useSearchParams, useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth/context";
 import useSWR from "swr";
-import { api } from "@/lib/api/client";
+import { api, ApiError } from "@/lib/api/client";
 import Link from "next/link";
 import {
   ChevronLeftIcon,
   CopyIcon,
   CheckIcon,
   ExternalLinkIcon,
+  Cross2Icon,
 } from "@radix-ui/react-icons";
+import * as Dialog from "@radix-ui/react-dialog";
 import * as Tabs from "@radix-ui/react-tabs";
 import * as RadixTooltip from "@radix-ui/react-tooltip";
 import {
@@ -170,6 +172,9 @@ export default function ProxyDetailPage() {
         ? "settings"
         : "overview";
   const [copied, setCopied] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [deleteConfirmation, setDeleteConfirmation] = useState("");
+  const [isDeleting, setIsDeleting] = useState(false);
   const { toast } = useToast();
 
   const setActiveTab = (tab: TabType) => {
@@ -273,6 +278,40 @@ export default function ProxyDetailPage() {
     { id: "endpoints", label: "Endpoints" },
     { id: "settings", label: "Settings" },
   ];
+
+  const handleDeleteProxy = async () => {
+    if (!tenant || deleteConfirmation !== tenant.name) return;
+
+    setIsDeleting(true);
+    try {
+      await api.delete(apiEndpoint);
+      setDeleteDialogOpen(false);
+      toast({
+        title: "Proxy deleted",
+        description: `${tenant.name} has been permanently deleted.`,
+        variant: "success",
+      });
+      router.push("/proxies");
+    } catch (err) {
+      if (err instanceof ApiError && err.data) {
+        const data = err.data as { error?: string };
+        toast({
+          title: "Cannot delete proxy",
+          description: data.error || "Failed to delete proxy",
+          variant: "error",
+        });
+      } else {
+        toast({
+          title: "Error",
+          description:
+            err instanceof Error ? err.message : "Failed to delete proxy",
+          variant: "error",
+        });
+      }
+    } finally {
+      setIsDeleting(false);
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -605,9 +644,86 @@ export default function ProxyDetailPage() {
                 </div>
               </dl>
             </div>
+
+            <section className="rounded-lg border border-red-900/50 bg-red-950/20 p-6">
+              <h3 className="mb-2 text-lg font-medium text-red-400">
+                Danger Zone
+              </h3>
+              <p className="mb-4 text-sm text-gray-11">
+                Once you delete a proxy, there is no going back. All endpoints
+                and transaction history will be permanently deleted.
+              </p>
+              <button
+                onClick={() => setDeleteDialogOpen(true)}
+                className="rounded-md border border-red-800 bg-red-900/30 px-4 py-2 text-sm font-medium text-red-400 transition-colors hover:bg-red-900/50"
+              >
+                Delete Proxy
+              </button>
+            </section>
           </div>
         )}
       </div>
+
+      <Dialog.Root
+        open={deleteDialogOpen}
+        onOpenChange={(open) => {
+          setDeleteDialogOpen(open);
+          if (!open) setDeleteConfirmation("");
+        }}
+      >
+        <Dialog.Portal>
+          <Dialog.Overlay className="fixed inset-0 bg-black/60 backdrop-blur-sm" />
+          <Dialog.Content className="fixed left-1/2 top-1/2 w-full max-w-md -translate-x-1/2 -translate-y-1/2 rounded-lg border border-gray-6 bg-gray-1 p-6 shadow-xl">
+            <div className="mb-4 flex items-center justify-between">
+              <Dialog.Title className="text-lg font-semibold text-gray-12">
+                Delete Proxy
+              </Dialog.Title>
+              <Dialog.Close className="rounded p-1 text-gray-11 hover:bg-gray-4 hover:text-gray-12">
+                <Cross2Icon className="h-4 w-4" />
+              </Dialog.Close>
+            </div>
+
+            <div className="space-y-4">
+              <p className="text-sm text-gray-11">
+                This action cannot be undone. This will permanently delete{" "}
+                <span className="font-medium text-gray-12">{tenant.name}</span>{" "}
+                and all associated endpoints.
+              </p>
+
+              <p className="text-sm text-gray-11">
+                Please type{" "}
+                <span className="font-mono text-gray-12">{tenant.name}</span> to
+                confirm.
+              </p>
+
+              <input
+                type="text"
+                value={deleteConfirmation}
+                onChange={(e) => setDeleteConfirmation(e.target.value)}
+                placeholder={tenant.name}
+                className="w-full rounded-md border border-gray-6 bg-gray-2 px-3 py-2 text-sm text-gray-12 placeholder-gray-9 focus:border-red-800 focus:outline-none focus:ring-1 focus:ring-red-800"
+              />
+
+              <div className="flex justify-end gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setDeleteDialogOpen(false)}
+                  className="rounded-md border border-gray-6 px-4 py-2 text-sm text-gray-11 hover:bg-gray-3"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleDeleteProxy}
+                  disabled={isDeleting || deleteConfirmation !== tenant.name}
+                  className="rounded-md bg-red-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-red-700 disabled:opacity-50"
+                >
+                  {isDeleting ? "Deleting..." : "Delete Proxy"}
+                </button>
+              </div>
+            </div>
+          </Dialog.Content>
+        </Dialog.Portal>
+      </Dialog.Root>
     </div>
   );
 }
