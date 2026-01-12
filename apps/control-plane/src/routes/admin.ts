@@ -14,6 +14,7 @@ import {
   deleteHealthCheck,
   deleteNodeDnsRecord,
 } from "../lib/dns.js";
+import { toDomainInfo, type TenantDomainInfo } from "../lib/domain.js";
 import {
   enqueueCertProvisioning,
   enqueueTenantDeletion,
@@ -213,11 +214,17 @@ adminRoutes.get("/organizations/:id", async (c) => {
 
   const tenants = await db
     .selectFrom("tenants")
-    .selectAll()
+    .selectAll("tenants")
     .where("organization_id", "=", id)
     .execute();
 
-  return c.json({ ...org, members, tenants });
+  // Add organization_slug to each tenant for URL generation
+  const tenantsWithSlug = tenants.map((t) => ({
+    ...t,
+    organization_slug: org.slug,
+  }));
+
+  return c.json({ ...org, members, tenants: tenantsWithSlug });
 });
 
 adminRoutes.get("/wallets", async (c) => {
@@ -257,6 +264,7 @@ adminRoutes.get("/tenants", async (c) => {
       "tenants.upstream_auth_header",
       "tenants.upstream_auth_value",
       "tenants.created_at",
+      "tenants.org_slug",
       "organizations.name as organization_name",
       "wallets.name as wallet_name",
       "wallets.funding_status as wallet_funding_status",
@@ -308,21 +316,41 @@ adminRoutes.get("/tenants", async (c) => {
 adminRoutes.get("/tenants/check-name", async (c) => {
   const name = c.req.query("name");
   const excludeId = c.req.query("excludeId");
+  const organizationId = c.req.query("organization_id");
 
   if (!name?.trim()) {
     return c.json({ available: false });
   }
 
-  let query = db
-    .selectFrom("tenants")
-    .select("id")
-    .where("name", "=", name.trim());
+  let existing;
 
-  if (excludeId) {
-    query = query.where("id", "!=", parseInt(excludeId));
+  if (organizationId) {
+    let query = db
+      .selectFrom("tenants")
+      .select("id")
+      .where("name", "=", name.trim())
+      .where("organization_id", "=", parseInt(organizationId))
+      .where("org_slug", "is not", null);
+
+    if (excludeId) {
+      query = query.where("id", "!=", parseInt(excludeId));
+    }
+
+    existing = await query.executeTakeFirst();
+  } else {
+    // legacy format: check against other legacy tenants
+    let query = db
+      .selectFrom("tenants")
+      .select("id")
+      .where("name", "=", name.trim())
+      .where("org_slug", "is", null);
+
+    if (excludeId) {
+      query = query.where("id", "!=", parseInt(excludeId));
+    }
+
+    existing = await query.executeTakeFirst();
   }
-
-  const existing = await query.executeTakeFirst();
 
   return c.json({ available: !existing });
 });
@@ -355,6 +383,21 @@ adminRoutes.post(
       }
     }
 
+    let orgSlug: string | null = null;
+
+    if (body.organization_id) {
+      const org = await db
+        .selectFrom("organizations")
+        .select("slug")
+        .where("id", "=", body.organization_id)
+        .executeTakeFirst();
+
+      if (!org) {
+        return c.json({ error: "Organization not found" }, 404);
+      }
+      orgSlug = org.slug;
+    }
+
     const tenant = await db
       .insertInto("tenants")
       .values({
@@ -366,9 +409,16 @@ adminRoutes.post(
         default_scheme: body.default_scheme ?? "exact",
         upstream_auth_header: body.upstream_auth_header ?? null,
         upstream_auth_value: body.upstream_auth_value ?? null,
+        org_slug: orgSlug,
       })
       .returningAll()
       .executeTakeFirstOrThrow();
+
+    // Build domain info for DNS/cert operations
+    const domainInfo: TenantDomainInfo = {
+      proxyName: sanitizedName,
+      orgSlug,
+    };
 
     const activeNodeIds: number[] = [];
 
@@ -398,7 +448,7 @@ adminRoutes.post(
 
       if (node.public_ip) {
         const healthCheckId = await createHealthCheck(
-          tenant.name,
+          domainInfo,
           node.public_ip,
         );
         if (healthCheckId) {
@@ -410,7 +460,7 @@ adminRoutes.post(
         }
 
         upsertNodeDnsRecord(
-          tenant.name,
+          domainInfo,
           nodeId,
           node.public_ip,
           healthCheckId,
@@ -425,8 +475,8 @@ adminRoutes.post(
     }
 
     if (activeNodeIds.length > 0) {
-      enqueueCertProvisioning(activeNodeIds, tenant.name).catch((err) =>
-        logger.error(`Failed to enqueue cert provisioning: ${err}`),
+      enqueueCertProvisioning(activeNodeIds, sanitizedName, orgSlug).catch(
+        (err) => logger.error(`Failed to enqueue cert provisioning: ${err}`),
       );
     }
 
@@ -458,7 +508,7 @@ adminRoutes.post(
       }
     }
 
-    return c.json(tenant, 201);
+    return c.json({ ...tenant, organization_slug: orgSlug }, 201);
   },
 );
 
@@ -471,7 +521,7 @@ adminRoutes.put(
 
     const tenant = await db
       .selectFrom("tenants")
-      .select(["id", "name", "status"])
+      .select(["id", "name", "status", "org_slug"])
       .where("id", "=", id)
       .executeTakeFirst();
 
@@ -496,12 +546,27 @@ adminRoutes.put(
           );
         }
 
-        const existing = await db
-          .selectFrom("tenants")
-          .select("id")
-          .where("name", "=", nameValidation.sanitized)
-          .where("id", "!=", id)
-          .executeTakeFirst();
+        // Check name collision based on org_slug
+        let existing: { id: number } | undefined;
+        if (tenant.org_slug) {
+          // org_slug: check within same organization
+          existing = await db
+            .selectFrom("tenants")
+            .select(["id"])
+            .where("name", "=", nameValidation.sanitized)
+            .where("org_slug", "=", tenant.org_slug)
+            .where("id", "!=", id)
+            .executeTakeFirst();
+        } else {
+          // legacy: check against all legacy tenants
+          existing = await db
+            .selectFrom("tenants")
+            .select("id")
+            .where("name", "=", nameValidation.sanitized)
+            .where("org_slug", "is", null)
+            .where("id", "!=", id)
+            .executeTakeFirst();
+        }
 
         if (existing) {
           return c.json({ error: "Name already taken" }, 400);
@@ -513,7 +578,12 @@ adminRoutes.put(
           .where("id", "=", id)
           .execute();
 
-        await enqueueTenantRename(id, tenant.name, nameValidation.sanitized);
+        await enqueueTenantRename(
+          id,
+          tenant.name,
+          nameValidation.sanitized,
+          tenant.org_slug ?? null,
+        );
 
         return c.json({
           id: tenant.id,
@@ -554,8 +624,24 @@ adminRoutes.put(
     const updateData: Record<string, unknown> = {};
     if (body.backend_url !== undefined)
       updateData.backend_url = body.backend_url;
-    if (body.organization_id !== undefined)
+    if (body.organization_id !== undefined) {
       updateData.organization_id = body.organization_id;
+      if (body.organization_id === null) {
+        updateData.org_slug = null;
+      } else {
+        const org = await db
+          .selectFrom("organizations")
+          .select(["id", "slug"])
+          .where("id", "=", body.organization_id)
+          .executeTakeFirst();
+
+        if (!org) {
+          return c.json({ error: "Organization not found" }, 404);
+        }
+
+        updateData.org_slug = org.slug;
+      }
+    }
     if (body.is_active !== undefined) updateData.is_active = body.is_active;
     if (body.upstream_auth_header !== undefined)
       updateData.upstream_auth_header = body.upstream_auth_header;
@@ -630,6 +716,7 @@ adminRoutes.delete("/tenants/:id", async (c) => {
       "tenants.name",
       "tenants.status",
       "tenants.wallet_id",
+      "tenants.org_slug",
       "wallets.wallet_config",
     ])
     .where("tenants.id", "=", id)
@@ -666,7 +753,7 @@ adminRoutes.delete("/tenants/:id", async (c) => {
     .where("id", "=", id)
     .execute();
 
-  await enqueueTenantDeletion(tenant.id, tenant.name);
+  await enqueueTenantDeletion(tenant.id, tenant.name, tenant.org_slug ?? null);
 
   return c.json({ success: true });
 });
@@ -681,13 +768,15 @@ adminRoutes.post(
 
     const tenant = await db
       .selectFrom("tenants")
-      .select(["id", "name"])
+      .select(["id", "name", "org_slug"])
       .where("id", "=", tenantId)
       .executeTakeFirst();
 
     if (!tenant) {
       return c.json({ error: "Tenant not found" }, 404);
     }
+
+    const domainInfo = toDomainInfo(tenant);
 
     const node = await db
       .selectFrom("nodes")
@@ -729,10 +818,7 @@ adminRoutes.post(
       .executeTakeFirstOrThrow();
 
     if (node.public_ip) {
-      const healthCheckId = await createHealthCheck(
-        tenant.name,
-        node.public_ip,
-      );
+      const healthCheckId = await createHealthCheck(domainInfo, node.public_ip);
       if (healthCheckId) {
         await db
           .updateTable("tenant_nodes")
@@ -742,7 +828,7 @@ adminRoutes.post(
       }
 
       upsertNodeDnsRecord(
-        tenant.name,
+        domainInfo,
         nodeId,
         node.public_ip,
         healthCheckId,
@@ -750,8 +836,8 @@ adminRoutes.post(
     }
 
     if (node.status === "active") {
-      enqueueCertProvisioning([nodeId], tenant.name).catch((err) =>
-        logger.error(`Failed to enqueue cert provisioning: ${err}`),
+      enqueueCertProvisioning([nodeId], tenant.name, domainInfo.orgSlug).catch(
+        (err) => logger.error(`Failed to enqueue cert provisioning: ${err}`),
       );
     }
 
@@ -788,13 +874,15 @@ adminRoutes.delete("/tenants/:id/nodes/:nodeId", async (c) => {
 
   const tenant = await db
     .selectFrom("tenants")
-    .select(["name"])
+    .select(["name", "org_slug"])
     .where("id", "=", tenantId)
     .executeTakeFirst();
 
   if (!tenant) {
     return c.json({ error: "Tenant not found" }, 404);
   }
+
+  const domainInfo = toDomainInfo(tenant);
 
   await db
     .updateTable("tenant_nodes")
@@ -808,7 +896,7 @@ adminRoutes.delete("/tenants/:id/nodes/:nodeId", async (c) => {
       if (tenantNode.health_check_id) {
         await deleteHealthCheck(tenantNode.health_check_id);
       }
-      await deleteNodeDnsRecord(tenant.name, nodeId);
+      await deleteNodeDnsRecord(domainInfo, nodeId);
 
       await db
         .deleteFrom("tenant_nodes")
@@ -975,6 +1063,46 @@ adminRoutes.get("/transactions", async (c) => {
   });
 });
 
+adminRoutes.get("/tenants/:id/transactions", async (c) => {
+  const tenantId = parseInt(c.req.param("id"));
+  const { limit, offset } = parsePagination(
+    c.req.query("limit"),
+    c.req.query("offset"),
+    10,
+  );
+
+  const transactions = await db
+    .selectFrom("transactions")
+    .select([
+      "id",
+      "endpoint_id",
+      "tenant_id",
+      "amount_usdc",
+      "tx_hash",
+      "network",
+      "request_path",
+      "created_at",
+    ])
+    .where("tenant_id", "=", tenantId)
+    .orderBy("created_at", "desc")
+    .limit(limit)
+    .offset(offset)
+    .execute();
+
+  const countResult = await db
+    .selectFrom("transactions")
+    .select(db.fn.count<number>("id").as("count"))
+    .where("tenant_id", "=", tenantId)
+    .executeTakeFirst();
+
+  return c.json({
+    transactions,
+    total: countResult?.count || 0,
+    limit,
+    offset,
+  });
+});
+
 adminRoutes.get("/tenants/:id/corbits-transactions", async (c) => {
   const tenantId = parseInt(c.req.param("id"));
   const { limit, offset } = parsePagination(
@@ -1076,6 +1204,7 @@ adminRoutes.get("/tenants-with-wallets", async (c) => {
       "tenants.id",
       "tenants.name",
       "tenants.organization_id",
+      "tenants.org_slug",
       "organizations.name as organization_name",
     ])
     .where("tenants.wallet_id", "is not", null)

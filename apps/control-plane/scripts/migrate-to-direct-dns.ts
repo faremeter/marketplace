@@ -3,6 +3,7 @@ import "dotenv/config";
 import { readFileSync } from "fs";
 import { createDatabase } from "../src/db/client.js";
 import { upsertNodeDnsRecord, createHealthCheck } from "../src/lib/dns.js";
+import { toDomainInfo } from "../src/lib/domain.js";
 
 async function triggerCertProvisioningHttp(
   internalIp: string,
@@ -137,9 +138,12 @@ async function main() {
 
       console.log(`  Processing node ${node.name} (${node.publicIp})...`);
 
+      // Migration script: all existing tenants use legacy format (org_slug = null)
+      const domainInfo = toDomainInfo({ name: tenant.name, org_slug: null });
+
       // Step 1: Create health check
       console.log(`    Creating health check...`);
-      const healthCheckId = await createHealthCheck(tenant.name, node.publicIp);
+      const healthCheckId = await createHealthCheck(domainInfo, node.publicIp);
       if (healthCheckId) {
         await db
           .updateTable("tenant_nodes")
@@ -154,7 +158,7 @@ async function main() {
       // Step 2: Create weighted DNS record with health check
       console.log(`    Creating DNS record...`);
       const dnsSuccess = await upsertNodeDnsRecord(
-        tenant.name,
+        domainInfo,
         node.id,
         node.publicIp,
         healthCheckId,

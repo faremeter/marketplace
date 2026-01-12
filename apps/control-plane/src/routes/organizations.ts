@@ -28,6 +28,7 @@ import {
 } from "../lib/corbits-dash.js";
 import { validateProxyName } from "../lib/proxy-name.js";
 import { slugify } from "../lib/slug.js";
+import { toDomainInfo } from "../lib/domain.js";
 import {
   getOrganizationEarnings,
   getTenantEarnings,
@@ -237,6 +238,24 @@ organizationsRoutes.delete("/:id", modifyResourceLimiter, async (c) => {
     return c.json({ error: "Only owners can delete the organization" }, 403);
   }
 
+  // Check for org_slug tenants that would be orphaned
+  const orgSlugTenants = await db
+    .selectFrom("tenants")
+    .select("id")
+    .where("organization_id", "=", id)
+    .where("org_slug", "is not", null)
+    .execute();
+
+  if (orgSlugTenants.length > 0) {
+    return c.json(
+      {
+        error:
+          "Cannot delete organization with active proxies. Delete proxies first.",
+      },
+      400,
+    );
+  }
+
   await db.deleteFrom("organizations").where("id", "=", id).execute();
 
   return c.json({ deleted: true });
@@ -413,6 +432,7 @@ organizationsRoutes.get("/:id/tenants", async (c) => {
       "tenants.created_at",
       "tenants.default_price_usdc",
       "tenants.default_scheme",
+      "tenants.org_slug",
       "wallets.name as wallet_name",
       "wallets.funding_status as wallet_funding_status",
     ])
@@ -596,6 +616,7 @@ organizationsRoutes.delete(
       return c.json({ error: "Organization not found" }, 404);
     }
 
+    // Fetch tenant with org slug for domain info
     const tenant = await db
       .selectFrom("tenants")
       .leftJoin("wallets", "wallets.id", "tenants.wallet_id")
@@ -605,6 +626,7 @@ organizationsRoutes.delete(
         "tenants.status",
         "tenants.wallet_id",
         "tenants.organization_id",
+        "tenants.org_slug",
         "wallets.wallet_config",
       ])
       .where("tenants.id", "=", tenantId)
@@ -641,7 +663,11 @@ organizationsRoutes.delete(
       .where("id", "=", tenantId)
       .execute();
 
-    await enqueueTenantDeletion(tenant.id, tenant.name);
+    await enqueueTenantDeletion(
+      tenant.id,
+      tenant.name,
+      tenant.org_slug ?? null,
+    );
 
     return c.json({ success: true });
   },
@@ -667,13 +693,16 @@ organizationsRoutes.get("/:id/tenants/check-name", async (c) => {
     return c.json({ available: false });
   }
 
-  const existing = await db
+  const trimmedName = name.trim();
+
+  const existingInOrg = await db
     .selectFrom("tenants")
     .select("id")
-    .where("name", "=", name.trim())
+    .where("name", "=", trimmedName)
+    .where("organization_id", "=", orgId)
     .executeTakeFirst();
 
-  return c.json({ available: !existing });
+  return c.json({ available: !existingInOrg });
 });
 
 organizationsRoutes.get("/:id/can-create-proxy", async (c) => {
@@ -793,11 +822,37 @@ organizationsRoutes.post(
       return c.json({ error: "Organization not found" }, 404);
     }
 
+    // Fetch organization slug for the new URL format
+    const org = await db
+      .selectFrom("organizations")
+      .select(["id", "slug"])
+      .where("id", "=", orgId)
+      .executeTakeFirst();
+
+    if (!org) {
+      return c.json({ error: "Organization not found" }, 404);
+    }
+
     const nameValidation = validateProxyName(body.name);
     if (!nameValidation.valid) {
       return c.json({ error: nameValidation.error }, 400);
     }
     const sanitizedName = nameValidation.sanitized;
+
+    // Check per-organization uniqueness
+    const existingTenant = await db
+      .selectFrom("tenants")
+      .select("id")
+      .where("name", "=", sanitizedName)
+      .where("organization_id", "=", orgId)
+      .executeTakeFirst();
+
+    if (existingTenant) {
+      return c.json(
+        { error: "A proxy with this name already exists in this organization" },
+        409,
+      );
+    }
 
     const wallet = await db
       .selectFrom("wallets")
@@ -844,14 +899,20 @@ organizationsRoutes.post(
         default_scheme: body.default_scheme ?? "exact",
         upstream_auth_header: body.upstream_auth_header ?? null,
         upstream_auth_value: body.upstream_auth_value ?? null,
+        org_slug: org.slug,
       })
-      .onConflict((oc) => oc.column("name").doNothing())
       .returningAll()
       .executeTakeFirst();
 
     if (!tenant) {
-      return c.json({ error: "A proxy with this name already exists" }, 409);
+      return c.json({ error: "Failed to create proxy" }, 500);
     }
+
+    // Build domain info for DNS/cert operations
+    const domainInfo = toDomainInfo({
+      name: sanitizedName,
+      org_slug: org.slug,
+    });
 
     const activeNodeIds: number[] = [];
 
@@ -873,7 +934,7 @@ organizationsRoutes.post(
 
       if (node.public_ip) {
         const healthCheckId = await createHealthCheck(
-          tenant.name,
+          domainInfo,
           node.public_ip,
         );
         if (healthCheckId) {
@@ -885,7 +946,7 @@ organizationsRoutes.post(
         }
 
         upsertNodeDnsRecord(
-          tenant.name,
+          domainInfo,
           nodeId,
           node.public_ip,
           healthCheckId,
@@ -900,8 +961,8 @@ organizationsRoutes.post(
     }
 
     if (activeNodeIds.length > 0) {
-      enqueueCertProvisioning(activeNodeIds, tenant.name).catch((err) =>
-        logger.error(`Failed to enqueue cert provisioning: ${err}`),
+      enqueueCertProvisioning(activeNodeIds, tenant.name, org.slug).catch(
+        (err) => logger.error(`Failed to enqueue cert provisioning: ${err}`),
       );
     }
 

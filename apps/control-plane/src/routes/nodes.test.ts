@@ -56,7 +56,12 @@ async function createOrg(name: string, slug: string) {
 async function createTenant(
   orgId: number,
   name: string,
-  opts: { is_active?: boolean; status?: string; wallet_id?: number } = {},
+  opts: {
+    is_active?: boolean;
+    status?: string;
+    wallet_id?: number;
+    org_slug?: string | null;
+  } = {},
 ) {
   return db
     .insertInto("tenants")
@@ -69,6 +74,7 @@ async function createTenant(
       is_active: opts.is_active ?? true,
       status: opts.status ?? "active",
       wallet_id: opts.wallet_id ?? null,
+      org_slug: opts.org_slug ?? null,
     })
     .returning(["id"])
     .executeTakeFirstOrThrow();
@@ -323,8 +329,8 @@ await t.test("GET /api/admin/nodes/:id/sync", async (t) => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const data = (await res.json()) as any;
       t.equal(data.tenant_count, 1);
-      t.ok(data.config["my-tenant"]);
-      t.equal(data.config["my-tenant"].endpoints.length, 1);
+      t.ok(data.config["my-tenant.api.corbits.dev"]);
+      t.equal(data.config["my-tenant.api.corbits.dev"].endpoints.length, 1);
     },
   );
 
@@ -408,9 +414,9 @@ await t.test("GET /api/admin/nodes/:id/sync", async (t) => {
     t.equal(res.status, 200);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const data = (await res.json()) as any;
-    t.equal(data.config["my-tenant"].endpoints.length, 1);
+    t.equal(data.config["my-tenant.api.corbits.dev"].endpoints.length, 1);
     t.equal(
-      data.config["my-tenant"].endpoints[0].path_pattern,
+      data.config["my-tenant.api.corbits.dev"].endpoints[0].path_pattern,
       "^/api/active$",
     );
   });
@@ -460,7 +466,7 @@ await t.test("GET /api/admin/nodes/:id/sync", async (t) => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const data = (await res.json()) as any;
 
-    const tenantConfig = data.config["configured-tenant"];
+    const tenantConfig = data.config["configured-tenant.api.corbits.dev"];
     t.ok(tenantConfig, "tenant config exists");
     t.equal(tenantConfig.backend_url, "http://backend.example.com");
     t.equal(tenantConfig.default_price_usdc, 0.05);
@@ -523,7 +529,7 @@ await t.test("GET /api/admin/nodes/:id/sync", async (t) => {
     t.equal(res.status, 200);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const data = (await res.json()) as any;
-    const endpoints = data.config["my-tenant"].endpoints;
+    const endpoints = data.config["my-tenant.api.corbits.dev"].endpoints;
     t.equal(endpoints.length, 3);
     t.equal(endpoints[0].priority, 1);
     t.equal(endpoints[1].priority, 50);
@@ -537,6 +543,182 @@ await t.test("GET /api/admin/nodes/:id/sync", async (t) => {
     });
     t.equal(res.status, 404);
   });
+
+  await t.test(
+    "sync config uses correct domain for org_slug format tenant",
+    async (t) => {
+      const admin = await createUser("admin@example.com", true);
+      const node = await createNode("test-node");
+      const org = await createOrg("Acme Corp", "acme");
+      const wallet = await createWallet(org.id, "wallet", true);
+      const tenant = await createTenant(org.id, "my-api", {
+        wallet_id: wallet.id,
+        status: "active",
+        is_active: true,
+        org_slug: "acme",
+      });
+      await linkTenantToNode(tenant.id, node.id);
+
+      const res = await app.request(`/api/admin/nodes/${node.id}/sync`, {
+        headers: { Cookie: `auth_token=${admin.token}` },
+      });
+      t.equal(res.status, 200);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const data = (await res.json()) as any;
+      t.equal(data.tenant_count, 1);
+      t.ok(data.config["my-api.acme.api.corbits.dev"]);
+      t.notOk(data.config["my-api.api.corbits.dev"]);
+    },
+  );
+
+  await t.test(
+    "sync config includes name, proxy_name, domain, org_slug for legacy tenant",
+    async (t) => {
+      const admin = await createUser("admin@example.com", true);
+      const node = await createNode("test-node");
+      const org = await createOrg("Team", "team");
+      const wallet = await createWallet(org.id, "wallet", true);
+      const tenant = await createTenant(org.id, "legacy-api", {
+        wallet_id: wallet.id,
+        status: "active",
+        is_active: true,
+        org_slug: null,
+      });
+      await linkTenantToNode(tenant.id, node.id);
+
+      const res = await app.request(`/api/admin/nodes/${node.id}/sync`, {
+        headers: { Cookie: `auth_token=${admin.token}` },
+      });
+      t.equal(res.status, 200);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const data = (await res.json()) as any;
+      const tenantConfig = data.config["legacy-api.api.corbits.dev"];
+      t.ok(tenantConfig, "tenant config exists");
+      t.equal(tenantConfig.name, "legacy-api");
+      t.equal(tenantConfig.proxy_name, "legacy-api");
+      t.equal(tenantConfig.domain, "legacy-api.api.corbits.dev");
+      t.equal(tenantConfig.org_slug, null);
+    },
+  );
+
+  await t.test(
+    "sync config includes name, proxy_name, domain, org_slug for org_slug tenant",
+    async (t) => {
+      const admin = await createUser("admin@example.com", true);
+      const node = await createNode("test-node");
+      const org = await createOrg("Acme Corp", "acme");
+      const wallet = await createWallet(org.id, "wallet", true);
+      const tenant = await createTenant(org.id, "org-api", {
+        wallet_id: wallet.id,
+        status: "active",
+        is_active: true,
+        org_slug: "acme",
+      });
+      await linkTenantToNode(tenant.id, node.id);
+
+      const res = await app.request(`/api/admin/nodes/${node.id}/sync`, {
+        headers: { Cookie: `auth_token=${admin.token}` },
+      });
+      t.equal(res.status, 200);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const data = (await res.json()) as any;
+      const tenantConfig = data.config["org-api.acme.api.corbits.dev"];
+      t.ok(tenantConfig, "tenant config exists");
+      t.equal(tenantConfig.name, "org-api");
+      t.equal(tenantConfig.proxy_name, "org-api");
+      t.equal(tenantConfig.domain, "org-api.acme.api.corbits.dev");
+      t.equal(tenantConfig.org_slug, "acme");
+    },
+  );
+
+  await t.test(
+    "multiple tenants with different formats on same node",
+    async (t) => {
+      const admin = await createUser("admin@example.com", true);
+      const node = await createNode("test-node");
+      const org1 = await createOrg("Org One", "org-one");
+      const org2 = await createOrg("Org Two", "org-two");
+      const wallet1 = await createWallet(org1.id, "wallet1", true);
+      const wallet2 = await createWallet(org2.id, "wallet2", true);
+
+      const legacyTenant = await createTenant(org1.id, "legacy-svc", {
+        wallet_id: wallet1.id,
+        status: "active",
+        is_active: true,
+        org_slug: null,
+      });
+      const orgSlugTenant = await createTenant(org2.id, "org-svc", {
+        wallet_id: wallet2.id,
+        status: "active",
+        is_active: true,
+        org_slug: "org-two",
+      });
+
+      await linkTenantToNode(legacyTenant.id, node.id);
+      await linkTenantToNode(orgSlugTenant.id, node.id);
+
+      const res = await app.request(`/api/admin/nodes/${node.id}/sync`, {
+        headers: { Cookie: `auth_token=${admin.token}` },
+      });
+      t.equal(res.status, 200);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const data = (await res.json()) as any;
+      t.equal(data.tenant_count, 2);
+
+      // Legacy tenant uses simple domain
+      t.ok(data.config["legacy-svc.api.corbits.dev"]);
+      t.equal(data.config["legacy-svc.api.corbits.dev"].org_slug, null);
+
+      // org_slug tenant uses org-qualified domain
+      t.ok(data.config["org-svc.org-two.api.corbits.dev"]);
+      t.equal(
+        data.config["org-svc.org-two.api.corbits.dev"].org_slug,
+        "org-two",
+      );
+    },
+  );
+
+  await t.test(
+    "same tenant name in different orgs with org_slug format",
+    async (t) => {
+      const admin = await createUser("admin@example.com", true);
+      const node = await createNode("test-node");
+      const org1 = await createOrg("Org One", "org-one");
+      const org2 = await createOrg("Org Two", "org-two");
+      const wallet1 = await createWallet(org1.id, "wallet1", true);
+      const wallet2 = await createWallet(org2.id, "wallet2", true);
+
+      const tenant1 = await createTenant(org1.id, "api", {
+        wallet_id: wallet1.id,
+        status: "active",
+        is_active: true,
+        org_slug: "org-one",
+      });
+      const tenant2 = await createTenant(org2.id, "api", {
+        wallet_id: wallet2.id,
+        status: "active",
+        is_active: true,
+        org_slug: "org-two",
+      });
+
+      await linkTenantToNode(tenant1.id, node.id);
+      await linkTenantToNode(tenant2.id, node.id);
+
+      const res = await app.request(`/api/admin/nodes/${node.id}/sync`, {
+        headers: { Cookie: `auth_token=${admin.token}` },
+      });
+      t.equal(res.status, 200);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const data = (await res.json()) as any;
+      t.equal(data.tenant_count, 2);
+
+      // Both have same name but different domains
+      t.ok(data.config["api.org-one.api.corbits.dev"]);
+      t.ok(data.config["api.org-two.api.corbits.dev"]);
+      t.equal(data.config["api.org-one.api.corbits.dev"].org_slug, "org-one");
+      t.equal(data.config["api.org-two.api.corbits.dev"].org_slug, "org-two");
+    },
+  );
 });
 
 await t.test("PUT /api/admin/nodes/:id", async (t) => {

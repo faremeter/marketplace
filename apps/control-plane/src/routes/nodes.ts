@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import { db } from "../db/instance.js";
 import { regenWireguardConfig } from "../lib/wireguard.js";
 import { deleteNodeDnsRecord, deleteHealthCheck } from "../lib/dns.js";
+import { toDomainInfo, buildTenantDomain } from "../lib/domain.js";
 import { logger } from "../logger.js";
 import { enqueueCertProvisioning } from "../lib/queue.js";
 import { requireAdmin } from "../middleware/auth.js";
@@ -107,6 +108,7 @@ nodesRoutes.get("/:id/sync", async (c) => {
       "tenants.default_scheme",
       "tenants.upstream_auth_header",
       "tenants.upstream_auth_value",
+      "tenants.org_slug",
       "wallets.wallet_config",
     ])
     .where("tenant_nodes.node_id", "=", id)
@@ -125,7 +127,12 @@ nodesRoutes.get("/:id/sync", async (c) => {
       .orderBy("priority", "asc")
       .execute();
 
-    config[tenant.name] = {
+    const domain = buildTenantDomain(toDomainInfo(tenant));
+    config[domain] = {
+      name: tenant.name,
+      proxy_name: tenant.name,
+      domain,
+      org_slug: tenant.org_slug ?? null,
       backend_url: tenant.backend_url,
       wallet_config: tenant.wallet_config,
       default_price_usdc: tenant.default_price_usdc,
@@ -191,12 +198,16 @@ nodesRoutes.put(
       const assignedTenants = await db
         .selectFrom("tenant_nodes")
         .innerJoin("tenants", "tenants.id", "tenant_nodes.tenant_id")
-        .select(["tenants.name"])
+        .select(["tenants.name", "tenants.org_slug"])
         .where("tenant_nodes.node_id", "=", id)
         .execute();
 
-      for (const { name } of assignedTenants) {
-        enqueueCertProvisioning([id], name).catch((err) =>
+      for (const tenant of assignedTenants) {
+        enqueueCertProvisioning(
+          [id],
+          tenant.name,
+          tenant.org_slug ?? null,
+        ).catch((err) =>
           logger.error(`Failed to enqueue cert provisioning: ${err}`),
         );
       }
@@ -212,7 +223,11 @@ nodesRoutes.delete("/:id", async (c) => {
   const affectedTenants = await db
     .selectFrom("tenant_nodes")
     .innerJoin("tenants", "tenants.id", "tenant_nodes.tenant_id")
-    .select(["tenants.name as tenantName", "tenant_nodes.health_check_id"])
+    .select([
+      "tenants.name",
+      "tenants.org_slug",
+      "tenant_nodes.health_check_id",
+    ])
     .where("tenant_nodes.node_id", "=", id)
     .execute();
 
@@ -230,13 +245,13 @@ nodesRoutes.delete("/:id", async (c) => {
     await regenWireguardConfig();
   }
 
-  for (const { tenantName, health_check_id } of affectedTenants) {
-    deleteNodeDnsRecord(tenantName, id).catch((err) =>
+  for (const tenant of affectedTenants) {
+    deleteNodeDnsRecord(toDomainInfo(tenant), id).catch((err) =>
       logger.error(`Failed to delete DNS record: ${err}`),
     );
 
-    if (health_check_id) {
-      deleteHealthCheck(health_check_id).catch((err) =>
+    if (tenant.health_check_id) {
+      deleteHealthCheck(tenant.health_check_id).catch((err) =>
         logger.error(`Failed to delete health check: ${err}`),
       );
     }

@@ -717,33 +717,141 @@ await t.test("GET /api/organizations/:id/tenants/check-name", async (t) => {
     t.equal(data.available, true);
   });
 
-  await t.test("returns available false for used name", async (t) => {
-    const owner = await createUser("owner@example.com");
-    const org = await createOrg("Team", "team");
-    await addMember(owner.id, org.id, "owner");
+  await t.test(
+    "returns available false for name used in same org",
+    async (t) => {
+      const owner = await createUser("owner@example.com");
+      const org = await createOrg("Team", "team");
+      await addMember(owner.id, org.id, "owner");
 
-    await db
-      .insertInto("tenants")
-      .values({
-        name: "existing-proxy",
-        backend_url: "http://backend.com",
-        default_price_usdc: 0.01,
-        default_scheme: "exact",
-      })
-      .execute();
+      await db
+        .insertInto("tenants")
+        .values({
+          name: "existing-proxy",
+          organization_id: org.id,
+          org_slug: "team",
+          backend_url: "http://backend.com",
+          default_price_usdc: 0.01,
+          default_scheme: "exact",
+        })
+        .execute();
 
-    const res = await app.request(
-      `/api/organizations/${org.id}/tenants/check-name?name=existing-proxy`,
-      {
-        headers: { Cookie: `auth_token=${owner.token}` },
-      },
-    );
+      const res = await app.request(
+        `/api/organizations/${org.id}/tenants/check-name?name=existing-proxy`,
+        {
+          headers: { Cookie: `auth_token=${owner.token}` },
+        },
+      );
 
-    t.equal(res.status, 200);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data = (await res.json()) as any;
-    t.equal(data.available, false);
-  });
+      t.equal(res.status, 200);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const data = (await res.json()) as any;
+      t.equal(data.available, false);
+    },
+  );
+
+  await t.test(
+    "returns available for name used by legacy tenant (no conflict)",
+    async (t) => {
+      const owner = await createUser("owner@example.com");
+      const org = await createOrg("Team", "team");
+      await addMember(owner.id, org.id, "owner");
+
+      await db
+        .insertInto("tenants")
+        .values({
+          name: "legacy-api",
+          backend_url: "http://backend.com",
+          default_price_usdc: 0.01,
+          default_scheme: "exact",
+          org_slug: null,
+        })
+        .execute();
+
+      const res = await app.request(
+        `/api/organizations/${org.id}/tenants/check-name?name=legacy-api`,
+        {
+          headers: { Cookie: `auth_token=${owner.token}` },
+        },
+      );
+
+      t.equal(res.status, 200);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const data = (await res.json()) as any;
+      t.equal(data.available, true);
+    },
+  );
+
+  await t.test(
+    "returns available for name used in different org with org_slug format",
+    async (t) => {
+      const owner = await createUser("owner@example.com");
+      const org1 = await createOrg("Org One", "org-one");
+      const org2 = await createOrg("Org Two", "org-two");
+      await addMember(owner.id, org1.id, "owner");
+      await addMember(owner.id, org2.id, "owner");
+
+      // Create org_slug tenant in org1
+      await db
+        .insertInto("tenants")
+        .values({
+          name: "shared-api",
+          organization_id: org1.id,
+          backend_url: "http://backend.com",
+          default_price_usdc: 0.01,
+          default_scheme: "exact",
+          org_slug: "org-one",
+        })
+        .execute();
+
+      // Check availability in org2
+      const res = await app.request(
+        `/api/organizations/${org2.id}/tenants/check-name?name=shared-api`,
+        {
+          headers: { Cookie: `auth_token=${owner.token}` },
+        },
+      );
+
+      t.equal(res.status, 200);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const data = (await res.json()) as any;
+      t.equal(data.available, true);
+    },
+  );
+
+  await t.test(
+    "returns unavailable for name used in same org with org_slug format",
+    async (t) => {
+      const owner = await createUser("owner@example.com");
+      const org = await createOrg("Team", "team");
+      await addMember(owner.id, org.id, "owner");
+
+      // Create org_slug tenant in same org
+      await db
+        .insertInto("tenants")
+        .values({
+          name: "taken-api",
+          organization_id: org.id,
+          backend_url: "http://backend.com",
+          default_price_usdc: 0.01,
+          default_scheme: "exact",
+          org_slug: "team",
+        })
+        .execute();
+
+      const res = await app.request(
+        `/api/organizations/${org.id}/tenants/check-name?name=taken-api`,
+        {
+          headers: { Cookie: `auth_token=${owner.token}` },
+        },
+      );
+
+      t.equal(res.status, 200);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const data = (await res.json()) as any;
+      t.equal(data.available, false);
+    },
+  );
 });
 
 await t.test("GET /api/organizations/:id/can-create-proxy", async (t) => {
@@ -1862,6 +1970,204 @@ await t.test("POST /api/organizations/:id/tenants", async (t) => {
     const data = (await res.json()) as any;
     t.ok(data.error.includes("already exists"));
   });
+
+  await t.test("new proxy has org_slug set from organization", async (t) => {
+    const owner = await createUser("owner@example.com");
+    const org = await createOrg("Team", "team");
+    await addMember(owner.id, org.id, "owner");
+
+    const wallet = await db
+      .insertInto("wallets")
+      .values({
+        name: "Test Wallet",
+        organization_id: org.id,
+        wallet_config: JSON.stringify({ type: "solana" }),
+      })
+      .returning("id")
+      .executeTakeFirstOrThrow();
+
+    await db
+      .insertInto("nodes")
+      .values([
+        {
+          name: "node1",
+          internal_ip: "10.0.0.1",
+          public_ip: "1.2.3.4",
+          status: "active",
+        },
+        {
+          name: "node2",
+          internal_ip: "10.0.0.2",
+          public_ip: "2.3.4.5",
+          status: "active",
+        },
+      ])
+      .execute();
+
+    const res = await app.request(`/api/organizations/${org.id}/tenants`, {
+      method: "POST",
+      headers: {
+        Cookie: `auth_token=${owner.token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        name: "new-proxy",
+        backend_url: "http://backend.com",
+        wallet_id: wallet.id,
+      }),
+    });
+
+    t.equal(res.status, 201);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const data = (await res.json()) as any;
+    t.equal(data.org_slug, "team");
+  });
+
+  await t.test(
+    "allows same name as org_slug proxy in different org",
+    async (t) => {
+      const owner = await createUser("owner@example.com");
+      const org1 = await createOrg("Team One", "team-one");
+      const org2 = await createOrg("Team Two", "team-two");
+      await addMember(owner.id, org1.id, "owner");
+      await addMember(owner.id, org2.id, "owner");
+
+      const wallet1 = await db
+        .insertInto("wallets")
+        .values({
+          name: "Wallet 1",
+          organization_id: org1.id,
+          wallet_config: JSON.stringify({ type: "solana" }),
+        })
+        .returning("id")
+        .executeTakeFirstOrThrow();
+
+      const wallet2 = await db
+        .insertInto("wallets")
+        .values({
+          name: "Wallet 2",
+          organization_id: org2.id,
+          wallet_config: JSON.stringify({ type: "solana" }),
+        })
+        .returning("id")
+        .executeTakeFirstOrThrow();
+
+      await db
+        .insertInto("nodes")
+        .values([
+          {
+            name: "node1",
+            internal_ip: "10.0.0.1",
+            public_ip: "1.2.3.4",
+            status: "active",
+          },
+          {
+            name: "node2",
+            internal_ip: "10.0.0.2",
+            public_ip: "2.3.4.5",
+            status: "active",
+          },
+        ])
+        .execute();
+
+      // Create proxy in org1
+      const res1 = await app.request(`/api/organizations/${org1.id}/tenants`, {
+        method: "POST",
+        headers: {
+          Cookie: `auth_token=${owner.token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          name: "shared-api",
+          backend_url: "http://backend1.com",
+          wallet_id: wallet1.id,
+        }),
+      });
+      t.equal(res1.status, 201);
+
+      // Create proxy with same name in org2
+      const res2 = await app.request(`/api/organizations/${org2.id}/tenants`, {
+        method: "POST",
+        headers: {
+          Cookie: `auth_token=${owner.token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          name: "shared-api",
+          backend_url: "http://backend2.com",
+          wallet_id: wallet2.id,
+        }),
+      });
+      t.equal(res2.status, 201);
+    },
+  );
+
+  await t.test(
+    "rejects same name as existing org_slug proxy in same org",
+    async (t) => {
+      const owner = await createUser("owner@example.com");
+      const org = await createOrg("Team", "team");
+      await addMember(owner.id, org.id, "owner");
+
+      const wallet = await db
+        .insertInto("wallets")
+        .values({
+          name: "Test Wallet",
+          organization_id: org.id,
+          wallet_config: JSON.stringify({ type: "solana" }),
+        })
+        .returning("id")
+        .executeTakeFirstOrThrow();
+
+      await db
+        .insertInto("nodes")
+        .values([
+          {
+            name: "node1",
+            internal_ip: "10.0.0.1",
+            public_ip: "1.2.3.4",
+            status: "active",
+          },
+          {
+            name: "node2",
+            internal_ip: "10.0.0.2",
+            public_ip: "2.3.4.5",
+            status: "active",
+          },
+        ])
+        .execute();
+
+      // Create first proxy
+      const res1 = await app.request(`/api/organizations/${org.id}/tenants`, {
+        method: "POST",
+        headers: {
+          Cookie: `auth_token=${owner.token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          name: "my-api",
+          backend_url: "http://backend.com",
+          wallet_id: wallet.id,
+        }),
+      });
+      t.equal(res1.status, 201);
+
+      // Try to create duplicate in same org
+      const res2 = await app.request(`/api/organizations/${org.id}/tenants`, {
+        method: "POST",
+        headers: {
+          Cookie: `auth_token=${owner.token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          name: "my-api",
+          backend_url: "http://backend2.com",
+          wallet_id: wallet.id,
+        }),
+      });
+      t.equal(res2.status, 409);
+    },
+  );
 });
 
 await t.test(

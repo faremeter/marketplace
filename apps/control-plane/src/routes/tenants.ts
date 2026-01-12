@@ -9,6 +9,7 @@ import {
   createHealthCheck,
   deleteHealthCheck,
 } from "../lib/dns.js";
+import { toDomainInfo } from "../lib/domain.js";
 import { enqueueCertProvisioning } from "../lib/queue.js";
 import { validateProxyName } from "../lib/proxy-name.js";
 import { requireAdmin } from "../middleware/auth.js";
@@ -58,17 +59,34 @@ tenantsRoutes.post(
     }
     const sanitizedName = nameValidation.sanitized;
 
+    let orgSlug: string | null = null;
+
+    if (body.organization_id) {
+      const org = await db
+        .selectFrom("organizations")
+        .select(["id", "slug"])
+        .where("id", "=", body.organization_id)
+        .executeTakeFirst();
+
+      if (!org) {
+        return c.json({ error: "Organization not found" }, 404);
+      }
+      orgSlug = org.slug;
+    }
+
     const result = await db
       .insertInto("tenants")
       .values({
         name: sanitizedName,
         backend_url: body.backend_url,
+        organization_id: body.organization_id ?? null,
         wallet_id: body.wallet_id ?? null,
         default_price_usdc: body.default_price_usdc ?? 0,
         default_scheme: body.default_scheme ?? "exact",
         upstream_auth_header: body.upstream_auth_header ?? null,
         upstream_auth_value: body.upstream_auth_value ?? null,
         is_active: body.is_active ?? true,
+        org_slug: orgSlug,
       })
       .returningAll()
       .executeTakeFirstOrThrow();
@@ -107,8 +125,24 @@ tenantsRoutes.put(
     if (body.name !== undefined) updateData.name = body.name;
     if (body.backend_url !== undefined)
       updateData.backend_url = body.backend_url;
-    if (body.organization_id !== undefined)
+    if (body.organization_id !== undefined) {
       updateData.organization_id = body.organization_id;
+      if (body.organization_id === null) {
+        updateData.org_slug = null;
+      } else {
+        const org = await db
+          .selectFrom("organizations")
+          .select(["id", "slug"])
+          .where("id", "=", body.organization_id)
+          .executeTakeFirst();
+
+        if (!org) {
+          return c.json({ error: "Organization not found" }, 404);
+        }
+
+        updateData.org_slug = org.slug;
+      }
+    }
     if (body.wallet_id !== undefined) updateData.wallet_id = body.wallet_id;
     if (body.default_price_usdc !== undefined)
       updateData.default_price_usdc = body.default_price_usdc;
@@ -150,13 +184,15 @@ tenantsRoutes.delete("/:id", async (c) => {
 
   const tenant = await db
     .selectFrom("tenants")
-    .select(["id", "name"])
+    .select(["id", "name", "org_slug"])
     .where("id", "=", id)
     .executeTakeFirst();
 
   if (!tenant) {
     return c.json({ error: "Tenant not found" }, 404);
   }
+
+  const domainInfo = toDomainInfo(tenant);
 
   const tenantNodes = await db
     .selectFrom("tenant_nodes")
@@ -177,7 +213,7 @@ tenantsRoutes.delete("/:id", async (c) => {
     return c.json({ error: "Tenant not found" }, 404);
   }
 
-  deleteAllTenantDnsRecords(tenant.name).catch((err) =>
+  deleteAllTenantDnsRecords(domainInfo).catch((err) =>
     logger.error(`Failed to delete DNS for tenant ${tenant.name}: ${err}`),
   );
 
@@ -236,13 +272,15 @@ tenantsRoutes.post(
 
     const tenant = await db
       .selectFrom("tenants")
-      .select(["id", "name"])
+      .select(["id", "name", "org_slug"])
       .where("id", "=", tenantId)
       .executeTakeFirst();
 
     if (!tenant) {
       return c.json({ error: "Tenant not found" }, 404);
     }
+
+    const domainInfo = toDomainInfo(tenant);
 
     const node = await db
       .selectFrom("nodes")
@@ -290,7 +328,7 @@ tenantsRoutes.post(
       .returningAll()
       .executeTakeFirstOrThrow();
 
-    const healthCheckId = await createHealthCheck(tenant.name, node.public_ip);
+    const healthCheckId = await createHealthCheck(domainInfo, node.public_ip);
     if (healthCheckId) {
       await db
         .updateTable("tenant_nodes")
@@ -300,17 +338,18 @@ tenantsRoutes.post(
     }
 
     upsertNodeDnsRecord(
-      tenant.name,
+      domainInfo,
       nodeId,
       node.public_ip,
       healthCheckId,
     ).catch((err) => logger.error(`Failed to create DNS record: ${err}`));
 
     if (node.status === "active") {
-      enqueueCertProvisioning([nodeId], tenant.name).catch((err) =>
-        logger.error(
-          `Failed to enqueue cert provisioning for tenant ${tenant.name} on node ${nodeId}: ${err}`,
-        ),
+      enqueueCertProvisioning([nodeId], tenant.name, domainInfo.orgSlug).catch(
+        (err) =>
+          logger.error(
+            `Failed to enqueue cert provisioning for tenant ${tenant.name} on node ${nodeId}: ${err}`,
+          ),
       );
     }
 
@@ -326,13 +365,15 @@ tenantsRoutes.delete("/:id/nodes/:nodeId", async (c) => {
 
   const tenant = await db
     .selectFrom("tenants")
-    .select(["id", "name"])
+    .select(["id", "name", "org_slug"])
     .where("id", "=", tenantId)
     .executeTakeFirst();
 
   if (!tenant) {
     return c.json({ error: "Tenant not found" }, 404);
   }
+
+  const domainInfo = toDomainInfo(tenant);
 
   const result = await db
     .deleteFrom("tenant_nodes")
@@ -351,7 +392,7 @@ tenantsRoutes.delete("/:id/nodes/:nodeId", async (c) => {
     );
   }
 
-  deleteNodeDnsRecord(tenant.name, nodeId).catch((err) =>
+  deleteNodeDnsRecord(domainInfo, nodeId).catch((err) =>
     logger.error(`Failed to delete DNS record: ${err}`),
   );
 

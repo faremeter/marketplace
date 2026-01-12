@@ -21,17 +21,46 @@ internalRoutes.post(
       );
     }
 
-    const tenant = await db
-      .selectFrom("tenants")
-      .select(["id", "organization_id"])
-      .where("name", "=", body.tenant_name)
-      .executeTakeFirst();
+    // Lookup tenant by name + org_slug (for org_slug format) or name + legacy format
+    let tenant: { id: number; organization_id: number | null } | undefined;
+
+    if (body.org_slug) {
+      // org_slug format: lookup by name AND org_slug
+      tenant = await db
+        .selectFrom("tenants")
+        .select(["id", "organization_id"])
+        .where("name", "=", body.tenant_name)
+        .where("org_slug", "=", body.org_slug)
+        .executeTakeFirst();
+    } else {
+      // Legacy format: lookup by name only (org_slug is null)
+      tenant = await db
+        .selectFrom("tenants")
+        .select(["id", "organization_id"])
+        .where("name", "=", body.tenant_name)
+        .where("org_slug", "is", null)
+        .executeTakeFirst();
+    }
 
     if (!tenant) {
       logger.warn(
-        `Transaction received for unknown tenant: ${body.tenant_name}`,
+        `Transaction received for unknown tenant: ${body.tenant_name}${body.org_slug ? ` (org: ${body.org_slug})` : ""}`,
       );
       return c.json({ error: "Tenant not found" }, 404);
+    }
+
+    // Validate endpoint belongs to tenant if provided
+    if (body.endpoint_id) {
+      const endpoint = await db
+        .selectFrom("endpoints")
+        .select("id")
+        .where("id", "=", body.endpoint_id)
+        .where("tenant_id", "=", tenant.id)
+        .executeTakeFirst();
+
+      if (!endpoint) {
+        return c.json({ error: "Endpoint does not belong to tenant" }, 400);
+      }
     }
 
     try {

@@ -1144,3 +1144,228 @@ await t.test(
     });
   },
 );
+
+await t.test(
+  "POST /api/wallets/organization/:orgId - funding status based on chain type",
+  async (t) => {
+    await t.test(
+      "Solana-only wallet is created with pending status",
+      async (t) => {
+        const user = await createUser("owner@example.com");
+        const org = await createOrg("Team", "team");
+        await addMember(user.id, org.id, "owner");
+
+        const solanaConfig = {
+          solana: {
+            "mainnet-beta": {
+              address: "So11111111111111111111111111111111111111112",
+            },
+          },
+        };
+
+        const res = await app.request(`/api/wallets/organization/${org.id}`, {
+          method: "POST",
+          headers: {
+            Cookie: `auth_token=${user.token}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            name: "Solana Wallet",
+            wallet_config: solanaConfig,
+          }),
+        });
+
+        t.equal(res.status, 201);
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const data = (await res.json()) as any;
+        t.equal(data.funding_status, "pending");
+      },
+    );
+
+    await t.test(
+      "EVM-only wallet is created and marked as funded immediately",
+      async (t) => {
+        const user = await createUser("owner@example.com");
+        const org = await createOrg("Team", "team");
+        await addMember(user.id, org.id, "owner");
+
+        const evmConfig = {
+          evm: {
+            base: {
+              address: "0x1234567890123456789012345678901234567890",
+            },
+          },
+        };
+
+        const res = await app.request(`/api/wallets/organization/${org.id}`, {
+          method: "POST",
+          headers: {
+            Cookie: `auth_token=${user.token}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            name: "EVM Wallet",
+            wallet_config: evmConfig,
+          }),
+        });
+
+        t.equal(res.status, 201);
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const data = (await res.json()) as any;
+        // Initial response shows pending, but enqueueBalanceCheck marks it as funded
+        // We need to refetch to see the updated status
+        const refetch = await app.request(`/api/wallets/${data.id}`, {
+          headers: { Cookie: `auth_token=${user.token}` },
+        });
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const updated = (await refetch.json()) as any;
+        t.equal(updated.funding_status, "funded");
+      },
+    );
+
+    await t.test(
+      "Mixed wallet (Solana+EVM) is created with pending status",
+      async (t) => {
+        const user = await createUser("owner@example.com");
+        const org = await createOrg("Team", "team");
+        await addMember(user.id, org.id, "owner");
+
+        const mixedConfig = {
+          solana: {
+            "mainnet-beta": {
+              address: "So11111111111111111111111111111111111111112",
+            },
+          },
+          evm: {
+            base: {
+              address: "0x1234567890123456789012345678901234567890",
+            },
+          },
+        };
+
+        const res = await app.request(`/api/wallets/organization/${org.id}`, {
+          method: "POST",
+          headers: {
+            Cookie: `auth_token=${user.token}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            name: "Mixed Wallet",
+            wallet_config: mixedConfig,
+          }),
+        });
+
+        t.equal(res.status, 201);
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const data = (await res.json()) as any;
+        // Mixed wallet has Solana, so it stays pending (needs Solana funding check)
+        t.equal(data.funding_status, "pending");
+      },
+    );
+  },
+);
+
+await t.test("PUT /api/wallets/:id - funding status updates", async (t) => {
+  await t.test("updating to EVM-only config sets funded status", async (t) => {
+    const user = await createUser("owner@example.com");
+    const org = await createOrg("Team", "team");
+    await addMember(user.id, org.id, "owner");
+
+    // Create wallet with Solana (pending)
+    const wallet = await db
+      .insertInto("wallets")
+      .values({
+        name: "Will Become EVM",
+        organization_id: org.id,
+        wallet_config: JSON.stringify({
+          solana: {
+            "mainnet-beta": {
+              address: "So11111111111111111111111111111111111111112",
+            },
+          },
+        }),
+        funding_status: "pending",
+      })
+      .returning("id")
+      .executeTakeFirstOrThrow();
+
+    // Update to EVM-only config
+    const evmConfig = {
+      evm: {
+        base: {
+          address: "0x1234567890123456789012345678901234567890",
+        },
+      },
+    };
+
+    const res = await app.request(`/api/wallets/${wallet.id}`, {
+      method: "PUT",
+      headers: {
+        Cookie: `auth_token=${user.token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ wallet_config: evmConfig }),
+    });
+
+    t.equal(res.status, 200);
+
+    // Refetch to see the updated status (after enqueueBalanceCheck runs)
+    const refetch = await app.request(`/api/wallets/${wallet.id}`, {
+      headers: { Cookie: `auth_token=${user.token}` },
+    });
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const updated = (await refetch.json()) as any;
+    t.equal(updated.funding_status, "funded");
+  });
+
+  await t.test(
+    "updating from EVM-only to Solana resets to pending status",
+    async (t) => {
+      const user = await createUser("owner@example.com");
+      const org = await createOrg("Team", "team");
+      await addMember(user.id, org.id, "owner");
+
+      // Create wallet with EVM (will be funded)
+      const wallet = await db
+        .insertInto("wallets")
+        .values({
+          name: "Will Become Solana",
+          organization_id: org.id,
+          wallet_config: JSON.stringify({
+            evm: {
+              base: {
+                address: "0x1234567890123456789012345678901234567890",
+              },
+            },
+          }),
+          funding_status: "funded",
+        })
+        .returning("id")
+        .executeTakeFirstOrThrow();
+
+      // Update to Solana config
+      const solanaConfig = {
+        solana: {
+          "mainnet-beta": {
+            address: "So11111111111111111111111111111111111111112",
+          },
+        },
+      };
+
+      const res = await app.request(`/api/wallets/${wallet.id}`, {
+        method: "PUT",
+        headers: {
+          Cookie: `auth_token=${user.token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ wallet_config: solanaConfig }),
+      });
+
+      t.equal(res.status, 200);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const data = (await res.json()) as any;
+      // Updated config resets to pending
+      t.equal(data.funding_status, "pending");
+    },
+  );
+});

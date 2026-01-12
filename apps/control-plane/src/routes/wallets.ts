@@ -223,13 +223,11 @@ walletsRoutes.post(
       .returningAll()
       .executeTakeFirstOrThrow();
 
-    if (addresses.solana) {
-      enqueueBalanceCheck(wallet.id, addresses.solana).catch((err) => {
-        logger.error(
-          `Failed to enqueue balance check for wallet ${wallet.id}: ${err}`,
-        );
-      });
-    }
+    enqueueBalanceCheck(wallet.id, addresses.solana).catch((err) => {
+      logger.error(
+        `Failed to enqueue balance check for wallet ${wallet.id}: ${err}`,
+      );
+    });
 
     return c.json(wallet, 201);
   },
@@ -296,13 +294,11 @@ walletsRoutes.put(
 
     if (body.wallet_config) {
       const addresses = extractAddresses(body.wallet_config as WalletConfig);
-      if (addresses.solana) {
-        enqueueBalanceCheck(updated.id, addresses.solana).catch((err) => {
-          logger.error(
-            `Failed to enqueue balance check for wallet ${updated.id}: ${err}`,
-          );
-        });
-      }
+      enqueueBalanceCheck(updated.id, addresses.solana).catch((err) => {
+        logger.error(
+          `Failed to enqueue balance check for wallet ${updated.id}: ${err}`,
+        );
+      });
     }
 
     return c.json(updated);

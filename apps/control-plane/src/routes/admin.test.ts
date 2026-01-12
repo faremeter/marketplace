@@ -48,7 +48,7 @@ async function createOrg(name: string, slug: string) {
 async function createTenant(
   orgId: number,
   name: string,
-  opts: { wallet_id?: number; status?: string } = {},
+  opts: { wallet_id?: number; status?: string; org_slug?: string } = {},
 ) {
   return db
     .insertInto("tenants")
@@ -60,6 +60,7 @@ async function createTenant(
       default_scheme: "exact",
       wallet_id: opts.wallet_id ?? null,
       status: opts.status ?? "active",
+      org_slug: opts.org_slug ?? null,
     })
     .returning(["id"])
     .executeTakeFirstOrThrow();
@@ -431,6 +432,97 @@ await t.test("GET /api/admin/tenants/check-name", async (t) => {
     const data = (await res.json()) as any;
     t.equal(data.available, false);
   });
+
+  await t.test(
+    "with organization_id: returns unavailable for name in same org",
+    async (t) => {
+      const admin = await createUser("admin@example.com", true);
+      const org = await createOrg("Team", "team");
+      await createTenant(org.id, "existing-api", { org_slug: "team" });
+
+      const res = await app.request(
+        `/api/admin/tenants/check-name?name=existing-api&organization_id=${org.id}`,
+        { headers: { Cookie: `auth_token=${admin.token}` } },
+      );
+      t.equal(res.status, 200);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const data = (await res.json()) as any;
+      t.equal(data.available, false);
+    },
+  );
+
+  await t.test(
+    "with organization_id: returns available for name in different org",
+    async (t) => {
+      const admin = await createUser("admin@example.com", true);
+      const org1 = await createOrg("Org One", "org-one");
+      const org2 = await createOrg("Org Two", "org-two");
+      await createTenant(org1.id, "shared-api", { org_slug: "org-one" });
+
+      const res = await app.request(
+        `/api/admin/tenants/check-name?name=shared-api&organization_id=${org2.id}`,
+        { headers: { Cookie: `auth_token=${admin.token}` } },
+      );
+      t.equal(res.status, 200);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const data = (await res.json()) as any;
+      t.equal(data.available, true);
+    },
+  );
+
+  await t.test(
+    "with organization_id: returns available for name used by legacy tenant",
+    async (t) => {
+      const admin = await createUser("admin@example.com", true);
+      const org = await createOrg("Team", "team");
+      await createTenant(org.id, "legacy-api");
+
+      const res = await app.request(
+        `/api/admin/tenants/check-name?name=legacy-api&organization_id=${org.id}`,
+        { headers: { Cookie: `auth_token=${admin.token}` } },
+      );
+      t.equal(res.status, 200);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const data = (await res.json()) as any;
+      t.equal(data.available, true);
+    },
+  );
+
+  await t.test(
+    "legacy check: returns unavailable for name used by another legacy",
+    async (t) => {
+      const admin = await createUser("admin@example.com", true);
+      const org = await createOrg("Team", "team");
+      await createTenant(org.id, "legacy-svc");
+
+      const res = await app.request(
+        "/api/admin/tenants/check-name?name=legacy-svc",
+        { headers: { Cookie: `auth_token=${admin.token}` } },
+      );
+      t.equal(res.status, 200);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const data = (await res.json()) as any;
+      t.equal(data.available, false);
+    },
+  );
+
+  await t.test(
+    "legacy check: returns available for name used by org_slug tenant",
+    async (t) => {
+      const admin = await createUser("admin@example.com", true);
+      const org = await createOrg("Team", "team");
+      await createTenant(org.id, "org-only-api", { org_slug: "team" });
+
+      const res = await app.request(
+        "/api/admin/tenants/check-name?name=org-only-api",
+        { headers: { Cookie: `auth_token=${admin.token}` } },
+      );
+      t.equal(res.status, 200);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const data = (await res.json()) as any;
+      t.equal(data.available, true);
+    },
+  );
 });
 
 await t.test("POST /api/admin/tenants", async (t) => {
