@@ -8,8 +8,10 @@ import {
 import {
   fetchWalletBalances,
   extractAddresses,
+  checkBalancesMeetMinimum,
   BALANCE_CACHE_TTL_MS,
   type WalletConfig,
+  type WalletBalances,
 } from "../lib/balances.js";
 import { enqueueBalanceCheck } from "../lib/queue.js";
 import { logger } from "../logger.js";
@@ -164,11 +166,26 @@ walletsRoutes.get("/:id/balances", async (c) => {
   const addresses = extractAddresses(config);
   const balances = await fetchWalletBalances(addresses);
 
+  const adminSettings = await db
+    .selectFrom("admin_settings")
+    .select(["minimum_balance_sol", "minimum_balance_usdc"])
+    .where("id", "=", 1)
+    .executeTakeFirst();
+
+  const minSol = adminSettings?.minimum_balance_sol ?? 0.001;
+  const minUsdc = adminSettings?.minimum_balance_usdc ?? 0.01;
+  const isFunded = checkBalancesMeetMinimum(
+    balances as WalletBalances,
+    minSol,
+    minUsdc,
+  );
+
   await db
     .updateTable("wallets")
     .set({
       cached_balances: JSON.stringify(balances),
       balances_cached_at: new Date(),
+      funding_status: isFunded ? "funded" : wallet.funding_status,
     })
     .where("id", "=", id)
     .execute();

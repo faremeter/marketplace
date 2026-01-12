@@ -488,6 +488,74 @@ await t.test("GET /api/wallets/:id/balances", async (t) => {
     const balances = typeof data === "string" ? JSON.parse(data) : data;
     t.equal(balances.solana.native, "1.5");
   });
+
+  await t.test(
+    "updates funding_status to funded when balance meets minimum",
+    async (t) => {
+      const mockBalances = {
+        solana: { native: "1.0", usdc: "10.0" },
+        base: { native: "0", usdc: "0" },
+        polygon: { native: "0", usdc: "0" },
+        monad: { native: "0", usdc: "0" },
+      };
+
+      const { walletsRoutes: mockedRoutes } = await t.mockImport<
+        typeof import("./wallets.js")
+      >("./wallets.js", {
+        "../lib/balances.js": {
+          ...(await import("../lib/balances.js")),
+          fetchWalletBalances: async () => mockBalances,
+        },
+      });
+
+      const testApp = new Hono();
+      testApp.route("/api/wallets", mockedRoutes);
+
+      const user = await createUser("member@example.com");
+      const org = await createOrg("Team", "team");
+      await addMember(user.id, org.id, "member");
+
+      await db
+        .insertInto("admin_settings")
+        .values({
+          minimum_balance_sol: 0.001,
+          minimum_balance_usdc: 0.01,
+        })
+        .execute();
+
+      const wallet = await db
+        .insertInto("wallets")
+        .values({
+          name: "Pending Wallet",
+          organization_id: org.id,
+          wallet_config: JSON.stringify(validWalletConfig()),
+          funding_status: "pending",
+          balances_cached_at: new Date(Date.now() - 120000).toISOString(),
+        })
+        .returning("id")
+        .executeTakeFirstOrThrow();
+
+      const before = await db
+        .selectFrom("wallets")
+        .select("funding_status")
+        .where("id", "=", wallet.id)
+        .executeTakeFirstOrThrow();
+      t.equal(before.funding_status, "pending");
+
+      const res = await testApp.request(`/api/wallets/${wallet.id}/balances`, {
+        headers: { Cookie: `auth_token=${user.token}` },
+      });
+
+      t.equal(res.status, 200);
+
+      const after = await db
+        .selectFrom("wallets")
+        .select("funding_status")
+        .where("id", "=", wallet.id)
+        .executeTakeFirstOrThrow();
+      t.equal(after.funding_status, "funded");
+    },
+  );
 });
 
 await t.test("POST /api/wallets/organization/:orgId", async (t) => {
