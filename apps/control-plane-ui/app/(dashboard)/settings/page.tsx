@@ -1,13 +1,15 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth/context";
 import { titleCase } from "@/lib/format";
 import useSWR from "swr";
-import { api } from "@/lib/api/client";
+import { api, ApiError } from "@/lib/api/client";
 import { InviteMemberDialog } from "@/components/settings/invite-member-dialog";
 import { Cross2Icon, CopyIcon, CheckIcon } from "@radix-ui/react-icons";
 import { useToast } from "@/components/ui/toast";
+import * as Dialog from "@radix-ui/react-dialog";
 
 interface OrgMember {
   id: number;
@@ -27,13 +29,17 @@ interface Invitation {
 }
 
 export default function SettingsPage() {
-  const { user, currentOrg } = useAuth();
+  const router = useRouter();
+  const { user, currentOrg, refresh, setCurrentOrg } = useAuth();
   const { toast } = useToast();
   const [activeTab, setActiveTab] = useState<"organization" | "account">(
     "organization",
   );
   const [inviteDialogOpen, setInviteDialogOpen] = useState(false);
   const [copiedId, setCopiedId] = useState<number | null>(null);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [deleteConfirmation, setDeleteConfirmation] = useState("");
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const { data: members } = useSWR(
     currentOrg ? `/api/organizations/${currentOrg.id}/members` : null,
@@ -49,6 +55,45 @@ export default function SettingsPage() {
     (o) => o.id === currentOrg?.id,
   )?.role;
   const isOwnerOrAdmin = currentRole === "owner" || currentRole === "admin";
+  const isOwner = currentRole === "owner";
+
+  const handleDeleteOrg = async () => {
+    if (!currentOrg || deleteConfirmation !== currentOrg.name) return;
+
+    setIsDeleting(true);
+    try {
+      await api.delete(`/api/organizations/${currentOrg.id}`);
+      setDeleteDialogOpen(false);
+      toast({
+        title: "Organization deleted",
+        description: `${currentOrg.name} has been permanently deleted.`,
+        variant: "success",
+      });
+      await refresh();
+      setCurrentOrg(null);
+      router.push("/dashboard");
+    } catch (err) {
+      if (err instanceof ApiError && err.data) {
+        const data = err.data as { error?: string };
+        toast({
+          title: "Cannot delete organization",
+          description: data.error || "Failed to delete organization",
+          variant: "error",
+        });
+      } else {
+        toast({
+          title: "Error",
+          description:
+            err instanceof Error
+              ? err.message
+              : "Failed to delete organization",
+          variant: "error",
+        });
+      }
+    } finally {
+      setIsDeleting(false);
+    }
+  };
 
   const handleCopyInviteLink = async (invitation: Invitation) => {
     const url = `${window.location.origin}/invite/${invitation.token}`;
@@ -278,6 +323,91 @@ export default function SettingsPage() {
               organizationId={currentOrg.id}
               onSuccess={() => mutateInvitations()}
             />
+
+            {isOwner && (
+              <section className="rounded-lg border border-red-900/50 bg-red-950/20 p-6">
+                <h2 className="mb-2 text-lg font-medium text-red-400">
+                  Danger Zone
+                </h2>
+                <p className="mb-4 text-sm text-gray-11">
+                  Once you delete an organization, there is no going back. All
+                  wallets will be permanently deleted.
+                </p>
+                <button
+                  onClick={() => setDeleteDialogOpen(true)}
+                  className="rounded-md border border-red-800 bg-red-900/30 px-4 py-2 text-sm font-medium text-red-400 transition-colors hover:bg-red-900/50"
+                >
+                  Delete Organization
+                </button>
+              </section>
+            )}
+
+            <Dialog.Root
+              open={deleteDialogOpen}
+              onOpenChange={(open) => {
+                setDeleteDialogOpen(open);
+                if (!open) setDeleteConfirmation("");
+              }}
+            >
+              <Dialog.Portal>
+                <Dialog.Overlay className="fixed inset-0 bg-black/60 backdrop-blur-sm" />
+                <Dialog.Content className="fixed left-1/2 top-1/2 w-full max-w-md -translate-x-1/2 -translate-y-1/2 rounded-lg border border-gray-6 bg-gray-1 p-6 shadow-xl">
+                  <div className="mb-4 flex items-center justify-between">
+                    <Dialog.Title className="text-lg font-semibold text-gray-12">
+                      Delete Organization
+                    </Dialog.Title>
+                    <Dialog.Close className="rounded p-1 text-gray-11 hover:bg-gray-4 hover:text-gray-12">
+                      <Cross2Icon className="h-4 w-4" />
+                    </Dialog.Close>
+                  </div>
+
+                  <div className="space-y-4">
+                    <p className="text-sm text-gray-11">
+                      This action cannot be undone. This will permanently delete{" "}
+                      <span className="font-medium text-gray-12">
+                        {currentOrg.name}
+                      </span>{" "}
+                      and remove all members.
+                    </p>
+
+                    <p className="text-sm text-gray-11">
+                      Please type{" "}
+                      <span className="font-mono text-gray-12">
+                        {currentOrg.name}
+                      </span>{" "}
+                      to confirm.
+                    </p>
+
+                    <input
+                      type="text"
+                      value={deleteConfirmation}
+                      onChange={(e) => setDeleteConfirmation(e.target.value)}
+                      placeholder={currentOrg.name}
+                      className="w-full rounded-md border border-gray-6 bg-gray-2 px-3 py-2 text-sm text-gray-12 placeholder-gray-9 focus:border-red-800 focus:outline-none focus:ring-1 focus:ring-red-800"
+                    />
+
+                    <div className="flex justify-end gap-3 pt-2">
+                      <button
+                        type="button"
+                        onClick={() => setDeleteDialogOpen(false)}
+                        className="rounded-md border border-gray-6 px-4 py-2 text-sm text-gray-11 hover:bg-gray-3"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        onClick={handleDeleteOrg}
+                        disabled={
+                          isDeleting || deleteConfirmation !== currentOrg.name
+                        }
+                        className="rounded-md bg-red-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-red-700 disabled:opacity-50"
+                      >
+                        {isDeleting ? "Deleting..." : "Delete Organization"}
+                      </button>
+                    </div>
+                  </div>
+                </Dialog.Content>
+              </Dialog.Portal>
+            </Dialog.Root>
           </>
         )}
       </div>
