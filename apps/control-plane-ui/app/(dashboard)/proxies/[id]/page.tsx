@@ -21,7 +21,13 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from "recharts";
-import { formatUSDC } from "@/lib/analytics";
+import {
+  type EarningsAnalytics,
+  formatUSDC,
+  getValueColor,
+  getChangeColor,
+  formatChange,
+} from "@/lib/analytics";
 import { useToast } from "@/components/ui/toast";
 import { InlineUrlEdit } from "@/components/shared/inline-url-edit";
 import { InlineActiveToggle } from "@/components/shared/inline-active-toggle";
@@ -175,6 +181,13 @@ export default function ProxyDetailPage() {
       ? `/api/organizations/${currentOrg.id}/analytics/earnings?level=tenant&targetId=${tenantId}&granularity=day&periods=30`
       : null,
     api.get<DailyCallData[]>,
+  );
+
+  const { data: analytics } = useSWR(
+    currentOrg && tenantId
+      ? `/api/organizations/${currentOrg.id}/tenants/${tenantId}/analytics`
+      : null,
+    api.get<EarningsAnalytics>,
   );
 
   const chartData = useMemo(() => {
@@ -331,6 +344,34 @@ export default function ProxyDetailPage() {
       <div>
         {activeTab === "overview" && (
           <div className="space-y-6">
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="rounded-lg border border-gray-6 bg-gray-2 p-4">
+                <p className="text-[12px] text-gray-9">Total Earned</p>
+                <p
+                  className={`mt-1 text-[15px] font-medium ${getValueColor(analytics?.total_earned_usdc)}`}
+                >
+                  {formatUSDC(analytics?.total_earned_usdc)}
+                </p>
+              </div>
+              <div className="rounded-lg border border-gray-6 bg-gray-2 p-4">
+                <p className="text-[12px] text-gray-9">This Month</p>
+                <div className="mt-1 flex items-baseline gap-2">
+                  <p
+                    className={`text-[15px] font-medium ${getValueColor(analytics?.current_month_earned_usdc)}`}
+                  >
+                    {formatUSDC(analytics?.current_month_earned_usdc)}
+                  </p>
+                  {formatChange(analytics?.percent_change) !== "-" && (
+                    <span
+                      className={`text-[12px] font-medium ${getChangeColor(analytics?.percent_change)}`}
+                    >
+                      {formatChange(analytics?.percent_change)}
+                    </span>
+                  )}
+                </div>
+              </div>
+            </div>
+
             <Tabs.Root
               defaultValue="revenue"
               className="rounded-lg border border-gray-6 bg-gray-2 p-6"
