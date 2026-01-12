@@ -1,5 +1,6 @@
 import { db } from "../db/instance.js";
 import { logger } from "../logger.js";
+import { buildTenantDomain, toDomainInfo } from "./domain.js";
 
 export async function buildNodeConfig(nodeId: number) {
   const node = await db
@@ -25,6 +26,7 @@ export async function buildNodeConfig(nodeId: number) {
       "tenants.default_scheme",
       "tenants.upstream_auth_header",
       "tenants.upstream_auth_value",
+      "tenants.org_slug",
       "wallets.wallet_config",
       "wallets.funding_status",
     ])
@@ -65,8 +67,14 @@ export async function buildNodeConfig(nodeId: number) {
       .orderBy("priority", "asc")
       .execute();
 
-    config[tenant.name] = {
+    const domainInfo = toDomainInfo(tenant);
+    const domain = buildTenantDomain(domainInfo);
+
+    config[domain] = {
       name: tenant.name,
+      proxy_name: tenant.name,
+      domain,
+      org_slug: tenant.org_slug ?? null,
       backend_url: tenant.backend_url,
       wallet_config: walletConfig,
       default_price_usdc: tenant.default_price_usdc,

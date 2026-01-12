@@ -12,10 +12,11 @@ import {
   deleteAllTenantDnsRecords,
 } from "./dns.js";
 import { syncToNode } from "./sync.js";
-import { fetchWalletBalances } from "./balances.js";
+import { fetchWalletBalances, extractAddresses } from "./balances.js";
 import { cleanupAccount, renameAccount } from "./corbits-dash.js";
 import { logger } from "../logger.js";
 import { db } from "../db/instance.js";
+import { toDomainInfo } from "./domain.js";
 
 let boss: PgBoss | null = null;
 
@@ -23,22 +24,26 @@ const CERT_PROVISIONING_QUEUE = "cert-provisioning";
 const TENANT_DELETION_QUEUE = "tenant-deletion";
 const TENANT_RENAME_QUEUE = "tenant-rename";
 const BALANCE_CHECK_QUEUE = "balance-check";
+const BALANCE_AUDIT_QUEUE = "balance-audit";
 const TRANSACTION_RECORDING_QUEUE = "transaction-recording";
 
 interface CertProvisioningJob {
   nodeIds: number[];
   tenantName: string;
+  orgSlug: string | null;
 }
 
 interface TenantDeletionJob {
   tenantId: number;
   tenantName: string;
+  orgSlug: string | null;
 }
 
 interface TenantRenameJob {
   tenantId: number;
   oldName: string;
   newName: string;
+  orgSlug: string | null;
 }
 
 interface BalanceCheckJob {
@@ -179,17 +184,34 @@ export async function startQueue(config: {
   await boss.createQueue(TRANSACTION_RECORDING_QUEUE);
   logger.info(`Created queue: ${TRANSACTION_RECORDING_QUEUE}`);
 
+  await boss.createQueue(BALANCE_AUDIT_QUEUE);
+  logger.info(`Created queue: ${BALANCE_AUDIT_QUEUE}`);
+
+  await boss.schedule(
+    BALANCE_AUDIT_QUEUE,
+    "*/5 * * * *",
+    {},
+    {
+      tz: "UTC",
+    },
+  );
+  logger.info(`Scheduled ${BALANCE_AUDIT_QUEUE} to run every 5 minutes`);
+
   await boss.work<CertProvisioningJob>(
     CERT_PROVISIONING_QUEUE,
     { batchSize: 1 },
     async (jobs) => {
       for (const job of jobs) {
-        const { nodeIds, tenantName } = job.data;
+        const { nodeIds, tenantName, orgSlug } = job.data;
+        const domainInfo = toDomainInfo({
+          name: tenantName,
+          org_slug: orgSlug,
+        });
         logger.info(
           `Processing cert provisioning job ${job.id} for ${tenantName} on nodes [${nodeIds.join(", ")}]`,
         );
 
-        const success = await triggerCertProvisioning(nodeIds, tenantName);
+        const success = await triggerCertProvisioning(nodeIds, domainInfo);
 
         if (!success) {
           throw new Error(
@@ -207,7 +229,11 @@ export async function startQueue(config: {
     { batchSize: 1 },
     async (jobs) => {
       for (const job of jobs) {
-        const { tenantId, tenantName } = job.data;
+        const { tenantId, tenantName, orgSlug } = job.data;
+        const domainInfo = toDomainInfo({
+          name: tenantName,
+          org_slug: orgSlug,
+        });
         logger.info(
           `Processing tenant deletion job ${job.id} for ${tenantName}`,
         );
@@ -241,10 +267,10 @@ export async function startQueue(config: {
                 logger.error(`Failed to delete health check: ${err}`),
               );
             }
-            await deleteNodeDnsRecord(tenantName, node_id).catch((err) =>
+            await deleteNodeDnsRecord(domainInfo, node_id).catch((err) =>
               logger.error(`Failed to delete DNS record: ${err}`),
             );
-            await deleteCertOnNode(node_id, tenantName).catch((err) =>
+            await deleteCertOnNode(node_id, domainInfo).catch((err) =>
               logger.error(`Failed to delete cert on node ${node_id}: ${err}`),
             );
             await db
@@ -254,14 +280,14 @@ export async function startQueue(config: {
               .execute();
           }
 
-          await deleteAllTenantDnsRecords(tenantName).catch((err) =>
+          await deleteAllTenantDnsRecords(domainInfo).catch((err) =>
             logger.error(
               `Failed to delete DNS for tenant ${tenantName}: ${err}`,
             ),
           );
 
           await cleanupAccount(tenantName);
-          await deleteLocalCert(tenantName);
+          await deleteLocalCert(domainInfo);
 
           await db
             .deleteFrom("transactions")
@@ -297,7 +323,15 @@ export async function startQueue(config: {
     { batchSize: 1 },
     async (jobs) => {
       for (const job of jobs) {
-        const { tenantId, oldName, newName } = job.data;
+        const { tenantId, oldName, newName, orgSlug } = job.data;
+        const oldDomainInfo = toDomainInfo({
+          name: oldName,
+          org_slug: orgSlug,
+        });
+        const newDomainInfo = toDomainInfo({
+          name: newName,
+          org_slug: orgSlug,
+        });
         logger.info(
           `Processing tenant rename job ${job.id}: ${oldName} -> ${newName}`,
         );
@@ -337,12 +371,12 @@ export async function startQueue(config: {
             if (!tn.public_ip) continue;
 
             const newHealthCheckId = await createHealthCheck(
-              newName,
+              newDomainInfo,
               tn.public_ip,
             );
 
             await upsertNodeDnsRecord(
-              newName,
+              newDomainInfo,
               tn.node_id,
               tn.public_ip,
               newHealthCheckId,
@@ -378,7 +412,7 @@ export async function startQueue(config: {
 
           if (activeNodeIds.length > 0) {
             try {
-              await enqueueCertProvisioning(activeNodeIds, newName);
+              await enqueueCertProvisioning(activeNodeIds, newName, orgSlug);
             } catch (err) {
               logger.error(
                 `Failed to enqueue cert provisioning for nodes [${activeNodeIds.join(", ")}]: ${err}`,
@@ -387,7 +421,7 @@ export async function startQueue(config: {
           }
 
           for (const tn of tenantNodes) {
-            await deleteNodeDnsRecord(oldName, tn.node_id).catch((err) =>
+            await deleteNodeDnsRecord(oldDomainInfo, tn.node_id).catch((err) =>
               logger.error(`Failed to delete old DNS record: ${err}`),
             );
           }
@@ -526,6 +560,102 @@ export async function startQueue(config: {
 
   logger.info("Balance check worker started");
 
+  await boss.work(BALANCE_AUDIT_QUEUE, { batchSize: 1 }, async () => {
+    logger.info("Running periodic balance audit");
+
+    try {
+      const adminSettings = await db
+        .selectFrom("admin_settings")
+        .select(["minimum_balance_sol", "minimum_balance_usdc"])
+        .where("id", "=", 1)
+        .executeTakeFirst();
+
+      const minSol = adminSettings?.minimum_balance_sol ?? 0.001;
+      const minUsdc = adminSettings?.minimum_balance_usdc ?? 0.01;
+
+      const fundedWallets = await db
+        .selectFrom("wallets")
+        .select(["id", "wallet_config"])
+        .where("funding_status", "=", "funded")
+        .execute();
+
+      let checkedCount = 0;
+      let unfundedCount = 0;
+
+      for (const wallet of fundedWallets) {
+        const config = wallet.wallet_config
+          ? JSON.parse(wallet.wallet_config as string)
+          : null;
+        const addresses = extractAddresses(config);
+
+        if (!addresses.solana) {
+          continue;
+        }
+
+        if (checkedCount > 0) {
+          await new Promise((resolve) => setTimeout(resolve, 1000));
+        }
+
+        checkedCount++;
+
+        try {
+          const balances = await fetchWalletBalances({
+            solana: addresses.solana,
+            evm: null,
+          });
+
+          const solBalance = parseFloat(balances.solana.native);
+          const usdcBalance = parseFloat(balances.solana.usdc);
+
+          if (solBalance < minSol || usdcBalance < minUsdc) {
+            logger.warn(
+              `Wallet ${wallet.id} balance dropped below minimum: ${solBalance} SOL, ${usdcBalance} USDC`,
+            );
+
+            await db
+              .updateTable("wallets")
+              .set({ funding_status: "pending" })
+              .where("id", "=", wallet.id)
+              .execute();
+
+            const tenants = await db
+              .selectFrom("tenants")
+              .select(["id"])
+              .where("wallet_id", "=", wallet.id)
+              .execute();
+
+            for (const tenant of tenants) {
+              await checkAndUpdateTenantStatus(tenant.id);
+            }
+
+            if (boss) {
+              await boss.send(
+                BALANCE_CHECK_QUEUE,
+                { walletId: wallet.id, solanaAddress: addresses.solana },
+                { retryLimit: 0, startAfter: 30 },
+              );
+            }
+
+            unfundedCount++;
+          }
+        } catch (error) {
+          logger.error(
+            `Balance audit failed for wallet ${wallet.id}: ${error}`,
+          );
+        }
+      }
+
+      logger.info(
+        `Balance audit complete: checked ${checkedCount} wallets, ${unfundedCount} marked unfunded`,
+      );
+    } catch (error) {
+      logger.error(`Balance audit failed: ${error}`);
+      throw error;
+    }
+  });
+
+  logger.info("Balance audit worker started");
+
   await boss.work<TransactionRecordingJob>(
     TRANSACTION_RECORDING_QUEUE,
     { batchSize: 10 },
@@ -584,6 +714,7 @@ export async function stopQueue(): Promise<void> {
 export async function enqueueCertProvisioning(
   nodeIds: number[],
   tenantName: string,
+  orgSlug: string | null,
 ): Promise<void> {
   if (process.env.NODE_ENV === "test") {
     return;
@@ -598,11 +729,23 @@ export async function enqueueCertProvisioning(
     return;
   }
 
-  const tenant = await db
-    .selectFrom("tenants")
-    .select(["id"])
-    .where("name", "=", tenantName)
-    .executeTakeFirst();
+  let tenant: { id: number } | undefined;
+
+  if (orgSlug) {
+    tenant = await db
+      .selectFrom("tenants")
+      .select(["id"])
+      .where("name", "=", tenantName)
+      .where("org_slug", "=", orgSlug)
+      .executeTakeFirst();
+  } else {
+    tenant = await db
+      .selectFrom("tenants")
+      .select(["id"])
+      .where("name", "=", tenantName)
+      .where("org_slug", "is", null)
+      .executeTakeFirst();
+  }
 
   if (tenant) {
     await db
@@ -615,7 +758,7 @@ export async function enqueueCertProvisioning(
 
   const jobId = await boss.send(
     CERT_PROVISIONING_QUEUE,
-    { nodeIds, tenantName },
+    { nodeIds, tenantName, orgSlug },
     {
       retryLimit: 3,
       retryDelay: 60,
@@ -638,6 +781,7 @@ export async function enqueueCertProvisioning(
 export async function enqueueTenantDeletion(
   tenantId: number,
   tenantName: string,
+  orgSlug: string | null,
 ): Promise<void> {
   if (process.env.NODE_ENV === "test") {
     return;
@@ -649,7 +793,7 @@ export async function enqueueTenantDeletion(
 
   const jobId = await boss.send(
     TENANT_DELETION_QUEUE,
-    { tenantId, tenantName },
+    { tenantId, tenantName, orgSlug },
     {
       retryLimit: 3,
       retryDelay: 60,
@@ -669,6 +813,7 @@ export async function enqueueTenantRename(
   tenantId: number,
   oldName: string,
   newName: string,
+  orgSlug: string | null,
 ): Promise<void> {
   if (process.env.NODE_ENV === "test") {
     return;
@@ -680,7 +825,7 @@ export async function enqueueTenantRename(
 
   const jobId = await boss.send(
     TENANT_RENAME_QUEUE,
-    { tenantId, oldName, newName },
+    { tenantId, oldName, newName, orgSlug },
     {
       retryLimit: 3,
       retryDelay: 60,
@@ -700,8 +845,31 @@ export async function enqueueTenantRename(
 
 export async function enqueueBalanceCheck(
   walletId: number,
-  solanaAddress: string,
+  solanaAddress: string | null,
 ): Promise<void> {
+  // Handle EVM-only wallets first (before test env check so it can be tested)
+  if (!solanaAddress) {
+    await db
+      .updateTable("wallets")
+      .set({ funding_status: "funded" })
+      .where("id", "=", walletId)
+      .execute();
+
+    const tenants = await db
+      .selectFrom("tenants")
+      .select(["id"])
+      .where("wallet_id", "=", walletId)
+      .execute();
+
+    for (const tenant of tenants) {
+      await checkAndUpdateTenantStatus(tenant.id);
+    }
+
+    logger.info(`Wallet ${walletId} marked as funded (EVM-only)`);
+    return;
+  }
+
+  // Skip actual queue operations in test environment
   if (process.env.NODE_ENV === "test") {
     return;
   }

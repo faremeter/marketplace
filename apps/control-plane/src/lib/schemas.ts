@@ -229,13 +229,14 @@ export const AdminUpdateSettingsSchema = type({
 });
 
 export const InternalTransactionSchema = type({
-  ngx_request_id: "string > 0",
-  tenant_name: "string > 0",
+  ngx_request_id: `string > 0 & string <= ${MAX_NAME_LENGTH}`,
+  tenant_name: `string > 0 & string <= ${MAX_SLUG_LENGTH}`,
+  "org_slug?": `string <= ${MAX_SLUG_LENGTH} | null`,
   "endpoint_id?": "number | null",
   amount_usdc: "number >= 0",
-  "tx_hash?": "string | null",
-  "network?": "string | null",
-  request_path: "string > 0",
+  "tx_hash?": `string <= ${MAX_NAME_LENGTH} | null`,
+  "network?": "string <= 50 | null",
+  request_path: `string > 0 & string <= ${MAX_PATH_LENGTH}`,
 });
 
 export const AdminAssignNodeSchema = type({

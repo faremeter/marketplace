@@ -3,21 +3,32 @@ import { promisify } from "util";
 import { db } from "../db/instance.js";
 import { logger } from "../logger.js";
 import { checkAndUpdateTenantStatus } from "./queue.js";
+import { type TenantDomainInfo, buildTenantDomain } from "./domain.js";
 
 const execAsync = promisify(exec);
 
-const BASE_DOMAIN = "test.api.corbits.dev";
-
 async function setCertStatus(
-  tenantName: string,
+  domainInfo: TenantDomainInfo,
   nodeId: number,
   status: "provisioned" | "failed",
 ) {
-  const tenant = await db
-    .selectFrom("tenants")
-    .select(["id"])
-    .where("name", "=", tenantName)
-    .executeTakeFirst();
+  let tenant: { id: number } | undefined;
+
+  if (domainInfo.orgSlug) {
+    tenant = await db
+      .selectFrom("tenants")
+      .select(["id"])
+      .where("name", "=", domainInfo.proxyName)
+      .where("org_slug", "=", domainInfo.orgSlug)
+      .executeTakeFirst();
+  } else {
+    tenant = await db
+      .selectFrom("tenants")
+      .select(["id"])
+      .where("name", "=", domainInfo.proxyName)
+      .where("org_slug", "is", null)
+      .executeTakeFirst();
+  }
 
   if (tenant) {
     await db
@@ -33,7 +44,8 @@ async function setCertStatus(
 
 async function pushCertToNode(
   nodeId: number,
-  tenantName: string,
+  domainInfo: TenantDomainInfo,
+  domain: string,
   fullchain: string,
   privkey: string,
 ): Promise<boolean> {
@@ -45,7 +57,7 @@ async function pushCertToNode(
 
   if (!node) {
     logger.error(`pushCertToNode: Node ${nodeId} not found`);
-    await setCertStatus(tenantName, nodeId, "failed");
+    await setCertStatus(domainInfo, nodeId, "failed");
     return false;
   }
 
@@ -64,7 +76,7 @@ async function pushCertToNode(
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          tenant_name: tenantName,
+          domain,
           fullchain,
           privkey,
         }),
@@ -79,7 +91,7 @@ async function pushCertToNode(
       logger.error(
         `Failed to push cert to node ${nodeId}: ${response.status} - ${text}`,
       );
-      await setCertStatus(tenantName, nodeId, "failed");
+      await setCertStatus(domainInfo, nodeId, "failed");
       return false;
     }
 
@@ -90,32 +102,32 @@ async function pushCertToNode(
 
     if (result.success) {
       logger.info(
-        `Successfully provisioned cert for ${tenantName} on node ${nodeId}`,
+        `Successfully provisioned cert for ${domain} on node ${nodeId}`,
       );
-      await setCertStatus(tenantName, nodeId, "provisioned");
+      await setCertStatus(domainInfo, nodeId, "provisioned");
       return true;
     } else {
       logger.error(
-        `Cert install failed for ${tenantName} on node ${nodeId}: ${result.error}`,
+        `Cert install failed for ${domain} on node ${nodeId}: ${result.error}`,
       );
-      await setCertStatus(tenantName, nodeId, "failed");
+      await setCertStatus(domainInfo, nodeId, "failed");
       return false;
     }
   } catch (err) {
-    logger.error(
-      `Error pushing cert to node ${nodeId} for ${tenantName}: ${err}`,
-    );
-    await setCertStatus(tenantName, nodeId, "failed");
+    logger.error(`Error pushing cert to node ${nodeId} for ${domain}: ${err}`);
+    await setCertStatus(domainInfo, nodeId, "failed");
     return false;
   }
 }
 
 export async function triggerCertProvisioning(
   nodeIds: number[],
-  tenantName: string,
+  domainInfo: TenantDomainInfo,
 ): Promise<boolean> {
+  const domain = buildTenantDomain(domainInfo);
+
   if (nodeIds.length === 0) {
-    logger.warn(`triggerCertProvisioning: No nodes provided for ${tenantName}`);
+    logger.warn(`triggerCertProvisioning: No nodes provided for ${domain}`);
     return true;
   }
 
@@ -123,14 +135,13 @@ export async function triggerCertProvisioning(
     process.env.NODE_ENV === "development" ||
     process.env.NODE_ENV === "test"
   ) {
-    logger.info(`[DEV] skipped cert provisioning for ${tenantName}`);
+    logger.info(`[DEV] skipped cert provisioning for ${domain}`);
     for (const nodeId of nodeIds) {
-      await setCertStatus(tenantName, nodeId, "provisioned");
+      await setCertStatus(domainInfo, nodeId, "provisioned");
     }
     return true;
   }
 
-  const domain = `${tenantName}.${BASE_DOMAIN}`;
   const certDir = `/etc/letsencrypt/live/${domain}`;
 
   const { stdout: certCheckResult } = await execAsync(
@@ -150,7 +161,7 @@ export async function triggerCertProvisioning(
     } catch (err) {
       logger.error(`Certbot failed for ${domain}: ${err}`);
       for (const nodeId of nodeIds) {
-        await setCertStatus(tenantName, nodeId, "failed");
+        await setCertStatus(domainInfo, nodeId, "failed");
       }
       return false;
     }
@@ -172,7 +183,7 @@ export async function triggerCertProvisioning(
   } catch (err) {
     logger.error(`Failed to read cert files for ${domain}: ${err}`);
     for (const nodeId of nodeIds) {
-      await setCertStatus(tenantName, nodeId, "failed");
+      await setCertStatus(domainInfo, nodeId, "failed");
     }
     return false;
   }
@@ -181,7 +192,8 @@ export async function triggerCertProvisioning(
   for (const nodeId of nodeIds) {
     const success = await pushCertToNode(
       nodeId,
-      tenantName,
+      domainInfo,
+      domain,
       fullchain,
       privkey,
     );
@@ -195,15 +207,15 @@ export async function triggerCertProvisioning(
 
 export async function deleteCertOnNode(
   nodeId: number,
-  tenantName: string,
+  domainInfo: TenantDomainInfo,
 ): Promise<boolean> {
+  const domain = buildTenantDomain(domainInfo);
+
   if (
     process.env.NODE_ENV === "development" ||
     process.env.NODE_ENV === "test"
   ) {
-    logger.info(
-      `[DEV] skipped cert deletion for ${tenantName} on node ${nodeId}`,
-    );
+    logger.info(`[DEV] skipped cert deletion for ${domain} on node ${nodeId}`);
     return true;
   }
 
@@ -226,7 +238,7 @@ export async function deleteCertOnNode(
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ tenant_name: tenantName }),
+        body: JSON.stringify({ domain }),
         signal: controller.signal,
       },
     );
@@ -241,26 +253,27 @@ export async function deleteCertOnNode(
       return false;
     }
 
-    logger.info(`Deleted cert for ${tenantName} on node ${nodeId}`);
+    logger.info(`Deleted cert for ${domain} on node ${nodeId}`);
     return true;
   } catch (err) {
-    logger.error(
-      `Error deleting cert on node ${nodeId} for ${tenantName}: ${err}`,
-    );
+    logger.error(`Error deleting cert on node ${nodeId} for ${domain}: ${err}`);
     return false;
   }
 }
 
-export async function deleteLocalCert(tenantName: string): Promise<void> {
+export async function deleteLocalCert(
+  domainInfo: TenantDomainInfo,
+): Promise<void> {
+  const domain = buildTenantDomain(domainInfo);
+
   if (
     process.env.NODE_ENV === "development" ||
     process.env.NODE_ENV === "test"
   ) {
-    logger.info(`[DEV] skipped local cert deletion for ${tenantName}`);
+    logger.info(`[DEV] skipped local cert deletion for ${domain}`);
     return;
   }
 
-  const domain = `${tenantName}.${BASE_DOMAIN}`;
   try {
     await execAsync(
       `sudo certbot delete --cert-name ${domain} --non-interactive`,

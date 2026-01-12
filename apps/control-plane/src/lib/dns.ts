@@ -7,23 +7,29 @@ import {
   ChangeAction,
 } from "@aws-sdk/client-route-53";
 import { logger } from "../logger.js";
+import {
+  type TenantDomainInfo,
+  buildTenantDomain,
+  buildSetIdentifier,
+} from "./domain.js";
 
 const route53 = new Route53Client({});
 
 const ZONE_ID = process.env.ROUTE53_ZONE_ID;
 const DNS_TTL = 60;
-const BASE_DOMAIN = "test.api.corbits.dev";
 const skipExternal =
   process.env.NODE_ENV === "development" || process.env.NODE_ENV === "test";
 
 export async function upsertNodeDnsRecord(
-  tenantName: string,
+  domainInfo: TenantDomainInfo,
   nodeId: number,
   publicIp: string,
   healthCheckId: string | null,
 ): Promise<boolean> {
+  const domain = buildTenantDomain(domainInfo);
+
   if (skipExternal) {
-    logger.info(`[DEV] skipped DNS upsert for ${tenantName}`);
+    logger.info(`[DEV] skipped DNS upsert for ${domain}`);
     return true;
   }
 
@@ -32,8 +38,8 @@ export async function upsertNodeDnsRecord(
     return false;
   }
 
-  const recordName = `${tenantName}.${BASE_DOMAIN}`;
-  const setIdentifier = `${tenantName}-node-${nodeId}`;
+  const recordName = domain;
+  const setIdentifier = buildSetIdentifier(domainInfo, nodeId);
 
   try {
     const resourceRecordSet: Record<string, unknown> = {
@@ -68,18 +74,20 @@ export async function upsertNodeDnsRecord(
     return true;
   } catch (err) {
     logger.error(
-      `Failed to upsert DNS record for ${tenantName} node ${nodeId}: ${err}`,
+      `Failed to upsert DNS record for ${domain} node ${nodeId}: ${err}`,
     );
     return false;
   }
 }
 
 export async function deleteNodeDnsRecord(
-  tenantName: string,
+  domainInfo: TenantDomainInfo,
   nodeId: number,
 ): Promise<boolean> {
+  const domain = buildTenantDomain(domainInfo);
+
   if (skipExternal) {
-    logger.info(`[DEV] skipped DNS delete for ${tenantName}`);
+    logger.info(`[DEV] skipped DNS delete for ${domain}`);
     return true;
   }
 
@@ -88,8 +96,8 @@ export async function deleteNodeDnsRecord(
     return false;
   }
 
-  const recordName = `${tenantName}.${BASE_DOMAIN}.`;
-  const setIdentifier = `${tenantName}-node-${nodeId}`;
+  const recordName = `${domain}.`;
+  const setIdentifier = buildSetIdentifier(domainInfo, nodeId);
 
   try {
     const listCommand = new ListResourceRecordSetsCommand({
@@ -130,17 +138,19 @@ export async function deleteNodeDnsRecord(
     return true;
   } catch (err) {
     logger.error(
-      `Failed to delete DNS record for ${tenantName} node ${nodeId}: ${err}`,
+      `Failed to delete DNS record for ${domain} node ${nodeId}: ${err}`,
     );
     return false;
   }
 }
 
 export async function deleteAllTenantDnsRecords(
-  tenantName: string,
+  domainInfo: TenantDomainInfo,
 ): Promise<boolean> {
+  const domain = buildTenantDomain(domainInfo);
+
   if (skipExternal) {
-    logger.info(`[DEV] skipped delete all DNS for ${tenantName}`);
+    logger.info(`[DEV] skipped delete all DNS for ${domain}`);
     return true;
   }
 
@@ -149,7 +159,7 @@ export async function deleteAllTenantDnsRecords(
     return false;
   }
 
-  const recordName = `${tenantName}.${BASE_DOMAIN}.`;
+  const recordName = `${domain}.`;
 
   try {
     const listCommand = new ListResourceRecordSetsCommand({
@@ -166,7 +176,7 @@ export async function deleteAllTenantDnsRecords(
       ) ?? [];
 
     if (records.length === 0) {
-      logger.info(`No DNS records found for ${tenantName}`);
+      logger.info(`No DNS records found for ${domain}`);
       return true;
     }
 
@@ -181,18 +191,20 @@ export async function deleteAllTenantDnsRecords(
     });
 
     await route53.send(deleteCommand);
-    logger.info(`Deleted ${records.length} DNS record(s) for ${tenantName}`);
+    logger.info(`Deleted ${records.length} DNS record(s) for ${domain}`);
     return true;
   } catch (err) {
-    logger.error(`Failed to delete DNS records for ${tenantName}: ${err}`);
+    logger.error(`Failed to delete DNS records for ${domain}: ${err}`);
     return false;
   }
 }
 
 export async function createHealthCheck(
-  tenantName: string,
+  domainInfo: TenantDomainInfo,
   nodePublicIp: string,
 ): Promise<string | null> {
+  const domain = buildTenantDomain(domainInfo);
+
   if (skipExternal) {
     const mockId = `dev-hc-${Date.now()}`;
     logger.info(`[DEV] skipped health check creation, mock id: ${mockId}`);
@@ -201,7 +213,7 @@ export async function createHealthCheck(
 
   try {
     const command = new CreateHealthCheckCommand({
-      CallerReference: `${tenantName}-${nodePublicIp}-${Date.now()}`,
+      CallerReference: `${domain}-${nodePublicIp}-${Date.now()}`,
       HealthCheckConfig: {
         IPAddress: nodePublicIp,
         Port: 80,
@@ -217,14 +229,14 @@ export async function createHealthCheck(
 
     if (healthCheckId) {
       logger.info(
-        `Created health check ${healthCheckId} for ${tenantName} @ ${nodePublicIp}`,
+        `Created health check ${healthCheckId} for ${domain} @ ${nodePublicIp}`,
       );
     }
 
     return healthCheckId ?? null;
   } catch (err) {
     logger.error(
-      `Failed to create health check for ${tenantName} @ ${nodePublicIp}: ${err}`,
+      `Failed to create health check for ${domain} @ ${nodePublicIp}: ${err}`,
     );
     return null;
   }
