@@ -211,19 +211,41 @@ export default function ProxyDetailPage() {
   );
 
   const chartData = useMemo(() => {
-    if (!dailyData || !Array.isArray(dailyData)) return [];
-    return dailyData.map((d) => ({
-      date: d.period.slice(5),
-      calls: d.call_count,
-    }));
+    const dataMap = new Map<string, number>();
+    if (dailyData && Array.isArray(dailyData)) {
+      dailyData.forEach((d) => dataMap.set(d.period, d.call_count));
+    }
+    const result = [];
+    const today = new Date();
+    for (let i = 29; i >= 0; i--) {
+      const date = new Date(today);
+      date.setDate(date.getDate() - i);
+      const period = date.toISOString().slice(0, 10);
+      result.push({
+        date: period.slice(5),
+        calls: dataMap.get(period) ?? 0,
+      });
+    }
+    return result;
   }, [dailyData]);
 
   const revenueChartData = useMemo(() => {
-    if (!dailyData || !Array.isArray(dailyData)) return [];
-    return dailyData.map((d) => ({
-      date: d.period.slice(5),
-      revenue: d.total_usdc,
-    }));
+    const dataMap = new Map<string, number>();
+    if (dailyData && Array.isArray(dailyData)) {
+      dailyData.forEach((d) => dataMap.set(d.period, d.total_usdc));
+    }
+    const result = [];
+    const today = new Date();
+    for (let i = 29; i >= 0; i--) {
+      const date = new Date(today);
+      date.setDate(date.getDate() - i);
+      const period = date.toISOString().slice(0, 10);
+      result.push({
+        date: period.slice(5),
+        revenue: dataMap.get(period) ?? 0,
+      });
+    }
+    return result;
   }, [dailyData]);
 
   const tenant = tenants?.find((t) => t.id === tenantId);
@@ -468,7 +490,7 @@ export default function ProxyDetailPage() {
               </div>
               <Tabs.Content value="calls">
                 <div className="h-48">
-                  {chartData.length > 0 ? (
+                  {dailyData && dailyData.length > 0 ? (
                     <ResponsiveContainer width="100%" height="100%">
                       <BarChart data={chartData}>
                         <XAxis
@@ -507,7 +529,7 @@ export default function ProxyDetailPage() {
               </Tabs.Content>
               <Tabs.Content value="revenue">
                 <div className="h-48">
-                  {revenueChartData.length > 0 ? (
+                  {dailyData && dailyData.length > 0 ? (
                     <ResponsiveContainer width="100%" height="100%">
                       <BarChart data={revenueChartData}>
                         <XAxis
