@@ -752,9 +752,9 @@ export default function WalletsPage() {
   const [forceShowFundingModal, setForceShowFundingModal] = useState(false);
   const [fundingFlowActive, setFundingFlowActive] = useState(false);
 
-  // Activate funding flow when wallet exists but not yet funded - stays active until user dismisses
   useEffect(() => {
     if (
+      !onboardingStatus?.onboarding_completed &&
       onboardingStatus?.steps.wallet &&
       !onboardingStatus?.steps.funded &&
       !fundingFlowActive
@@ -764,6 +764,7 @@ export default function WalletsPage() {
       setIsContinuing(false);
     }
   }, [
+    onboardingStatus?.onboarding_completed,
     onboardingStatus?.steps.wallet,
     onboardingStatus?.steps.funded,
     fundingFlowActive,
