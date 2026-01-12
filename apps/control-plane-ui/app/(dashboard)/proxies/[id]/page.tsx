@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useParams, useSearchParams, useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth/context";
 import useSWR from "swr";
@@ -12,6 +12,16 @@ import {
   CheckIcon,
   ExternalLinkIcon,
 } from "@radix-ui/react-icons";
+import * as Tabs from "@radix-ui/react-tabs";
+import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  Tooltip,
+  ResponsiveContainer,
+} from "recharts";
+import { formatUSDC } from "@/lib/analytics";
 import { useToast } from "@/components/ui/toast";
 import { InlineUrlEdit } from "@/components/shared/inline-url-edit";
 import { InlineActiveToggle } from "@/components/shared/inline-active-toggle";
@@ -49,6 +59,12 @@ interface Tenant {
 interface OpenApiSpecResponse {
   spec: unknown | null;
   hasSpec: boolean;
+}
+
+interface DailyCallData {
+  period: string;
+  total_usdc: number;
+  call_count: number;
 }
 
 function getStatus(tenant: Tenant): {
@@ -153,6 +169,29 @@ export default function ProxyDetailPage() {
     tenantId ? `/api/tenants/${tenantId}/openapi/spec` : null,
     api.get<OpenApiSpecResponse>,
   );
+
+  const { data: dailyData } = useSWR(
+    currentOrg && tenantId
+      ? `/api/organizations/${currentOrg.id}/analytics/earnings?level=tenant&targetId=${tenantId}&granularity=day&periods=30`
+      : null,
+    api.get<DailyCallData[]>,
+  );
+
+  const chartData = useMemo(() => {
+    if (!dailyData || !Array.isArray(dailyData)) return [];
+    return dailyData.map((d) => ({
+      date: d.period.slice(5),
+      calls: d.call_count,
+    }));
+  }, [dailyData]);
+
+  const revenueChartData = useMemo(() => {
+    if (!dailyData || !Array.isArray(dailyData)) return [];
+    return dailyData.map((d) => ({
+      date: d.period.slice(5),
+      revenue: d.total_usdc,
+    }));
+  }, [dailyData]);
 
   const tenant = tenants?.find((t) => t.id === tenantId);
 
@@ -292,6 +331,117 @@ export default function ProxyDetailPage() {
       <div>
         {activeTab === "overview" && (
           <div className="space-y-6">
+            <Tabs.Root
+              defaultValue="revenue"
+              className="rounded-lg border border-gray-6 bg-gray-2 p-6"
+            >
+              <div className="mb-4 flex items-center justify-between">
+                <h3 className="text-sm font-medium uppercase tracking-wider text-gray-11">
+                  Activity{" "}
+                  <span className="text-xs font-normal normal-case text-gray-9">
+                    Last 30 Days
+                  </span>
+                </h3>
+                <Tabs.List className="flex rounded-md bg-gray-4 p-0.5">
+                  <Tabs.Trigger
+                    value="revenue"
+                    className="rounded px-3 py-1 text-xs font-medium text-gray-11 transition-colors data-[state=active]:bg-gray-6 data-[state=active]:text-white"
+                  >
+                    Revenue
+                  </Tabs.Trigger>
+                  <Tabs.Trigger
+                    value="calls"
+                    className="rounded px-3 py-1 text-xs font-medium text-gray-11 transition-colors data-[state=active]:bg-gray-6 data-[state=active]:text-white"
+                  >
+                    Calls
+                  </Tabs.Trigger>
+                </Tabs.List>
+              </div>
+              <Tabs.Content value="calls">
+                <div className="h-48">
+                  {chartData.length > 0 ? (
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={chartData}>
+                        <XAxis
+                          dataKey="date"
+                          tick={{ fill: "#888", fontSize: 10 }}
+                          tickLine={false}
+                          axisLine={{ stroke: "#333" }}
+                        />
+                        <YAxis
+                          tick={{ fill: "#888", fontSize: 10 }}
+                          tickLine={false}
+                          axisLine={{ stroke: "#333" }}
+                        />
+                        <Tooltip
+                          contentStyle={{
+                            backgroundColor: "#1a1a1a",
+                            border: "1px solid #333",
+                            borderRadius: "6px",
+                          }}
+                          labelStyle={{ color: "#888" }}
+                          cursor={{ fill: "rgba(234, 134, 42, 0.15)" }}
+                        />
+                        <Bar
+                          dataKey="calls"
+                          fill="#ea862a"
+                          radius={[2, 2, 0, 0]}
+                        />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  ) : (
+                    <div className="flex h-full items-center justify-center">
+                      <p className="text-sm text-gray-9">No activity yet</p>
+                    </div>
+                  )}
+                </div>
+              </Tabs.Content>
+              <Tabs.Content value="revenue">
+                <div className="h-48">
+                  {revenueChartData.length > 0 ? (
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={revenueChartData}>
+                        <XAxis
+                          dataKey="date"
+                          tick={{ fill: "#888", fontSize: 10 }}
+                          tickLine={false}
+                          axisLine={{ stroke: "#333" }}
+                        />
+                        <YAxis
+                          tick={{ fill: "#888", fontSize: 10 }}
+                          tickLine={false}
+                          axisLine={{ stroke: "#333" }}
+                          tickFormatter={(value) => formatUSDC(value)}
+                        />
+                        <Tooltip
+                          contentStyle={{
+                            backgroundColor: "#1a1a1a",
+                            border: "1px solid #333",
+                            borderRadius: "6px",
+                          }}
+                          labelStyle={{ color: "#888" }}
+                          formatter={(value) => [
+                            formatUSDC(value as number),
+                            "Revenue",
+                          ]}
+                          cursor={{ fill: "rgba(234, 134, 42, 0.15)" }}
+                        />
+                        <Bar
+                          dataKey="revenue"
+                          fill="#ea862a"
+                          radius={[2, 2, 0, 0]}
+                        />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  ) : (
+                    <div className="flex h-full items-center justify-center">
+                      <p className="text-sm text-gray-9">No revenue yet</p>
+                    </div>
+                  )}
+                </div>
+              </Tabs.Content>
+            </Tabs.Root>
+
             <div className="rounded-lg border border-gray-6 bg-gray-2 p-6">
               <h3 className="mb-4 text-sm font-medium uppercase tracking-wider text-gray-11">
                 Proxy Information
