@@ -203,7 +203,15 @@ export default function SettingsPage() {
               <div className="space-y-4">
                 <div>
                   <label className="block text-sm text-gray-11">Name</label>
-                  <p className="mt-1 text-gray-12">{currentOrg.name}</p>
+                  <p className="mt-1 text-gray-12">
+                    {currentOrg.name}
+                    {currentOrg.slug !== currentOrg.name && (
+                      <span className="font-mono text-gray-9">
+                        {" "}
+                        ({currentOrg.slug})
+                      </span>
+                    )}
+                  </p>
                 </div>
                 <div>
                   <label className="block text-sm text-gray-11">
