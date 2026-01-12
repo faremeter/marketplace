@@ -51,7 +51,8 @@ export default function TenantsPage() {
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [deleteConfirmName, setDeleteConfirmName] = useState("");
 
-  const isFirstProxy = !onboardingStatus?.steps.proxy;
+  const isFirstProxy =
+    !onboardingStatus?.onboarding_completed && !onboardingStatus?.steps.proxy;
 
   const {
     data: tenants,

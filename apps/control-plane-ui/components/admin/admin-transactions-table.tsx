@@ -8,29 +8,24 @@ import {
   ChevronRightIcon,
   ExternalLinkIcon,
 } from "@radix-ui/react-icons";
+import { formatUSDC } from "@/lib/analytics";
 
-interface CorbitsTransaction {
+interface Transaction {
   id: number;
-  chain: string;
-  signature: string;
-  block_time: string;
-  from_address: string | null;
-  to_address: string | null;
-  amount: string;
-  direction: "incoming" | "outgoing" | "fee" | null;
-  status: "pending" | "confirmed" | "finalized" | "failed";
-  mint_address: string | null;
-  tracked_address_id: number;
+  endpoint_id: number | null;
+  tenant_id: number;
+  amount_usdc: number;
+  tx_hash: string | null;
+  network: string | null;
+  request_path: string;
   created_at: string;
 }
 
 interface TransactionsResponse {
-  transactions: CorbitsTransaction[];
+  transactions: Transaction[];
   total: number;
   limit: number;
   offset: number;
-  cached?: boolean;
-  error?: string;
 }
 
 interface AdminTransactionsTableProps {
@@ -38,23 +33,23 @@ interface AdminTransactionsTableProps {
   pageSize?: number;
 }
 
-function truncateAddress(address: string, chars = 6): string {
-  if (address.length <= chars * 2 + 3) return address;
-  return `${address.slice(0, chars)}...${address.slice(-chars)}`;
+function truncateHash(hash: string, chars = 8): string {
+  if (hash.length <= chars * 2 + 3) return hash;
+  return `${hash.slice(0, chars)}...${hash.slice(-chars)}`;
 }
 
-function getExplorerUrl(chain: string, signature: string): string {
-  switch (chain) {
+function getExplorerUrl(network: string | null, txHash: string): string {
+  switch (network) {
     case "solana":
-      return `https://solscan.io/tx/${signature}`;
+      return `https://solscan.io/tx/${txHash}`;
     case "base":
-      return `https://basescan.org/tx/${signature}`;
+      return `https://basescan.org/tx/${txHash}`;
     case "polygon":
-      return `https://polygonscan.com/tx/${signature}`;
+      return `https://polygonscan.com/tx/${txHash}`;
     case "monad":
-      return `https://explorer.monad.xyz/tx/${signature}`;
+      return `https://explorer.monad.xyz/tx/${txHash}`;
     default:
-      return "#";
+      return `https://solscan.io/tx/${txHash}`;
   }
 }
 
@@ -66,9 +61,9 @@ export function AdminTransactionsTable({
   const offset = page * pageSize;
 
   const { data, isLoading, error } = useSWR<TransactionsResponse>(
-    `/api/admin/tenants/${tenantId}/corbits-transactions?limit=${pageSize}&offset=${offset}`,
+    `/api/admin/tenants/${tenantId}/transactions?limit=${pageSize}&offset=${offset}`,
     api.get,
-    { refreshInterval: 60000 },
+    { refreshInterval: 30000 },
   );
 
   const totalPages = data ? Math.ceil(data.total / pageSize) : 0;
@@ -83,12 +78,10 @@ export function AdminTransactionsTable({
     );
   }
 
-  if (error || data?.error) {
+  if (error) {
     return (
       <div className="rounded-lg border border-gray-6 bg-gray-2 px-4 py-3">
-        <p className="text-sm text-gray-11">
-          {data?.error || "Failed to load transactions"}
-        </p>
+        <p className="text-sm text-gray-11">Failed to load transactions</p>
       </div>
     );
   }
@@ -104,23 +97,20 @@ export function AdminTransactionsTable({
   return (
     <div className="space-y-3">
       <div className="overflow-x-auto rounded-lg border border-gray-6 bg-gray-2">
-        <table className="w-full min-w-[800px]">
+        <table className="w-full min-w-[700px]">
           <thead>
             <tr className="border-b border-gray-6 bg-gray-3">
               <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-11">
-                Chain
-              </th>
-              <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-11">
-                Signature
-              </th>
-              <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-11">
-                Direction
+                Path
               </th>
               <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-11">
                 Amount
               </th>
               <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-11">
-                Status
+                Network
+              </th>
+              <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-11">
+                TX Hash
               </th>
               <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-11">
                 Date
@@ -131,65 +121,46 @@ export function AdminTransactionsTable({
             {data.transactions.map((tx) => (
               <tr key={tx.id} className="hover:bg-gray-3">
                 <td className="px-4 py-3">
-                  <span className="text-sm font-medium text-gray-12">
-                    {tx.chain}
+                  <code className="rounded bg-gray-3 px-1.5 py-0.5 font-mono text-xs text-gray-12">
+                    {tx.request_path}
+                  </code>
+                </td>
+                <td className="px-4 py-3">
+                  <span className="text-sm font-medium text-green-400">
+                    {formatUSDC(tx.amount_usdc)}
                   </span>
                 </td>
                 <td className="px-4 py-3">
-                  <div className="flex items-center gap-1.5">
-                    <code className="rounded bg-gray-3 px-1.5 py-0.5 font-mono text-xs text-gray-12">
-                      {truncateAddress(tx.signature, 8)}
-                    </code>
-                    <a
-                      href={getExplorerUrl(tx.chain, tx.signature)}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="rounded p-1 text-gray-11 hover:bg-gray-4 hover:text-gray-12"
-                    >
-                      <ExternalLinkIcon className="h-3 w-3" />
-                    </a>
-                  </div>
+                  {tx.network ? (
+                    <span className="inline-flex rounded-full border border-gray-6 bg-gray-4 px-2 py-0.5 text-xs text-gray-11">
+                      {tx.network}
+                    </span>
+                  ) : (
+                    <span className="text-sm text-gray-11">-</span>
+                  )}
                 </td>
                 <td className="px-4 py-3">
-                  <span
-                    className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
-                      tx.direction === "incoming"
-                        ? "bg-green-900/30 text-green-400"
-                        : tx.direction === "outgoing"
-                          ? "bg-red-900/30 text-red-400"
-                          : "bg-gray-900/30 text-gray-400"
-                    }`}
-                  >
-                    {tx.direction === "incoming"
-                      ? "IN"
-                      : tx.direction === "outgoing"
-                        ? "OUT"
-                        : tx.direction || "-"}
-                  </span>
-                </td>
-                <td className="px-4 py-3">
-                  <span className="text-sm font-medium text-gray-12">
-                    ${tx.amount}
-                  </span>
-                </td>
-                <td className="px-4 py-3">
-                  <span
-                    className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
-                      tx.status === "finalized" || tx.status === "confirmed"
-                        ? "bg-green-900/30 text-green-400"
-                        : tx.status === "failed"
-                          ? "bg-red-900/30 text-red-400"
-                          : "bg-yellow-900/30 text-yellow-400"
-                    }`}
-                  >
-                    {tx.status}
-                  </span>
+                  {tx.tx_hash ? (
+                    <div className="flex items-center gap-1.5">
+                      <code className="rounded bg-gray-3 px-1.5 py-0.5 font-mono text-xs text-gray-12">
+                        {truncateHash(tx.tx_hash)}
+                      </code>
+                      <a
+                        href={getExplorerUrl(tx.network, tx.tx_hash)}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="rounded p-1 text-gray-11 hover:bg-gray-4 hover:text-gray-12"
+                      >
+                        <ExternalLinkIcon className="h-3 w-3" />
+                      </a>
+                    </div>
+                  ) : (
+                    <span className="text-sm text-gray-11">-</span>
+                  )}
                 </td>
                 <td className="px-4 py-3">
                   <span className="text-xs text-gray-11">
-                    {tx.block_time
-                      ? new Date(tx.block_time).toLocaleString()
-                      : "Pending"}
+                    {new Date(tx.created_at).toLocaleString()}
                   </span>
                 </td>
               </tr>

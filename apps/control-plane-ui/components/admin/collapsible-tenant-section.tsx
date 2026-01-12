@@ -8,12 +8,14 @@ import {
 } from "@radix-ui/react-icons";
 import { useToast } from "@/components/ui/toast";
 import { AdminEndpointsTable } from "./admin-endpoints-table";
+import { getProxyUrl } from "@/lib/format";
 
 interface Tenant {
   id: number;
   name: string;
   default_price_usdc: number;
   default_scheme: string;
+  org_slug?: string | null;
 }
 
 interface CollapsibleTenantSectionProps {
@@ -29,7 +31,10 @@ export function CollapsibleTenantSection({
 }: CollapsibleTenantSectionProps) {
   const [isExpanded, setIsExpanded] = useState(defaultExpanded);
   const { toast } = useToast();
-  const apiUrl = `https://${tenant.name}.api.corbits.dev`;
+  const apiUrl = getProxyUrl({
+    proxyName: tenant.name,
+    orgSlug: tenant.org_slug,
+  });
 
   const handleCopy = async (e: React.MouseEvent) => {
     e.stopPropagation();

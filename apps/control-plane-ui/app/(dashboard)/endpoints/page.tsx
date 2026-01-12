@@ -3,7 +3,7 @@
 const AUTO_COLLAPSE_THRESHOLD = 7;
 
 import { useAuth } from "@/lib/auth/context";
-import { titleCase } from "@/lib/format";
+import { titleCase, getProxyUrl } from "@/lib/format";
 import useSWR from "swr";
 import { api } from "@/lib/api/client";
 import { InlinePriceEdit } from "@/components/shared/inline-price-edit";
@@ -15,6 +15,7 @@ import {
   CheckIcon,
   EyeOpenIcon,
   ChevronDownIcon,
+  ExternalLinkIcon,
 } from "@radix-ui/react-icons";
 import { useState, useEffect } from "react";
 import { useToast } from "@/components/ui/toast";
@@ -35,6 +36,7 @@ interface Tenant {
   wallet_funding_status: string | null;
   default_price_usdc: number;
   default_scheme: string;
+  org_slug?: string | null;
 }
 
 interface Endpoint {
@@ -164,7 +166,10 @@ function TenantCard({
   };
 
   const apiEndpoint = `/api/organizations/${orgId}/tenants/${tenant.id}`;
-  const proxyUrl = `https://${tenant.name}.api.corbits.dev`;
+  const proxyUrl = getProxyUrl({
+    proxyName: tenant.name,
+    orgSlug: tenant.org_slug,
+  });
 
   const handleCopy = async () => {
     await navigator.clipboard.writeText(proxyUrl);
@@ -200,7 +205,7 @@ function TenantCard({
             </div>
             <button
               onClick={handleCopy}
-              className="border-l border-gray-6 px-2 py-1.5 text-gray-11 hover:bg-gray-4 hover:text-gray-12 transition-colors rounded-r-lg"
+              className="border-l border-gray-6 px-2 py-1.5 text-gray-11 hover:bg-gray-4 hover:text-gray-12 transition-colors"
               title="Copy URL"
             >
               {copied ? (
@@ -209,6 +214,15 @@ function TenantCard({
                 <CopyIcon className="h-3.5 w-3.5" />
               )}
             </button>
+            <a
+              href={proxyUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="border-l border-gray-6 px-2 py-1.5 text-gray-11 hover:bg-gray-4 hover:text-gray-12 transition-colors rounded-r-lg"
+              title="Open in new tab"
+            >
+              <ExternalLinkIcon className="h-3.5 w-3.5" />
+            </a>
           </div>
         </div>
         <div className="flex items-center gap-2">

@@ -12,6 +12,7 @@ import {
 import { api } from "@/lib/api/client";
 import { useToast } from "@/components/ui/toast";
 import { sanitizeProxyName } from "@/lib/proxy-name";
+import { getProxyUrlPattern } from "@/lib/format";
 
 interface InlineNameEditProps {
   name: string;
@@ -21,6 +22,8 @@ interface InlineNameEditProps {
   label?: string;
   checkAvailabilityEndpoint?: string;
   excludeId?: number;
+  organizationId?: number | null;
+  orgSlug?: string | null;
 }
 
 export function InlineNameEdit({
@@ -31,6 +34,8 @@ export function InlineNameEdit({
   label = "Name",
   checkAvailabilityEndpoint,
   excludeId,
+  organizationId,
+  orgSlug,
 }: InlineNameEditProps) {
   const { toast } = useToast();
   const [isOpen, setIsOpen] = useState(false);
@@ -69,6 +74,9 @@ export function InlineNameEdit({
         if (excludeId !== undefined) {
           url += `&excludeId=${excludeId}`;
         }
+        if (organizationId) {
+          url += `&organization_id=${organizationId}`;
+        }
 
         const result = await api.get<{ available: boolean }>(url);
 
@@ -91,7 +99,14 @@ export function InlineNameEdit({
         clearTimeout(checkTimeoutRef.current);
       }
     };
-  }, [value, name, checkAvailabilityEndpoint, excludeId, isOpen]);
+  }, [
+    value,
+    name,
+    checkAvailabilityEndpoint,
+    excludeId,
+    organizationId,
+    isOpen,
+  ]);
 
   const handleSave = async () => {
     const sanitized = sanitizeProxyName(value.trim());
@@ -200,8 +215,20 @@ export function InlineNameEdit({
                 !isCheckingName && (
                   <p className="mt-1 text-xs text-red-400">
                     This name is already taken
+                    {orgSlug && ` in this organization`}
                   </p>
                 )}
+              {orgSlug !== undefined && sanitizedValue && (
+                <p className="mt-1.5 text-xs text-gray-11">
+                  URL:{" "}
+                  <code className="text-gray-9">
+                    {getProxyUrlPattern({
+                      proxyName: sanitizedValue,
+                      orgSlug: orgSlug,
+                    })}
+                  </code>
+                </p>
+              )}
             </div>
             <div className="flex justify-end gap-2">
               <button

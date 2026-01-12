@@ -22,6 +22,7 @@ import {
   getChangeColor,
   formatChange,
 } from "@/lib/analytics";
+import { type WalletConfig, isWalletUsable } from "@/lib/wallet";
 import {
   BarChart,
   Bar,
@@ -57,12 +58,27 @@ interface Endpoint {
   path_pattern: string;
 }
 
+interface Wallet {
+  id: number;
+  funding_status: string;
+  wallet_config: WalletConfig;
+}
+
 export default function DashboardPage() {
   const { user, currentOrg } = useAuth();
 
   const { data: tenants } = useSWR(
     currentOrg ? `/api/organizations/${currentOrg.id}/tenants` : null,
     api.get<Tenant[]>,
+  );
+
+  const { data: wallets } = useSWR(
+    currentOrg ? `/api/wallets/organization/${currentOrg.id}` : null,
+    api.get<Wallet[]>,
+  );
+
+  const hasFundedWallet = wallets?.some((w) =>
+    isWalletUsable(w.wallet_config, w.funding_status),
   );
 
   const { data: analytics } = useSWR(
@@ -188,7 +204,7 @@ export default function DashboardPage() {
                   Payments flow directly to your wallet.
                 </p>
                 <Link
-                  href="/wallets"
+                  href={hasFundedWallet ? "/proxies" : "/wallets"}
                   className="inline-flex items-center gap-2 rounded-lg bg-corbits-orange px-5 py-2.5 text-sm font-semibold text-black shadow-lg shadow-corbits-orange/25 transition-all hover:bg-corbits-orange/90 hover:shadow-corbits-orange/40"
                 >
                   Get Started

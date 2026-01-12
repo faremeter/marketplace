@@ -31,11 +31,13 @@ import {
   composeFinalValue,
   maskToken,
 } from "@/lib/auth-header";
+import { type WalletConfig } from "@/lib/wallet";
 
 interface Wallet {
   id: number;
   name: string;
   funding_status: string;
+  wallet_config: WalletConfig;
 }
 
 interface CreateUserTenantDialogProps {

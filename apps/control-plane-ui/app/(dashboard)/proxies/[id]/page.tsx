@@ -6,7 +6,12 @@ import { useAuth } from "@/lib/auth/context";
 import useSWR from "swr";
 import { api } from "@/lib/api/client";
 import Link from "next/link";
-import { ChevronLeftIcon, CopyIcon, CheckIcon } from "@radix-ui/react-icons";
+import {
+  ChevronLeftIcon,
+  CopyIcon,
+  CheckIcon,
+  ExternalLinkIcon,
+} from "@radix-ui/react-icons";
 import { useToast } from "@/components/ui/toast";
 import { InlineUrlEdit } from "@/components/shared/inline-url-edit";
 import { InlineActiveToggle } from "@/components/shared/inline-active-toggle";
@@ -15,6 +20,7 @@ import { InlinePriceEdit } from "@/components/shared/inline-price-edit";
 import { InlineSchemeEdit } from "@/components/shared/inline-scheme-edit";
 import { InlineWalletSelect } from "@/components/shared/inline-wallet-select";
 import { EndpointsTab } from "@/components/proxy-endpoints/endpoints-tab";
+import { getProxyUrl } from "@/lib/format";
 
 interface TenantNode {
   id: number;
@@ -35,6 +41,7 @@ interface Tenant {
   default_scheme: string;
   upstream_auth_header: string | null;
   upstream_auth_value: string | null;
+  org_slug?: string | null;
   nodes: TenantNode[];
   created_at: string;
 }
@@ -214,29 +221,25 @@ export default function ProxyDetailPage() {
           <h1 className="text-2xl font-semibold text-gray-12">{tenant.name}</h1>
           <div className="flex items-center rounded-lg border border-gray-6 bg-gray-3/50">
             <div className="flex items-center gap-2 px-3 py-1.5">
-              <div
-                className={`h-2 w-2 rounded-full ${
-                  tenant.status === "active" && tenant.is_active
-                    ? "bg-green-500 animate-pulse"
-                    : tenant.status === "pending"
-                      ? "bg-yellow-500 animate-pulse"
-                      : "bg-gray-500"
-                }`}
-              />
               <code className="text-sm text-gray-11">
-                https://{tenant.name}.api.corbits.dev
+                {getProxyUrl({
+                  proxyName: tenant.name,
+                  orgSlug: tenant.org_slug,
+                })}
               </code>
             </div>
             <button
               onClick={async () => {
-                await navigator.clipboard.writeText(
-                  `https://${tenant.name}.api.corbits.dev`,
-                );
+                const proxyUrl = getProxyUrl({
+                  proxyName: tenant.name,
+                  orgSlug: tenant.org_slug,
+                });
+                await navigator.clipboard.writeText(proxyUrl);
                 setCopied(true);
                 setTimeout(() => setCopied(false), 2000);
                 toast({ title: "URL copied to clipboard" });
               }}
-              className="border-l border-gray-6 px-2 py-1.5 text-gray-11 hover:bg-gray-4 hover:text-gray-12 transition-colors rounded-r-lg"
+              className="border-l border-gray-6 px-2 py-1.5 text-gray-11 hover:bg-gray-4 hover:text-gray-12 transition-colors"
               title="Copy URL"
             >
               {copied ? (
@@ -245,24 +248,27 @@ export default function ProxyDetailPage() {
                 <CopyIcon className="h-3.5 w-3.5" />
               )}
             </button>
+            <a
+              href={getProxyUrl({
+                proxyName: tenant.name,
+                orgSlug: tenant.org_slug,
+              })}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="border-l border-gray-6 px-2 py-1.5 text-gray-11 hover:bg-gray-4 hover:text-gray-12 transition-colors rounded-r-lg"
+              title="Open in new tab"
+            >
+              <ExternalLinkIcon className="h-3.5 w-3.5" />
+            </a>
           </div>
         </div>
-        <div className="flex items-center gap-3">
-          {status.label !== "Ready" && (
-            <span
-              className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-medium ${status.color}`}
-            >
-              {status.label}
-            </span>
-          )}
-          <InlineActiveToggle
-            tenantId={tenant.id}
-            tenantName={tenant.name}
-            isActive={tenant.is_active}
-            onUpdate={() => mutateTenants()}
-            apiEndpoint={apiEndpoint}
-          />
-        </div>
+        {status.label !== "Ready" && (
+          <span
+            className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-medium ${status.color}`}
+          >
+            {status.label}
+          </span>
+        )}
       </div>
 
       <div className="border-b border-gray-6">

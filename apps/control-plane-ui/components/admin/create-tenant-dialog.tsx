@@ -21,6 +21,7 @@ import { api } from "@/lib/api/client";
 import { SCHEME_OPTIONS, MIN_PRICE_USD, MAX_PRICE_USD } from "@/lib/types/api";
 import { useToast } from "@/components/ui/toast";
 import { sanitizeProxyName } from "@/lib/proxy-name";
+import { getProxyUrlPattern } from "@/lib/format";
 import {
   type HeaderType,
   type ValueFormat,
@@ -84,7 +85,7 @@ export function CreateTenantDialog({
   const [valueFormat, setValueFormat] = useState<ValueFormat>("bearer");
   const [customPrefix, setCustomPrefix] = useState("");
   const [authToken, setAuthToken] = useState("");
-  const [organizationId, setOrganizationId] = useState("");
+  const [organizationId, setOrganizationId] = useState<string | null>(null); // null = not selected, "none" = no org, "123" = org id
   const [walletId, setWalletId] = useState<number | null>(null);
   const [defaultPrice, setDefaultPrice] = useState("0.01");
   const [defaultScheme, setDefaultScheme] = useState("exact");
@@ -95,6 +96,13 @@ export function CreateTenantDialog({
   const [showDiscardConfirm, setShowDiscardConfirm] = useState(false);
   const [showAuthValue, setShowAuthValue] = useState(false);
   const checkTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  const orgSelectionMade = organizationId !== null;
+  const isLegacyMode = organizationId === "none";
+  const selectedOrg =
+    organizationId && organizationId !== "none"
+      ? organizations?.find((o) => o.id === parseInt(organizationId))
+      : null;
 
   const getFinalAuthHeader = () => {
     if (!authToken.trim()) return null;
@@ -114,6 +122,7 @@ export function CreateTenantDialog({
       authToken.trim() !== "" ||
       customHeader.trim() !== "" ||
       customPrefix.trim() !== "" ||
+      organizationId !== null ||
       walletId !== null ||
       defaultPrice !== "0.01" ||
       defaultScheme !== "exact"
@@ -125,6 +134,7 @@ export function CreateTenantDialog({
     authToken,
     customHeader,
     customPrefix,
+    organizationId,
     walletId,
     defaultPrice,
     defaultScheme,
@@ -139,7 +149,7 @@ export function CreateTenantDialog({
   }, [isDirty, onOpenChange]);
 
   useEffect(() => {
-    if (!name.trim()) {
+    if (!name.trim() || !orgSelectionMade) {
       setNameAvailable(null);
       return;
     }
@@ -159,9 +169,13 @@ export function CreateTenantDialog({
           setIsCheckingName(false);
           return;
         }
-        const result = await api.get<{ available: boolean }>(
-          `/api/admin/tenants/check-name?name=${encodeURIComponent(sanitized)}`,
-        );
+
+        let checkUrl = `/api/admin/tenants/check-name?name=${encodeURIComponent(sanitized)}`;
+        if (!isLegacyMode && organizationId) {
+          checkUrl += `&organization_id=${organizationId}`;
+        }
+
+        const result = await api.get<{ available: boolean }>(checkUrl);
         setNameAvailable(result.available);
       } catch {
         setNameAvailable(null);
@@ -175,23 +189,17 @@ export function CreateTenantDialog({
         clearTimeout(checkTimeoutRef.current);
       }
     };
-  }, [name]);
+  }, [name, orgSelectionMade, isLegacyMode, organizationId]);
 
-  const [hasSelectedOrg, setHasSelectedOrg] = useState(false);
-
+  // Reset name availability when org or name changes
   useEffect(() => {
-    if (open && organizations && !hasSelectedOrg) {
-      const adminOrg = organizations.find((o) => o.is_admin);
-      if (adminOrg) {
-        setOrganizationId(String(adminOrg.id));
-        setHasSelectedOrg(true);
-      }
+    if (name.trim()) {
+      setNameAvailable(null);
     }
-  }, [open, organizations, hasSelectedOrg]);
+  }, [organizationId, name]);
 
-  // Filter wallets based on selected organization
   const availableWallets = allWallets?.filter((w) => {
-    if (!organizationId) {
+    if (!organizationId || organizationId === "none") {
       // No org selected - show master wallets only
       return w.organization_id === null;
     }
@@ -223,14 +231,13 @@ export function CreateTenantDialog({
     setValueFormat("bearer");
     setCustomPrefix("");
     setAuthToken("");
-    setOrganizationId("");
+    setOrganizationId(null);
     setWalletId(null);
     setDefaultPrice("0.01");
     setDefaultScheme("exact");
     setError("");
     setNameAvailable(null);
     setIsCheckingName(false);
-    setHasSelectedOrg(false);
   };
 
   const handleOpenChange = (newOpen: boolean) => {
@@ -254,6 +261,10 @@ export function CreateTenantDialog({
     const finalHeader = getFinalAuthHeader();
     const finalValue = getFinalAuthValue();
 
+    if (!orgSelectionMade) {
+      setError("Please select an organization option first");
+      return;
+    }
     if (!name.trim()) {
       setError("Name is required");
       return;
@@ -285,7 +296,10 @@ export function CreateTenantDialog({
         backend_url: backendUrl.trim(),
         upstream_auth_header: finalHeader,
         upstream_auth_value: finalValue,
-        organization_id: organizationId ? parseInt(organizationId) : null,
+        organization_id:
+          organizationId && organizationId !== "none"
+            ? parseInt(organizationId)
+            : null,
         wallet_id: walletId,
         default_price_usdc: Math.round(
           (parseFloat(defaultPrice) || 0) * 1_000_000,
@@ -305,6 +319,27 @@ export function CreateTenantDialog({
     } finally {
       setIsSubmitting(false);
     }
+  };
+
+  const getUrlPreview = () => {
+    if (!orgSelectionMade) {
+      return null; // Don't show preview until org is selected
+    }
+
+    const sanitized = sanitizeProxyName(name) || "<name>";
+
+    if (isLegacyMode) {
+      return getProxyUrlPattern({
+        proxyName: sanitized,
+      });
+    } else if (selectedOrg) {
+      return getProxyUrlPattern({
+        proxyName: sanitized,
+        orgSlug: selectedOrg.slug,
+      });
+    }
+
+    return null;
   };
 
   return (
@@ -346,18 +381,26 @@ export function CreateTenantDialog({
             </p>
             <div className="flex items-center justify-center gap-2">
               <code className="font-mono text-sm">
-                {name.trim() ? (
-                  <span className="text-gray-12">
-                    {sanitizeProxyName(name) || "<name>"}.api.corbits.dev
-                  </span>
-                ) : (
+                {!orgSelectionMade ? (
+                  <span className="text-gray-9">Select organization first</span>
+                ) : getUrlPreview() ? (
                   <>
-                    <span className="text-gray-9">&lt;name&gt;</span>
-                    <span className="text-gray-12">.api.corbits.dev</span>
+                    {name.trim() ? (
+                      <span className="text-gray-12">{getUrlPreview()}</span>
+                    ) : (
+                      <>
+                        <span className="text-gray-9">&lt;name&gt;</span>
+                        <span className="text-gray-12">
+                          {isLegacyMode
+                            ? ".api.corbits.dev"
+                            : `.${selectedOrg?.slug}.api.corbits.dev`}
+                        </span>
+                      </>
+                    )}
                   </>
-                )}
+                ) : null}
               </code>
-              {name.trim() && (
+              {orgSelectionMade && name.trim() && (
                 <>
                   {isCheckingName ? (
                     <div className="h-4 w-4 animate-spin rounded-full border-2 border-gray-6 border-t-gray-11" />
@@ -369,14 +412,89 @@ export function CreateTenantDialog({
                 </>
               )}
             </div>
-            {name.trim() && nameAvailable === false && !isCheckingName && (
-              <p className="mt-1 text-xs text-red-400">
-                This name is already taken
-              </p>
-            )}
+            {orgSelectionMade &&
+              name.trim() &&
+              nameAvailable === false &&
+              !isCheckingName && (
+                <p className="mt-1 text-xs text-red-400">
+                  This name is already taken
+                  {!isLegacyMode && selectedOrg && ` in ${selectedOrg.name}`}
+                </p>
+              )}
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-6">
+            {/* Organization - FIRST */}
+            <section>
+              <h3 className="mb-3 text-xs font-medium uppercase tracking-wider text-gray-11">
+                Organization <span className="text-red-400">*</span>
+              </h3>
+              <div>
+                <Select.Root
+                  value={organizationId ?? undefined}
+                  onValueChange={(value) => setOrganizationId(value)}
+                >
+                  <Select.Trigger
+                    className={`flex w-full items-center justify-between rounded-md border px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-accent-8 ${
+                      organizationId === null
+                        ? "border-accent-8 bg-gray-2 text-gray-11"
+                        : "border-gray-6 bg-gray-2 text-gray-12"
+                    }`}
+                  >
+                    <Select.Value placeholder="Select organization mode..." />
+                    <Select.Icon>
+                      <ChevronDownIcon className="h-4 w-4 text-gray-11" />
+                    </Select.Icon>
+                  </Select.Trigger>
+                  <Select.Portal>
+                    <Select.Content
+                      className="overflow-hidden rounded-md border border-gray-6 bg-gray-2 shadow-lg"
+                      position="popper"
+                      sideOffset={4}
+                    >
+                      <Select.Viewport className="p-1">
+                        <Select.Item
+                          value="none"
+                          className="relative flex cursor-pointer select-none items-center rounded px-8 py-2 text-sm outline-none hover:bg-gray-4 data-[highlighted]:bg-gray-4"
+                        >
+                          <Select.ItemIndicator className="absolute left-2 inline-flex items-center">
+                            <CheckIcon className="h-4 w-4 text-accent-11" />
+                          </Select.ItemIndicator>
+                          <Select.ItemText>
+                            <span className="text-yellow-400">
+                              No organization
+                            </span>
+                            <span className="text-gray-11">
+                              {" "}
+                              (legacy format)
+                            </span>
+                          </Select.ItemText>
+                        </Select.Item>
+                        <div className="my-1 h-px bg-gray-6" />
+                        {organizations?.map((org) => (
+                          <Select.Item
+                            key={org.id}
+                            value={String(org.id)}
+                            className="relative flex cursor-pointer select-none items-center rounded px-8 py-2 text-sm outline-none hover:bg-gray-4 data-[highlighted]:bg-gray-4"
+                          >
+                            <Select.ItemIndicator className="absolute left-2 inline-flex items-center">
+                              <CheckIcon className="h-4 w-4 text-accent-11" />
+                            </Select.ItemIndicator>
+                            <Select.ItemText>
+                              <span>{org.name}</span>
+                              <span className="ml-2 text-gray-11">
+                                ({org.slug})
+                              </span>
+                            </Select.ItemText>
+                          </Select.Item>
+                        ))}
+                      </Select.Viewport>
+                    </Select.Content>
+                  </Select.Portal>
+                </Select.Root>
+              </div>
+            </section>
+
             {/* Basic Info */}
             <section>
               <h3 className="mb-3 text-xs font-medium uppercase tracking-wider text-gray-11">
@@ -390,8 +508,15 @@ export function CreateTenantDialog({
                   type="text"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  placeholder="my-api-tenant"
-                  className="w-full rounded-md border border-gray-6 bg-gray-2 px-3 py-2 text-sm text-gray-12 placeholder-gray-9 focus:border-accent-8 focus:outline-none focus:ring-1 focus:ring-accent-8"
+                  placeholder={
+                    orgSelectionMade
+                      ? "my-api-tenant"
+                      : "Select organization first"
+                  }
+                  disabled={!orgSelectionMade}
+                  className={`w-full rounded-md border border-gray-6 bg-gray-2 px-3 py-2 text-sm text-gray-12 placeholder-gray-9 focus:border-accent-8 focus:outline-none focus:ring-1 focus:ring-accent-8 ${
+                    !orgSelectionMade ? "cursor-not-allowed opacity-50" : ""
+                  }`}
                 />
               </div>
             </section>
@@ -662,30 +787,6 @@ export function CreateTenantDialog({
               </div>
             </section>
 
-            {/* Organization */}
-            <section>
-              <h3 className="mb-3 text-xs font-medium uppercase tracking-wider text-gray-11">
-                Organization
-              </h3>
-              <div>
-                <label className="mb-1.5 block text-sm text-gray-11">
-                  Organization
-                </label>
-                <select
-                  value={organizationId}
-                  onChange={(e) => setOrganizationId(e.target.value)}
-                  className="w-full rounded-md border border-gray-6 bg-gray-2 px-3 py-2 text-sm text-gray-12 focus:border-accent-8 focus:outline-none focus:ring-1 focus:ring-accent-8"
-                >
-                  <option value="">No organization</option>
-                  {organizations?.map((org) => (
-                    <option key={org.id} value={org.id}>
-                      {org.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </section>
-
             {/* Wallet */}
             <section>
               <h3 className="mb-3 text-xs font-medium uppercase tracking-wider text-gray-11">
@@ -759,9 +860,9 @@ export function CreateTenantDialog({
                   </Select.Portal>
                 </Select.Root>
                 <p className="mt-1 text-xs text-gray-9">
-                  {organizationId
+                  {organizationId && organizationId !== "none"
                     ? "Showing organization wallets and master wallets"
-                    : "Select an organization to see its wallets"}
+                    : "Showing master wallets only"}
                 </p>
               </div>
             </section>
