@@ -39,7 +39,8 @@ const BASE_USDC = evm.lookupKnownAsset("base", "USDC");
 const POLYGON_USDC = evm.lookupKnownAsset("eip155:137", "USDC");
 const MONAD_USDC = evm.lookupKnownAsset("eip155:10143", "USDC");
 
-const SOLANA_RPC_URL = "https://api.mainnet-beta.solana.com";
+const SOLANA_RPC_URL =
+  process.env.SOLANA_RPC_URL || "https://api.mainnet-beta.solana.com";
 
 const monadTestnet = {
   id: 10143,
