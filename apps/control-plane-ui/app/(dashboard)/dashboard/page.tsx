@@ -6,6 +6,7 @@ import { titleCase } from "@/lib/format";
 import useSWR from "swr";
 import { api } from "@/lib/api/client";
 import * as Dialog from "@radix-ui/react-dialog";
+import * as Tabs from "@radix-ui/react-tabs";
 import {
   Cross2Icon,
   PieChartIcon,
@@ -101,6 +102,14 @@ export default function DashboardPage() {
     }));
   }, [dailyData]);
 
+  const revenueChartData = useMemo(() => {
+    if (!dailyData || !Array.isArray(dailyData)) return [];
+    return dailyData.map((d) => ({
+      date: d.period.slice(5),
+      revenue: d.total_usdc,
+    }));
+  }, [dailyData]);
+
   const tenantStats: TenantStats = {
     total: tenants?.length ?? 0,
     active: tenants?.filter((t) => t.status === "active").length ?? 0,
@@ -138,51 +147,116 @@ export default function DashboardPage() {
 
           {tenants && tenants.length > 0 ? (
             <>
-              <div className="rounded-lg border border-white/10 bg-gray-2 p-6">
-                <h2 className="mb-4 text-[15px] font-medium text-white">
-                  Calls Per Day{" "}
-                  <span className="text-xs font-normal text-gray-9">
-                    Last 30 Days
-                  </span>
-                </h2>
-                <div className="h-48">
-                  {chartData.length > 0 ? (
-                    <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={chartData}>
-                        <XAxis
-                          dataKey="date"
-                          tick={{ fill: "#888", fontSize: 10 }}
-                          tickLine={false}
-                          axisLine={{ stroke: "#333" }}
-                        />
-                        <YAxis
-                          tick={{ fill: "#888", fontSize: 10 }}
-                          tickLine={false}
-                          axisLine={{ stroke: "#333" }}
-                        />
-                        <Tooltip
-                          contentStyle={{
-                            backgroundColor: "#1a1a1a",
-                            border: "1px solid #333",
-                            borderRadius: "6px",
-                          }}
-                          labelStyle={{ color: "#888" }}
-                          cursor={{ fill: "rgba(234, 134, 42, 0.15)" }}
-                        />
-                        <Bar
-                          dataKey="calls"
-                          fill="#ea862a"
-                          radius={[2, 2, 0, 0]}
-                        />
-                      </BarChart>
-                    </ResponsiveContainer>
-                  ) : (
-                    <div className="flex h-full items-center justify-center">
-                      <p className="text-sm text-gray-9">No activity yet</p>
-                    </div>
-                  )}
+              <Tabs.Root
+                defaultValue="revenue"
+                className="rounded-lg border border-white/10 bg-gray-2 p-6"
+              >
+                <div className="mb-4 flex items-center justify-between">
+                  <h2 className="text-[15px] font-medium text-white">
+                    Activity{" "}
+                    <span className="text-xs font-normal text-gray-9">
+                      Last 30 Days
+                    </span>
+                  </h2>
+                  <Tabs.List className="flex rounded-md bg-gray-4 p-0.5">
+                    <Tabs.Trigger
+                      value="revenue"
+                      className="rounded px-3 py-1 text-xs font-medium text-gray-11 transition-colors data-[state=active]:bg-gray-6 data-[state=active]:text-white"
+                    >
+                      Revenue
+                    </Tabs.Trigger>
+                    <Tabs.Trigger
+                      value="calls"
+                      className="rounded px-3 py-1 text-xs font-medium text-gray-11 transition-colors data-[state=active]:bg-gray-6 data-[state=active]:text-white"
+                    >
+                      Calls
+                    </Tabs.Trigger>
+                  </Tabs.List>
                 </div>
-              </div>
+                <Tabs.Content value="calls">
+                  <div className="h-48">
+                    {chartData.length > 0 ? (
+                      <ResponsiveContainer width="100%" height="100%">
+                        <BarChart data={chartData}>
+                          <XAxis
+                            dataKey="date"
+                            tick={{ fill: "#888", fontSize: 10 }}
+                            tickLine={false}
+                            axisLine={{ stroke: "#333" }}
+                          />
+                          <YAxis
+                            tick={{ fill: "#888", fontSize: 10 }}
+                            tickLine={false}
+                            axisLine={{ stroke: "#333" }}
+                          />
+                          <Tooltip
+                            contentStyle={{
+                              backgroundColor: "#1a1a1a",
+                              border: "1px solid #333",
+                              borderRadius: "6px",
+                            }}
+                            labelStyle={{ color: "#888" }}
+                            cursor={{ fill: "rgba(234, 134, 42, 0.15)" }}
+                          />
+                          <Bar
+                            dataKey="calls"
+                            fill="#ea862a"
+                            radius={[2, 2, 0, 0]}
+                          />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    ) : (
+                      <div className="flex h-full items-center justify-center">
+                        <p className="text-sm text-gray-9">No activity yet</p>
+                      </div>
+                    )}
+                  </div>
+                </Tabs.Content>
+                <Tabs.Content value="revenue">
+                  <div className="h-48">
+                    {revenueChartData.length > 0 ? (
+                      <ResponsiveContainer width="100%" height="100%">
+                        <BarChart data={revenueChartData}>
+                          <XAxis
+                            dataKey="date"
+                            tick={{ fill: "#888", fontSize: 10 }}
+                            tickLine={false}
+                            axisLine={{ stroke: "#333" }}
+                          />
+                          <YAxis
+                            tick={{ fill: "#888", fontSize: 10 }}
+                            tickLine={false}
+                            axisLine={{ stroke: "#333" }}
+                            tickFormatter={(value) => formatUSDC(value)}
+                          />
+                          <Tooltip
+                            contentStyle={{
+                              backgroundColor: "#1a1a1a",
+                              border: "1px solid #333",
+                              borderRadius: "6px",
+                            }}
+                            labelStyle={{ color: "#888" }}
+                            formatter={(value) => [
+                              formatUSDC(value as number),
+                              "Revenue",
+                            ]}
+                            cursor={{ fill: "rgba(234, 134, 42, 0.15)" }}
+                          />
+                          <Bar
+                            dataKey="revenue"
+                            fill="#ea862a"
+                            radius={[2, 2, 0, 0]}
+                          />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    ) : (
+                      <div className="flex h-full items-center justify-center">
+                        <p className="text-sm text-gray-9">No revenue yet</p>
+                      </div>
+                    )}
+                  </div>
+                </Tabs.Content>
+              </Tabs.Root>
 
               <div className="rounded-lg border border-white/10 bg-gray-2 p-6">
                 <h2 className="mb-4 text-[15px] font-medium text-white">
