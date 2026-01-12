@@ -3,7 +3,6 @@
 import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth/context";
-import { titleCase } from "@/lib/format";
 import useSWR from "swr";
 import * as Dialog from "@radix-ui/react-dialog";
 import {
@@ -959,9 +958,7 @@ export default function WalletsPage() {
           <h1 className="text-2xl font-semibold text-gray-12">Wallets</h1>
           <p className="text-sm text-gray-11">
             Manage crypto wallets for{" "}
-            <span className="text-corbits-orange">
-              {titleCase(currentOrg.name)}
-            </span>
+            <span className="text-corbits-orange">{currentOrg.name}</span>
           </p>
         </div>
         {isOwner && (

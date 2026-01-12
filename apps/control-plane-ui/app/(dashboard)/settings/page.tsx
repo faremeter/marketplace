@@ -3,7 +3,6 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth/context";
-import { titleCase } from "@/lib/format";
 import useSWR from "swr";
 import { api, ApiError } from "@/lib/api/client";
 import { InviteMemberDialog } from "@/components/settings/invite-member-dialog";
@@ -131,9 +130,7 @@ export default function SettingsPage() {
           {currentOrg ? (
             <>
               Manage settings for{" "}
-              <span className="text-corbits-orange">
-                {titleCase(currentOrg.name)}
-              </span>
+              <span className="text-corbits-orange">{currentOrg.name}</span>
             </>
           ) : (
             "Account settings"

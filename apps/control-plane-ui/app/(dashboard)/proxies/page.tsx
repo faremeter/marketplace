@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import { useAuth } from "@/lib/auth/context";
-import { titleCase } from "@/lib/format";
 import useSWR from "swr";
 import { api, ApiError } from "@/lib/api/client";
 import Link from "next/link";
@@ -126,9 +125,7 @@ export default function TenantsPage() {
           <h1 className="text-2xl font-semibold text-gray-12">Proxies</h1>
           <p className="text-sm text-gray-11">
             Manage x402 proxies for{" "}
-            <span className="text-corbits-orange">
-              {titleCase(currentOrg.name)}
-            </span>
+            <span className="text-corbits-orange">{currentOrg.name}</span>
           </p>
         </div>
         <button

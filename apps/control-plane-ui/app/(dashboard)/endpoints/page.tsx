@@ -3,7 +3,7 @@
 const AUTO_COLLAPSE_THRESHOLD = 7;
 
 import { useAuth } from "@/lib/auth/context";
-import { titleCase, getProxyUrl } from "@/lib/format";
+import { getProxyUrl } from "@/lib/format";
 import useSWR from "swr";
 import { api } from "@/lib/api/client";
 import { InlinePriceEdit } from "@/components/shared/inline-price-edit";
@@ -80,9 +80,7 @@ export default function EndpointsPage() {
         <h1 className="text-2xl font-semibold text-gray-12">Endpoints</h1>
         <p className="text-sm text-gray-11">
           API endpoints for{" "}
-          <span className="text-corbits-orange">
-            {titleCase(currentOrg.name)}
-          </span>
+          <span className="text-corbits-orange">{currentOrg.name}</span>
         </p>
       </div>
 
