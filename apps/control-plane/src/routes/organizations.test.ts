@@ -312,6 +312,197 @@ await t.test("POST /api/organizations", async (t) => {
     t.equal(res.status, 400);
   });
 
+  await t.test("accepts name with period", async (t) => {
+    const user = await createUser("period@example.com");
+    const res = await app.request("/api/organizations", {
+      method: "POST",
+      headers: {
+        Cookie: `auth_token=${user.token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ name: "My.Org.Name" }),
+    });
+    t.equal(res.status, 201);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const data = (await res.json()) as any;
+    t.equal(data.name, "My.Org.Name");
+    t.equal(data.slug, "my-org-name");
+  });
+
+  await t.test("converts period to dash in slug", async (t) => {
+    const user = await createUser("perioddash@example.com");
+    const res = await app.request("/api/organizations", {
+      method: "POST",
+      headers: {
+        Cookie: `auth_token=${user.token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ name: "Test.Company" }),
+    });
+    t.equal(res.status, 201);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const data = (await res.json()) as any;
+    t.equal(data.slug, "test-company");
+  });
+
+  await t.test("converts period and space to single dash", async (t) => {
+    const user = await createUser("periodspace@example.com");
+    const res = await app.request("/api/organizations", {
+      method: "POST",
+      headers: {
+        Cookie: `auth_token=${user.token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ name: "My. Org" }),
+    });
+    t.equal(res.status, 201);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const data = (await res.json()) as any;
+    t.equal(data.slug, "my-org");
+  });
+
+  await t.test("converts space and period to single dash", async (t) => {
+    const user = await createUser("spaceperiod@example.com");
+    const res = await app.request("/api/organizations", {
+      method: "POST",
+      headers: {
+        Cookie: `auth_token=${user.token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ name: "My .Org" }),
+    });
+    t.equal(res.status, 201);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const data = (await res.json()) as any;
+    t.equal(data.slug, "my-org");
+  });
+
+  await t.test("rejects name starting with period", async (t) => {
+    const user = await createUser("startperiod@example.com");
+    const res = await app.request("/api/organizations", {
+      method: "POST",
+      headers: {
+        Cookie: `auth_token=${user.token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ name: ".My Org" }),
+    });
+    t.equal(res.status, 400);
+  });
+
+  await t.test("rejects name ending with period", async (t) => {
+    const user = await createUser("endperiod@example.com");
+    const res = await app.request("/api/organizations", {
+      method: "POST",
+      headers: {
+        Cookie: `auth_token=${user.token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ name: "My Org." }),
+    });
+    t.equal(res.status, 400);
+  });
+
+  await t.test("rejects name with consecutive periods", async (t) => {
+    const user = await createUser("doubleperiod@example.com");
+    const res = await app.request("/api/organizations", {
+      method: "POST",
+      headers: {
+        Cookie: `auth_token=${user.token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ name: "My..Org" }),
+    });
+    t.equal(res.status, 400);
+  });
+
+  await t.test("rejects name with triple periods", async (t) => {
+    const user = await createUser("tripleperiod@example.com");
+    const res = await app.request("/api/organizations", {
+      method: "POST",
+      headers: {
+        Cookie: `auth_token=${user.token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ name: "My...Org" }),
+    });
+    t.equal(res.status, 400);
+  });
+
+  await t.test("accepts period-hyphen combination", async (t) => {
+    const user = await createUser("periodhyphen@example.com");
+    const res = await app.request("/api/organizations", {
+      method: "POST",
+      headers: {
+        Cookie: `auth_token=${user.token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ name: "My.-Org" }),
+    });
+    t.equal(res.status, 201);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const data = (await res.json()) as any;
+    t.equal(data.slug, "my-org");
+  });
+
+  await t.test("accepts hyphen-period combination", async (t) => {
+    const user = await createUser("hyphenperiod@example.com");
+    const res = await app.request("/api/organizations", {
+      method: "POST",
+      headers: {
+        Cookie: `auth_token=${user.token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ name: "My-.Org" }),
+    });
+    t.equal(res.status, 201);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const data = (await res.json()) as any;
+    t.equal(data.slug, "my-org");
+  });
+
+  await t.test("accepts multiple periods throughout name", async (t) => {
+    const user = await createUser("multiperiod@example.com");
+    const res = await app.request("/api/organizations", {
+      method: "POST",
+      headers: {
+        Cookie: `auth_token=${user.token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ name: "A.B.C.D" }),
+    });
+    t.equal(res.status, 201);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const data = (await res.json()) as any;
+    t.equal(data.slug, "a-b-c-d");
+  });
+
+  await t.test("rejects period followed by consecutive spaces", async (t) => {
+    const user = await createUser("periodspaces@example.com");
+    const res = await app.request("/api/organizations", {
+      method: "POST",
+      headers: {
+        Cookie: `auth_token=${user.token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ name: "My.  Org" }),
+    });
+    t.equal(res.status, 400);
+  });
+
+  await t.test("rejects consecutive spaces followed by period", async (t) => {
+    const user = await createUser("spacesperiod@example.com");
+    const res = await app.request("/api/organizations", {
+      method: "POST",
+      headers: {
+        Cookie: `auth_token=${user.token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ name: "My  .Org" }),
+    });
+    t.equal(res.status, 400);
+  });
+
   await t.test("rejects invalid custom slug", async (t) => {
     const user = await createUser("badslug@example.com");
     const res = await app.request("/api/organizations", {

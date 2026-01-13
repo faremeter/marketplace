@@ -162,23 +162,34 @@ export const VerifyEmailSchema = type({
   token: "string > 0",
 });
 
-const ORG_NAME_PATTERN = /^[a-zA-Z0-9 -]+$/;
+const ORG_NAME_PATTERN = /^[a-zA-Z0-9 .-]+$/;
 const MAX_SLUG_LENGTH = 63;
 
 const orgName = type(
   `string >= ${MIN_ORG_NAME_LENGTH} & string <= ${MAX_ORG_NAME_LENGTH}`,
 ).narrow((s, ctx) => {
   if (!ORG_NAME_PATTERN.test(s)) {
-    return ctx.mustBe("containing only letters, numbers, spaces, and hyphens");
+    return ctx.mustBe(
+      "containing only letters, numbers, spaces, hyphens, and periods",
+    );
   }
   if (/ {2}/.test(s)) {
     return ctx.mustBe("without consecutive spaces");
+  }
+  if (/\.{2}/.test(s)) {
+    return ctx.mustBe("without consecutive periods");
   }
   if (s.startsWith("-")) {
     return ctx.mustBe("not starting with a hyphen");
   }
   if (s.endsWith("-")) {
     return ctx.mustBe("not ending with a hyphen");
+  }
+  if (s.startsWith(".")) {
+    return ctx.mustBe("not starting with a period");
+  }
+  if (s.endsWith(".")) {
+    return ctx.mustBe("not ending with a period");
   }
   return true;
 });

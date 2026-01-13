@@ -8,7 +8,7 @@ import { api, ApiError } from "@/lib/api/client";
 import { useAuth, type Organization } from "@/lib/auth/context";
 import { useToast } from "@/components/ui/toast";
 
-const ORG_NAME_PATTERN = /^[a-zA-Z0-9 -]+$/;
+const ORG_NAME_PATTERN = /^[a-zA-Z0-9 .-]+$/;
 const MIN_ORG_NAME_LENGTH = 4;
 const MAX_ORG_NAME_LENGTH = 58;
 
@@ -29,16 +29,25 @@ function validateOrgName(name: string): string | null {
     return `Name must be at most ${MAX_ORG_NAME_LENGTH} characters`;
   }
   if (!ORG_NAME_PATTERN.test(name)) {
-    return "Name can only contain letters, numbers, spaces, and hyphens";
+    return "Name can only contain letters, numbers, spaces, hyphens, and periods";
   }
   if (/ {2}/.test(name)) {
     return "Name cannot have consecutive spaces";
+  }
+  if (/\.{2}/.test(name)) {
+    return "Name cannot have consecutive periods";
   }
   if (name.startsWith("-")) {
     return "Name cannot start with a hyphen";
   }
   if (name.endsWith("-")) {
     return "Name cannot end with a hyphen";
+  }
+  if (name.startsWith(".")) {
+    return "Name cannot start with a period";
+  }
+  if (name.endsWith(".")) {
+    return "Name cannot end with a period";
   }
   return null;
 }
