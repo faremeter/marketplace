@@ -1,0 +1,43 @@
+#!/bin/bash
+set -euo pipefail
+
+NODE_ID="${1:-}"
+MAX_RETRIES="${2:-30}"
+
+if [[ -z "$NODE_ID" ]]; then
+    if [[ -f /etc/api-node/node-id ]]; then
+        NODE_ID=$(cat /etc/api-node/node-id)
+    else
+        echo "Usage: pull-tenant-config <node-id> [max-retries]" >&2
+        exit 1
+    fi
+fi
+
+ADDRS_FILE="/etc/nginx/control-plane-addrs.conf"
+if [[ ! -f "$ADDRS_FILE" ]]; then
+    echo "Control plane addresses file not found: $ADDRS_FILE" >&2
+    exit 1
+fi
+
+IFS=',' read -ra addrs <"$ADDRS_FILE"
+retry=0
+
+while [[ $retry -lt "$MAX_RETRIES" ]]; do
+    for addr in "${addrs[@]}"; do
+        if curl -sf "http://${addr}/api/nodes/${NODE_ID}/sync" -o /etc/nginx/tenant-config.json; then
+            chown www-data:tenantmgr /etc/nginx/tenant-config.json
+            chmod 640 /etc/nginx/tenant-config.json
+            /usr/local/bin/regen-tenant-nginx
+            exit 0
+        fi
+    done
+    echo "Waiting for control-plane... (attempt $((retry + 1))/$MAX_RETRIES)"
+    sleep 2
+    retry=$((retry + 1))
+done
+
+echo "Failed to pull tenant config after $MAX_RETRIES attempts" >&2
+touch /etc/nginx/tenant-config.json
+chown www-data:tenantmgr /etc/nginx/tenant-config.json
+chmod 640 /etc/nginx/tenant-config.json
+exit 1

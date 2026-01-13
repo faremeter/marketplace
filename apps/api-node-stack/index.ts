@@ -73,6 +73,16 @@ new runner.SSHDeployer(
           mode: 0o755,
         }),
         runner.localFile({
+          filename: "regen-tenant-nginx",
+          localPath: "./assets/regen-tenant-nginx",
+          mode: 0o755,
+        }),
+        runner.localFile({
+          filename: "pull-tenant-config",
+          localPath: "./assets/pull-tenant-config",
+          mode: 0o755,
+        }),
+        runner.localFile({
           filename: "50_proxy.conf",
           localPath: "./assets/50_proxy.conf",
           mode: 0o644,

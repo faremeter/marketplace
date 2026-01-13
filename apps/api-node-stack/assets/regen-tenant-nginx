@@ -1,0 +1,99 @@
+#!/bin/bash
+set -euo pipefail
+
+CONFIG_FILE="/etc/nginx/tenant-config.json"
+OUTPUT_FILE="/etc/nginx/sites-available/api-node"
+CONF_DIR="/etc/nginx/sites-available/api-node.d"
+
+cat <<'BASE' >"$OUTPUT_FILE"
+lua_package_path '/etc/nginx/sites-available/api-node.d/?.lua;;';
+lua_shared_dict tenants 10m;
+lua_shared_dict word_dict 10m;
+lua_ssl_trusted_certificate /etc/ssl/certs/ca-certificates.crt;
+lua_ssl_verify_depth 2;
+
+init_by_lua_file /etc/nginx/init-config.lua;
+
+server {
+    listen 80 default_server;
+    server_name _;
+
+    location /.well-known/acme-challenge/ {
+        root /var/www/html;
+    }
+
+    location = /health {
+        return 200 'ok';
+        add_header Content-Type text/plain;
+    }
+
+    location = /internal/config {
+        allow 10.12.0.0/24;
+        deny all;
+        content_by_lua_file /etc/nginx/config-receiver.lua;
+    }
+
+    location = /internal/install-cert {
+        allow 10.12.0.0/24;
+        deny all;
+        client_max_body_size 1m;
+        content_by_lua_file /etc/nginx/cert-installer.lua;
+    }
+
+    location = /internal/delete-cert {
+        allow 10.12.0.0/24;
+        deny all;
+        content_by_lua_file /etc/nginx/cert-deleter.lua;
+    }
+
+    location / {
+        return 301 https://$host$request_uri;
+    }
+}
+BASE
+
+if [[ -f "$CONFIG_FILE" ]] && [[ -s "$CONFIG_FILE" ]]; then
+    TENANT_ENTRIES=$(jq -r '.config // {} | keys[]' "$CONFIG_FILE" 2>/dev/null) || true
+
+    if [[ -n "$TENANT_ENTRIES" ]]; then
+        while read -r domain; do
+            if [[ -z "$domain" ]]; then
+                continue
+            fi
+
+            CERT_PATH="/etc/letsencrypt/live/${domain}"
+            if [[ -d "$CERT_PATH" ]]; then
+                SERVER_NAMES="$domain"
+
+                domain_io="${domain/.corbits.dev/.corbits.io}"
+                if [[ "$domain_io" != "$domain" ]]; then
+                    SERVER_NAMES="$SERVER_NAMES $domain_io"
+                fi
+
+                cat <<EOF >>"$OUTPUT_FILE"
+
+server {
+    listen 443 ssl;
+    http2 on;
+    server_name ${SERVER_NAMES};
+
+    ssl_certificate ${CERT_PATH}/fullchain.pem;
+    ssl_certificate_key ${CERT_PATH}/privkey.pem;
+
+    resolver 8.8.8.8 8.8.4.4 valid=300s;
+    resolver_timeout 5s;
+
+    location = /health {
+        return 200 'ok';
+        add_header Content-Type text/plain;
+    }
+
+    include ${CONF_DIR}/*.conf;
+}
+EOF
+            fi
+        done <<<"$TENANT_ENTRIES"
+    fi
+fi
+
+sudo /usr/sbin/nginx -t && sudo /bin/systemctl reload nginx
