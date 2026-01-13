@@ -41,13 +41,9 @@ local tenant_name = normalize_tenant_name(data.tenant_name)
 local domain = normalize_domain(data.domain)
 
 if not domain then
-    if tenant_name then
-        domain = tenant_name .. ".test.api.corbits.dev"
-    else
-        ngx.status = 400
-        ngx.say(cjson.encode({success = false, error = "Missing domain"}))
-        return ngx.exit(400)
-    end
+    ngx.status = 400
+    ngx.say(cjson.encode({success = false, error = "Missing domain"}))
+    return ngx.exit(400)
 end
 
 if not tenant_name and data.tenant_name ~= nil then

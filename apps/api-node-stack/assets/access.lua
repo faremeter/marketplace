@@ -14,9 +14,7 @@ local function canonicalize_tenant_domain(host)
     local escaped_base = BASE_DOMAIN:gsub("%.", "%%.")
     local escaped_alt = ALT_BASE_DOMAIN:gsub("%.", "%%.")
     local patterns = {
-        "^(.+)%.test%." .. escaped_base .. "$",
         "^(.+)%." .. escaped_base .. "$",
-        "^(.+)%.test%." .. escaped_alt .. "$",
         "^(.+)%." .. escaped_alt .. "$"
     }
 

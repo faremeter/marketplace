@@ -56,9 +56,9 @@ EOF
 Address = ${WIREGUARD_WG1_ADDRESS}/24
 PrivateKey = ${WIREGUARD_PRIVATE_KEY}
 EOF
-    IFS=',' read -ra PEERS <<< "$CONTROL_PLANE_WG_PEERS"
+    IFS=',' read -ra PEERS <<<"$CONTROL_PLANE_WG_PEERS"
     for peer in "${PEERS[@]}"; do
-        IFS=':' read -r pubkey ip endpoint <<< "$peer"
+        IFS=':' read -r pubkey ip endpoint <<<"$peer"
         cat <<EOF >>/etc/wireguard/wg1.conf
 
 [Peer]
@@ -183,20 +183,10 @@ BASE
 
 # Get list of tenants from config file if it exists
 if [ -f "$CONFIG_FILE" ] && [ -s "$CONFIG_FILE" ]; then
-    JQ_FILTER='.config // {} | to_entries[] | "\(.key)|\(.value.domain // \"\")"'
-    TENANT_ENTRIES=$(jq -r "$JQ_FILTER" "$CONFIG_FILE" 2>/dev/null || echo "")
+    TENANT_ENTRIES=$(jq -r '.config // {} | keys[]' "$CONFIG_FILE" 2>/dev/null)
 
     if [ -n "$TENANT_ENTRIES" ]; then
-        while IFS='|' read -r tenant_key tenant_domain; do
-            if [ -z "$tenant_key" ]; then
-                continue
-            fi
-
-            domain="$tenant_domain"
-            if [ -z "$domain" ] || [ "$domain" = "null" ]; then
-                domain="$tenant_key"
-            fi
-
+        while read -r domain; do
             if [ -z "$domain" ]; then
                 continue
             fi
@@ -208,15 +198,6 @@ if [ -f "$CONFIG_FILE" ] && [ -s "$CONFIG_FILE" ]; then
                 domain_io="${domain/.corbits.dev/.corbits.io}"
                 if [ "$domain_io" != "$domain" ]; then
                     SERVER_NAMES="$SERVER_NAMES $domain_io"
-                fi
-
-                if [[ "$domain" == *.api.corbits.dev ]]; then
-                    domain_test="${domain/.api.corbits.dev/.test.api.corbits.dev}"
-                    SERVER_NAMES="$SERVER_NAMES $domain_test"
-                    domain_test_io="${domain_test/.corbits.dev/.corbits.io}"
-                    if [ "$domain_test_io" != "$domain_test" ]; then
-                        SERVER_NAMES="$SERVER_NAMES $domain_test_io"
-                    fi
                 fi
 
                 cat <<EOF >> "$OUTPUT_FILE"
@@ -274,7 +255,7 @@ step::40::setup-nginx() {
 
     local nginx_config="/etc/nginx/sites-available/api-node"
 
-    echo "$CONTROL_PLANE_ADDRS" > /etc/nginx/control-plane-addrs.conf
+    echo "$CONTROL_PLANE_ADDRS" >/etc/nginx/control-plane-addrs.conf
 
     cp ./access.lua /etc/nginx/.
     cp ./config-receiver.lua /etc/nginx/.
@@ -344,25 +325,26 @@ EOF
 }
 
 step::50::pull-tenant-config() {
-    local addrs=(${CONTROL_PLANE_ADDRS//,/ })
+    local addrs=()
+    IFS=',' read -ra addrs <<<"$CONTROL_PLANE_ADDRS"
     local max_retries=30
     local retry=0
 
     while [ $retry -lt $max_retries ]; do
         for addr in "${addrs[@]}"; do
             if curl -sf "http://${addr}/api/nodes/${NODE_ID}/sync" -o /etc/nginx/tenant-config.json; then
-                echo "Pulled tenant config from $addr"
+                log::info "Pulled tenant config from $addr"
                 chown www-data:www-data /etc/nginx/tenant-config.json
                 /usr/local/bin/regen-tenant-nginx
                 return 0
             fi
         done
-        echo "Waiting for control-plane... (attempt $((retry + 1))/$max_retries)"
+        log::info "Waiting for control-plane... (attempt $((retry + 1))/$max_retries)"
         sleep 2
         retry=$((retry + 1))
     done
 
-    echo "WARNING: Failed to pull tenant config after $max_retries attempts"
+    log::warn "Failed to pull tenant config after $max_retries attempts"
     touch /etc/nginx/tenant-config.json
     chown www-data:www-data /etc/nginx/tenant-config.json
 }
