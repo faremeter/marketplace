@@ -59,7 +59,7 @@ local config_file = io.open("/etc/nginx/tenant-config.json", "w")
 if config_file then
     config_file:write(body)
     config_file:close()
-    local regen_result = os.execute("sudo /usr/local/bin/regen-tenant-nginx")
+    local regen_result = os.execute("sudo -u tenantmgr /usr/local/bin/regen-tenant-nginx")
     if regen_result ~= 0 then
         ngx.log(ngx.ERR, "regen-tenant-nginx failed with exit code: ", regen_result)
     end

@@ -1,15 +1,26 @@
 #!/bin/bash
-set -e
-DOMAIN=$1
+set -euo pipefail
 
-if [ -z "$DOMAIN" ]; then
-    echo "Usage: delete-tenant-cert <domain>"
+DOMAIN="${1:-}"
+
+if [[ -z "$DOMAIN" ]]; then
+    echo "Usage: delete-tenant-cert <domain>" >&2
+    exit 1
+fi
+
+if [[ ! "$DOMAIN" =~ ^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$ ]]; then
+    echo "Invalid domain format" >&2
+    exit 1
+fi
+
+if [[ "$DOMAIN" == *".."* ]] || [[ "$DOMAIN" == *"/"* ]]; then
+    echo "Invalid domain: path traversal attempt" >&2
     exit 1
 fi
 
 CERT_DIR="/etc/letsencrypt/live/${DOMAIN}"
 
-if [ -d "$CERT_DIR" ]; then
+if [[ -d "$CERT_DIR" ]]; then
     rm -rf "$CERT_DIR"
     /usr/local/bin/regen-tenant-nginx
     echo "Deleted cert for ${DOMAIN}"

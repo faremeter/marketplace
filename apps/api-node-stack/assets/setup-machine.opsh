@@ -124,6 +124,15 @@ EOF
     systemctl enable alloy --now
 }
 
+step::32::setup-tenantmgr-user() {
+    useradd -r -s /usr/sbin/nologin -d /nonexistent tenantmgr || true
+    mkdir -p /etc/letsencrypt/live
+    chown -R tenantmgr:tenantmgr /etc/letsencrypt
+    chmod 755 /etc/letsencrypt
+    chmod 755 /etc/letsencrypt/live
+    usermod -a -G tenantmgr www-data
+}
+
 step::35::setup-cert-scripts() {
     # Create script to regenerate nginx TLS config from tenant-config.json
     cat <<'GENSCRIPT' >/usr/local/bin/regen-tenant-nginx
@@ -227,8 +236,7 @@ EOF
     fi
 fi
 
-# Reload nginx
-nginx -t && systemctl reload nginx
+nginx -t && sudo /bin/systemctl reload nginx
 GENSCRIPT
     chmod +x /usr/local/bin/regen-tenant-nginx
 
@@ -243,9 +251,10 @@ GENSCRIPT
     chmod +x /usr/local/bin/delete-tenant-cert
 
     cat <<EOF >/etc/sudoers.d/cert-provisioner
-www-data ALL=(ALL) NOPASSWD: /usr/local/bin/install-tenant-cert
-www-data ALL=(ALL) NOPASSWD: /usr/local/bin/delete-tenant-cert
-www-data ALL=(ALL) NOPASSWD: /usr/local/bin/regen-tenant-nginx
+www-data ALL=(tenantmgr) NOPASSWD: /usr/local/bin/install-tenant-cert
+www-data ALL=(tenantmgr) NOPASSWD: /usr/local/bin/delete-tenant-cert
+www-data ALL=(tenantmgr) NOPASSWD: /usr/local/bin/regen-tenant-nginx
+tenantmgr ALL=(root) NOPASSWD: /bin/systemctl reload nginx
 EOF
     chmod 440 /etc/sudoers.d/cert-provisioner
 }
@@ -316,6 +325,7 @@ server {
     include ${nginx_config}.d/*.conf;
 }
 EOF
+    chown tenantmgr:tenantmgr "$nginx_config"
     (cd /etc/nginx/sites-enabled && rm -f api-node && ln -s "../sites-available/api-node" .)
     systemctl reload nginx
 
@@ -334,7 +344,8 @@ step::50::pull-tenant-config() {
         for addr in "${addrs[@]}"; do
             if curl -sf "http://${addr}/api/nodes/${NODE_ID}/sync" -o /etc/nginx/tenant-config.json; then
                 log::info "Pulled tenant config from $addr"
-                chown www-data:www-data /etc/nginx/tenant-config.json
+                chown www-data:tenantmgr /etc/nginx/tenant-config.json
+                chmod 640 /etc/nginx/tenant-config.json
                 /usr/local/bin/regen-tenant-nginx
                 return 0
             fi
@@ -346,7 +357,8 @@ step::50::pull-tenant-config() {
 
     log::warn "Failed to pull tenant config after $max_retries attempts"
     touch /etc/nginx/tenant-config.json
-    chown www-data:www-data /etc/nginx/tenant-config.json
+    chown www-data:tenantmgr /etc/nginx/tenant-config.json
+    chmod 640 /etc/nginx/tenant-config.json
 }
 
 steps::run "step" "$@"

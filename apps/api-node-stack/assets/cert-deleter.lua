@@ -55,7 +55,7 @@ end
 tenant_name = tenant_name or domain
 
 local cmd = string.format(
-    "sudo /usr/local/bin/delete-tenant-cert '%s' 2>&1; echo EXIT_CODE:$?",
+    "sudo -u tenantmgr /usr/local/bin/delete-tenant-cert '%s' 2>&1; echo EXIT_CODE:$?",
     domain
 )
 local handle = io.popen(cmd)

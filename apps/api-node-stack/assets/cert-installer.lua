@@ -60,14 +60,13 @@ end
 
 tenant_name = tenant_name or domain
 
-local fullchain_b64 = ngx.encode_base64(data.fullchain)
-local privkey_b64 = ngx.encode_base64(data.privkey)
+local cert_json = cjson.encode({fullchain = data.fullchain, privkey = data.privkey})
+local escaped_json = cert_json:gsub("'", "'\\''")
 
 local cmd = string.format(
-    "sudo /usr/local/bin/install-tenant-cert '%s' '%s' '%s' 2>&1; echo EXIT_CODE:$?",
-    domain,
-    fullchain_b64,
-    privkey_b64
+    "echo '%s' | sudo -u tenantmgr /usr/local/bin/install-tenant-cert '%s' 2>&1; echo EXIT_CODE:$?",
+    escaped_json,
+    domain
 )
 local handle = io.popen(cmd)
 local result = handle:read("*a")

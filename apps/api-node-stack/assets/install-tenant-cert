@@ -1,22 +1,40 @@
 #!/bin/bash
-set -e
-DOMAIN=$1
-FULLCHAIN_B64=$2
-PRIVKEY_B64=$3
+set -euo pipefail
 
-if [ -z "$DOMAIN" ] || [ -z "$FULLCHAIN_B64" ] || [ -z "$PRIVKEY_B64" ]; then
-    echo "Usage: install-tenant-cert <domain> <fullchain_b64> <privkey_b64>"
+DOMAIN="${1:-}"
+
+if [[ -z "$DOMAIN" ]]; then
+    echo "Usage: install-tenant-cert <domain>" >&2
+    exit 1
+fi
+
+if [[ ! "$DOMAIN" =~ ^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$ ]]; then
+    echo "Invalid domain format" >&2
+    exit 1
+fi
+
+if [[ "$DOMAIN" == *".."* ]] || [[ "$DOMAIN" == *"/"* ]]; then
+    echo "Invalid domain: path traversal attempt" >&2
+    exit 1
+fi
+
+CERT_DATA=$(cat)
+FULLCHAIN=$(echo "$CERT_DATA" | jq -r '.fullchain // empty')
+PRIVKEY=$(echo "$CERT_DATA" | jq -r '.privkey // empty')
+
+if [[ -z "$FULLCHAIN" ]] || [[ -z "$PRIVKEY" ]]; then
+    echo "Missing certificate data in stdin" >&2
     exit 1
 fi
 
 CERT_DIR="/etc/letsencrypt/live/${DOMAIN}"
 mkdir -p "$CERT_DIR"
 
-echo "$FULLCHAIN_B64" | base64 -d > "$CERT_DIR/fullchain.pem"
-echo "$PRIVKEY_B64" | base64 -d > "$CERT_DIR/privkey.pem"
-
-chmod 600 "$CERT_DIR/privkey.pem"
+printf '%s' "$FULLCHAIN" >"$CERT_DIR/fullchain.pem"
 chmod 644 "$CERT_DIR/fullchain.pem"
+
+printf '%s' "$PRIVKEY" >"$CERT_DIR/privkey.pem"
+chmod 640 "$CERT_DIR/privkey.pem"
 
 echo "Installed cert for ${DOMAIN}"
 
