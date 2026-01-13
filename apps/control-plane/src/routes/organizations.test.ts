@@ -660,6 +660,19 @@ await t.test("DELETE /api/organizations/:id", async (t) => {
 
     t.equal(res.status, 403);
   });
+
+  await t.test("admin cannot delete org", async (t) => {
+    const user = await createUser("deladmin@example.com");
+    const org = await createOrg("AdminProtected", "admin-protected");
+    await addMember(user.id, org.id, "admin");
+
+    const res = await app.request(`/api/organizations/${org.id}`, {
+      method: "DELETE",
+      headers: { Cookie: `auth_token=${user.token}` },
+    });
+
+    t.equal(res.status, 403);
+  });
 });
 
 await t.test("GET /api/organizations/:id/members", async (t) => {
