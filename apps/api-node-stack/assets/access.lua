@@ -39,7 +39,10 @@ local function get_control_plane_addrs()
     end
 
     local f = io.open("/etc/nginx/control-plane-addrs.conf", "r")
-    if not f then return {"10.12.0.1:1337"} end
+    if not f then
+        ngx.log(ngx.ERR, "control-plane-addrs.conf not found")
+        return {}
+    end
     local content = f:read("*a")
     f:close()
 
@@ -54,7 +57,8 @@ local function get_control_plane_addrs()
     end
 
     if #addrs == 0 then
-        return {"10.12.0.1:1337"}
+        ngx.log(ngx.ERR, "control-plane-addrs.conf is empty")
+        return {}
     end
 
     ngx.shared.tenants:set("_control_plane_addrs", table.concat(clean, ","), 60)
