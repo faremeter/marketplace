@@ -327,6 +327,11 @@ function CatchAllRow({
       </td>
       <td className="whitespace-nowrap py-2 pl-4 text-right align-middle">
         <div className="flex items-center justify-end gap-2">
+          {tenant.default_price_usdc < 0.0000001 && (
+            <span className="rounded bg-green-900/50 px-1.5 py-0.5 text-[10px] font-medium text-green-400 border border-green-800">
+              Free
+            </span>
+          )}
           <InlinePriceEdit
             priceUsdc={tenant.default_price_usdc}
             onUpdate={onUpdate}
@@ -334,11 +339,6 @@ function CatchAllRow({
             fieldName="default_price_usdc"
             label="Default Price"
           />
-          {tenant.default_price_usdc < 0.0000001 && (
-            <span className="rounded bg-green-900/50 px-1.5 py-0.5 text-[10px] font-medium text-green-400 border border-green-800">
-              Free
-            </span>
-          )}
         </div>
       </td>
       <td className="whitespace-nowrap py-2 pl-4 text-right align-middle">
@@ -399,6 +399,11 @@ function EndpointRow({
       </td>
       <td className="whitespace-nowrap py-2 pl-4 text-right align-middle">
         <div className="flex items-center justify-end gap-2">
+          {(endpoint.price_usdc ?? tenant.default_price_usdc) < 0.0000001 && (
+            <span className="rounded bg-green-900/50 px-1.5 py-0.5 text-[10px] font-medium text-green-400 border border-green-800">
+              Free
+            </span>
+          )}
           <InlinePriceEdit
             priceUsdc={endpoint.price_usdc ?? tenant.default_price_usdc}
             defaultPriceUsdc={tenant.default_price_usdc}
@@ -407,11 +412,6 @@ function EndpointRow({
             fieldName="price_usdc"
             label="Price"
           />
-          {(endpoint.price_usdc ?? tenant.default_price_usdc) < 0.0000001 && (
-            <span className="rounded bg-green-900/50 px-1.5 py-0.5 text-[10px] font-medium text-green-400 border border-green-800">
-              Free
-            </span>
-          )}
         </div>
       </td>
       <td className="whitespace-nowrap py-2 pl-4 text-right align-middle">
