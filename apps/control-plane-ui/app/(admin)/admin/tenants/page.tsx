@@ -13,9 +13,9 @@ import {
   ChevronRightIcon,
   MagnifyingGlassIcon,
 } from "@radix-ui/react-icons";
-import * as Tooltip from "@radix-ui/react-tooltip";
 import * as Dialog from "@radix-ui/react-dialog";
 import { api, ApiError } from "@/lib/api/client";
+import { StatusBadge } from "@/components/ui/status-badge";
 import { CreateTenantDialog } from "@/components/admin/create-tenant-dialog";
 import { InlineOrgSelect } from "@/components/admin/inline-org-select";
 import { InlineWalletSelect } from "@/components/admin/inline-wallet-select";
@@ -27,7 +27,6 @@ import { InlineNodeSelect } from "@/components/admin/inline-node-select";
 import { useToast } from "@/components/ui/toast";
 import {
   type TenantNode as BaseTenantNode,
-  getTenantStatus,
   isDeleteDisabled,
 } from "@/lib/tenant-status";
 import { getProxyUrl } from "@/lib/format";
@@ -316,31 +315,7 @@ export default function AdminTenantsPage() {
                       />
                     </td>
                     <td className="px-4 py-3">
-                      {(() => {
-                        const status = getTenantStatus(tenant);
-                        return (
-                          <Tooltip.Provider delayDuration={0}>
-                            <Tooltip.Root>
-                              <Tooltip.Trigger asChild>
-                                <span
-                                  className={`inline-flex whitespace-nowrap cursor-help rounded-full border px-2 py-0.5 text-xs ${status.color} ${status.pulse ? "animate-pulse" : ""}`}
-                                >
-                                  {status.label}
-                                </span>
-                              </Tooltip.Trigger>
-                              <Tooltip.Portal>
-                                <Tooltip.Content
-                                  className="rounded bg-gray-1 px-2 py-1 text-xs text-gray-12 shadow-lg border border-gray-6"
-                                  sideOffset={5}
-                                >
-                                  {status.tooltip}
-                                  <Tooltip.Arrow className="fill-gray-6" />
-                                </Tooltip.Content>
-                              </Tooltip.Portal>
-                            </Tooltip.Root>
-                          </Tooltip.Provider>
-                        );
-                      })()}
+                      <StatusBadge tenant={tenant} />
                     </td>
                     <td className="px-4 py-3 text-sm text-gray-11">
                       {new Date(tenant.created_at).toLocaleDateString()}

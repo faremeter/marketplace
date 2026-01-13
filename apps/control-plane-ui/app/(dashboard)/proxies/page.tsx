@@ -16,7 +16,8 @@ import { InlineAuthEdit } from "@/components/shared/inline-auth-edit";
 import { InlineActiveToggle } from "@/components/shared/inline-active-toggle";
 import { InlineWalletSelect } from "@/components/shared/inline-wallet-select";
 import { CreateUserTenantDialog } from "@/components/tenants/create-user-tenant-dialog";
-import { type TenantNode, getTenantStatus } from "@/lib/tenant-status";
+import { StatusBadge } from "@/components/ui/status-badge";
+import { type TenantNode } from "@/lib/tenant-status";
 
 interface Tenant {
   id: number;
@@ -175,7 +176,6 @@ export default function TenantsPage() {
             </thead>
             <tbody className="divide-y divide-gray-6 bg-gray-2">
               {tenants.map((tenant) => {
-                const status = getTenantStatus(tenant);
                 const apiEndpoint = `/api/organizations/${currentOrg.id}/tenants/${tenant.id}`;
                 return (
                   <tr key={tenant.id} className="hover:bg-gray-3">
@@ -226,11 +226,7 @@ export default function TenantsPage() {
                       />
                     </td>
                     <td className="px-4 py-3">
-                      <span
-                        className={`inline-flex rounded-full border px-2 py-0.5 text-xs ${status.color} ${status.pulse ? "animate-pulse" : ""}`}
-                      >
-                        {status.label}
-                      </span>
+                      <StatusBadge tenant={tenant} />
                     </td>
                     <td className="px-4 py-3">
                       <Link

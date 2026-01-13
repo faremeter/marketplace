@@ -18,6 +18,7 @@ export interface StatusDisplay {
   color: string;
   tooltip: string;
   pulse: boolean;
+  pingColor?: string;
 }
 
 export function getTenantStatus(tenant: TenantStatusInput): StatusDisplay {
@@ -92,10 +93,11 @@ export function getTenantStatus(tenant: TenantStatusInput): StatusDisplay {
   }
 
   return {
-    label: "Ready",
-    tooltip: "Tenant is fully operational",
+    label: "Live",
+    tooltip: "Proxy is live and accepting requests",
     color: "bg-green-900/50 text-green-400 border-green-800",
     pulse: false,
+    pingColor: "bg-green-400",
   };
 }
 

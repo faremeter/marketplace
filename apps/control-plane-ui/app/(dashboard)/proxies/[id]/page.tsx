@@ -15,7 +15,6 @@ import {
 } from "@radix-ui/react-icons";
 import * as Dialog from "@radix-ui/react-dialog";
 import * as Tabs from "@radix-ui/react-tabs";
-import * as RadixTooltip from "@radix-ui/react-tooltip";
 import {
   BarChart,
   Bar,
@@ -40,12 +39,8 @@ import { InlineSchemeEdit } from "@/components/shared/inline-scheme-edit";
 import { InlineWalletSelect } from "@/components/shared/inline-wallet-select";
 import { EndpointsTab } from "@/components/proxy-endpoints/endpoints-tab";
 import { getProxyUrl } from "@/lib/format";
-
-interface TenantNode {
-  id: number;
-  cert_status: string | null;
-  is_primary: boolean;
-}
+import { StatusBadge } from "@/components/ui/status-badge";
+import { type TenantNode } from "@/lib/tenant-status";
 
 interface Tenant {
   id: number;
@@ -74,86 +69,6 @@ interface DailyCallData {
   period: string;
   total_usdc: number;
   call_count: number;
-}
-
-function getStatus(tenant: Tenant): {
-  label: string;
-  color: string;
-  tooltip: string;
-} {
-  if (tenant.status === "deleting") {
-    return {
-      label: "Deleting",
-      color: "bg-red-900/50 text-red-400 border-red-800",
-      tooltip: "This proxy is being deleted",
-    };
-  }
-
-  if (tenant.status === "failed") {
-    return {
-      label: "Pending",
-      color: "bg-yellow-900/50 text-yellow-400 border-yellow-800",
-      tooltip: "Proxy setup failed, retrying",
-    };
-  }
-
-  if (tenant.status === "pending") {
-    const hasPendingCert = tenant.nodes.some(
-      (n) => n.cert_status === "pending",
-    );
-
-    if (tenant.wallet_funding_status === "pending") {
-      return {
-        label: "Funding",
-        color: "bg-yellow-900/50 text-yellow-400 border-yellow-800",
-        tooltip: "Waiting for wallet funding to complete",
-      };
-    }
-
-    if (hasPendingCert) {
-      return {
-        label: "Provisioning",
-        color: "bg-yellow-900/50 text-yellow-400 border-yellow-800",
-        tooltip: "SSL certificate is being provisioned",
-      };
-    }
-
-    return {
-      label: "Initializing",
-      color: "bg-yellow-900/50 text-yellow-400 border-yellow-800",
-      tooltip: "Proxy is being initialized",
-    };
-  }
-
-  if (!tenant.wallet_id) {
-    return {
-      label: "No Wallet",
-      color: "bg-red-900/50 text-red-400 border-red-800",
-      tooltip: "Assign a wallet to enable this proxy",
-    };
-  }
-
-  if (tenant.wallet_funding_status !== "funded") {
-    return {
-      label: "Unfunded",
-      color: "bg-yellow-900/50 text-yellow-400 border-yellow-800",
-      tooltip: "Wallet needs funding to process payments",
-    };
-  }
-
-  if (!tenant.is_active) {
-    return {
-      label: "Inactive",
-      color: "bg-gray-800/50 text-gray-400 border-gray-700",
-      tooltip: "Proxy is disabled, enable it in settings",
-    };
-  }
-
-  return {
-    label: "Ready",
-    color: "bg-green-900/50 text-green-400 border-green-800",
-    tooltip: "Proxy is live and accepting requests",
-  };
 }
 
 type TabType = "overview" | "endpoints" | "settings";
@@ -292,7 +207,6 @@ export default function ProxyDetailPage() {
     );
   }
 
-  const status = getStatus(tenant);
   const apiEndpoint = `/api/organizations/${currentOrg.id}/tenants/${tenant.id}`;
 
   const tabs: { id: TabType; label: string }[] = [
@@ -391,26 +305,7 @@ export default function ProxyDetailPage() {
             </a>
           </div>
         </div>
-        <RadixTooltip.Provider>
-          <RadixTooltip.Root>
-            <RadixTooltip.Trigger asChild>
-              <span
-                className={`inline-flex cursor-help rounded-full border px-2.5 py-1 text-xs font-medium ${status.color}`}
-              >
-                {status.label}
-              </span>
-            </RadixTooltip.Trigger>
-            <RadixTooltip.Portal>
-              <RadixTooltip.Content
-                className="rounded-md bg-gray-1 px-3 py-2 text-xs text-gray-11 shadow-lg border border-gray-6"
-                sideOffset={5}
-              >
-                {status.tooltip}
-                <RadixTooltip.Arrow className="fill-gray-1" />
-              </RadixTooltip.Content>
-            </RadixTooltip.Portal>
-          </RadixTooltip.Root>
-        </RadixTooltip.Provider>
+        <StatusBadge tenant={tenant} size="md" />
       </div>
 
       <div className="border-b border-gray-6">
