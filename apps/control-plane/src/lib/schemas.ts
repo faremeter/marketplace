@@ -233,6 +233,9 @@ export const InternalTransactionSchema = type({
   "tx_hash?": `string <= ${MAX_NAME_LENGTH} | null`,
   "network?": "string <= 50 | null",
   request_path: `string > 0 & string <= ${MAX_PATH_LENGTH}`,
+  "client_ip?": `string <= ${MAX_IP_LENGTH} | null`,
+  "request_method?": "string <= 10 | null",
+  "metadata?": "object | null",
 });
 
 export const AdminAssignNodeSchema = type({

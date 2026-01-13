@@ -73,6 +73,9 @@ internalRoutes.post(
         amount_usdc: body.amount_usdc,
         network: body.network ?? null,
         request_path: body.request_path,
+        client_ip: body.client_ip ?? null,
+        request_method: body.request_method ?? null,
+        metadata: (body.metadata as Record<string, unknown>) ?? null,
       });
 
       return c.json({ success: true });

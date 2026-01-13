@@ -60,6 +60,9 @@ export interface TransactionRecordingJob {
   amount_usdc: number;
   network: string | null;
   request_path: string;
+  client_ip: string | null;
+  request_method: string | null;
+  metadata: Record<string, unknown> | null;
 }
 
 export async function checkAndUpdateTenantStatus(
@@ -668,6 +671,9 @@ export async function startQueue(config: {
           amount_usdc,
           network,
           request_path,
+          client_ip,
+          request_method,
+          metadata,
         } = job.data;
 
         try {
@@ -682,6 +688,9 @@ export async function startQueue(config: {
               amount_usdc,
               network,
               request_path,
+              client_ip,
+              request_method,
+              metadata: metadata ? JSON.stringify(metadata) : null,
             })
             .onConflict((oc) => oc.column("ngx_request_id").doNothing())
             .execute();

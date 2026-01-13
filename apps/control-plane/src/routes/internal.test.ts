@@ -644,4 +644,564 @@ await t.test("POST /internal/transactions", async (t) => {
       t.equal(resOrgSlug.status, 200);
     },
   );
+
+  // Tests for new metadata fields: client_ip, request_method, metadata
+
+  await t.test("client_ip field validation", async (t) => {
+    await t.test("accepts valid IPv4 address", async (t) => {
+      const org = await createOrg("Team", "team");
+      const tenant = await createTenant(org.id, "my-tenant");
+
+      const res = await app.request("/internal/transactions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          tenant_name: tenant.name,
+          ngx_request_id: "req-ipv4-001",
+          amount_usdc: 0,
+          request_path: "/api/test",
+          client_ip: "192.168.1.100",
+        }),
+      });
+      t.equal(res.status, 200);
+    });
+
+    await t.test("accepts valid IPv6 address", async (t) => {
+      const org = await createOrg("Team", "team");
+      const tenant = await createTenant(org.id, "my-tenant");
+
+      const res = await app.request("/internal/transactions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          tenant_name: tenant.name,
+          ngx_request_id: "req-ipv6-001",
+          amount_usdc: 0,
+          request_path: "/api/test",
+          client_ip: "2001:0db8:85a3:0000:0000:8a2e:0370:7334",
+        }),
+      });
+      t.equal(res.status, 200);
+    });
+
+    await t.test("accepts shortened IPv6 address", async (t) => {
+      const org = await createOrg("Team", "team");
+      const tenant = await createTenant(org.id, "my-tenant");
+
+      const res = await app.request("/internal/transactions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          tenant_name: tenant.name,
+          ngx_request_id: "req-ipv6-short-001",
+          amount_usdc: 0,
+          request_path: "/api/test",
+          client_ip: "::1",
+        }),
+      });
+      t.equal(res.status, 200);
+    });
+
+    await t.test("accepts null client_ip", async (t) => {
+      const org = await createOrg("Team", "team");
+      const tenant = await createTenant(org.id, "my-tenant");
+
+      const res = await app.request("/internal/transactions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          tenant_name: tenant.name,
+          ngx_request_id: "req-ip-null-001",
+          amount_usdc: 0,
+          request_path: "/api/test",
+          client_ip: null,
+        }),
+      });
+      t.equal(res.status, 200);
+    });
+
+    await t.test("accepts omitted client_ip", async (t) => {
+      const org = await createOrg("Team", "team");
+      const tenant = await createTenant(org.id, "my-tenant");
+
+      const res = await app.request("/internal/transactions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          tenant_name: tenant.name,
+          ngx_request_id: "req-ip-omit-001",
+          amount_usdc: 0,
+          request_path: "/api/test",
+        }),
+      });
+      t.equal(res.status, 200);
+    });
+
+    await t.test("rejects client_ip exceeding max length", async (t) => {
+      const org = await createOrg("Team", "team");
+      const tenant = await createTenant(org.id, "my-tenant");
+
+      const res = await app.request("/internal/transactions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          tenant_name: tenant.name,
+          ngx_request_id: "req-ip-long-001",
+          amount_usdc: 0,
+          request_path: "/api/test",
+          client_ip: "a".repeat(50),
+        }),
+      });
+      t.equal(res.status, 400);
+    });
+  });
+
+  await t.test("request_method field validation", async (t) => {
+    await t.test("accepts GET method", async (t) => {
+      const org = await createOrg("Team", "team");
+      const tenant = await createTenant(org.id, "my-tenant");
+
+      const res = await app.request("/internal/transactions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          tenant_name: tenant.name,
+          ngx_request_id: "req-method-get-001",
+          amount_usdc: 0,
+          request_path: "/api/test",
+          request_method: "GET",
+        }),
+      });
+      t.equal(res.status, 200);
+    });
+
+    await t.test("accepts POST method", async (t) => {
+      const org = await createOrg("Team", "team");
+      const tenant = await createTenant(org.id, "my-tenant");
+
+      const res = await app.request("/internal/transactions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          tenant_name: tenant.name,
+          ngx_request_id: "req-method-post-001",
+          amount_usdc: 0,
+          request_path: "/api/test",
+          request_method: "POST",
+        }),
+      });
+      t.equal(res.status, 200);
+    });
+
+    await t.test("accepts DELETE method", async (t) => {
+      const org = await createOrg("Team", "team");
+      const tenant = await createTenant(org.id, "my-tenant");
+
+      const res = await app.request("/internal/transactions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          tenant_name: tenant.name,
+          ngx_request_id: "req-method-delete-001",
+          amount_usdc: 0,
+          request_path: "/api/test",
+          request_method: "DELETE",
+        }),
+      });
+      t.equal(res.status, 200);
+    });
+
+    await t.test("accepts null request_method", async (t) => {
+      const org = await createOrg("Team", "team");
+      const tenant = await createTenant(org.id, "my-tenant");
+
+      const res = await app.request("/internal/transactions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          tenant_name: tenant.name,
+          ngx_request_id: "req-method-null-001",
+          amount_usdc: 0,
+          request_path: "/api/test",
+          request_method: null,
+        }),
+      });
+      t.equal(res.status, 200);
+    });
+
+    await t.test("accepts omitted request_method", async (t) => {
+      const org = await createOrg("Team", "team");
+      const tenant = await createTenant(org.id, "my-tenant");
+
+      const res = await app.request("/internal/transactions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          tenant_name: tenant.name,
+          ngx_request_id: "req-method-omit-001",
+          amount_usdc: 0,
+          request_path: "/api/test",
+        }),
+      });
+      t.equal(res.status, 200);
+    });
+
+    await t.test("rejects request_method exceeding max length", async (t) => {
+      const org = await createOrg("Team", "team");
+      const tenant = await createTenant(org.id, "my-tenant");
+
+      const res = await app.request("/internal/transactions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          tenant_name: tenant.name,
+          ngx_request_id: "req-method-long-001",
+          amount_usdc: 0,
+          request_path: "/api/test",
+          request_method: "VERYLONGMETHOD",
+        }),
+      });
+      t.equal(res.status, 400);
+    });
+  });
+
+  await t.test("metadata field validation", async (t) => {
+    await t.test("accepts simple metadata object", async (t) => {
+      const org = await createOrg("Team", "team");
+      const tenant = await createTenant(org.id, "my-tenant");
+
+      const res = await app.request("/internal/transactions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          tenant_name: tenant.name,
+          ngx_request_id: "req-meta-simple-001",
+          amount_usdc: 0,
+          request_path: "/api/test",
+          metadata: {
+            host: "api.example.com",
+            user_agent: "Mozilla/5.0",
+          },
+        }),
+      });
+      t.equal(res.status, 200);
+    });
+
+    await t.test("accepts null metadata", async (t) => {
+      const org = await createOrg("Team", "team");
+      const tenant = await createTenant(org.id, "my-tenant");
+
+      const res = await app.request("/internal/transactions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          tenant_name: tenant.name,
+          ngx_request_id: "req-meta-null-001",
+          amount_usdc: 0,
+          request_path: "/api/test",
+          metadata: null,
+        }),
+      });
+      t.equal(res.status, 200);
+    });
+
+    await t.test("accepts omitted metadata", async (t) => {
+      const org = await createOrg("Team", "team");
+      const tenant = await createTenant(org.id, "my-tenant");
+
+      const res = await app.request("/internal/transactions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          tenant_name: tenant.name,
+          ngx_request_id: "req-meta-omit-001",
+          amount_usdc: 0,
+          request_path: "/api/test",
+        }),
+      });
+      t.equal(res.status, 200);
+    });
+
+    await t.test("accepts empty metadata object", async (t) => {
+      const org = await createOrg("Team", "team");
+      const tenant = await createTenant(org.id, "my-tenant");
+
+      const res = await app.request("/internal/transactions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          tenant_name: tenant.name,
+          ngx_request_id: "req-meta-empty-001",
+          amount_usdc: 0,
+          request_path: "/api/test",
+          metadata: {},
+        }),
+      });
+      t.equal(res.status, 200);
+    });
+
+    await t.test("accepts free transaction metadata structure", async (t) => {
+      const org = await createOrg("Team", "team");
+      const tenant = await createTenant(org.id, "my-tenant");
+
+      const res = await app.request("/internal/transactions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          tenant_name: tenant.name,
+          ngx_request_id: "req-meta-free-001",
+          amount_usdc: 0,
+          request_path: "/api/test",
+          client_ip: "192.168.1.1",
+          request_method: "GET",
+          metadata: {
+            host: "myapi.api.corbits.dev",
+            query_string: "param=value&other=123",
+            user_agent: "curl/7.68.0",
+            x_forwarded_for: "10.0.0.1, 172.16.0.1",
+          },
+        }),
+      });
+      t.equal(res.status, 200);
+    });
+
+    await t.test(
+      "accepts paid transaction metadata with EVM payload",
+      async (t) => {
+        const org = await createOrg("Team", "team");
+        const tenant = await createTenant(org.id, "my-tenant");
+
+        const res = await app.request("/internal/transactions", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            tenant_name: tenant.name,
+            ngx_request_id: "req-meta-evm-001",
+            amount_usdc: 0.01,
+            tx_hash: "0xabc123",
+            network: "base",
+            request_path: "/api/paid",
+            client_ip: "203.0.113.50",
+            request_method: "POST",
+            metadata: {
+              host: "myapi.api.corbits.dev",
+              query_string: null,
+              user_agent: "MyApp/1.0",
+              x_forwarded_for: null,
+              payment: {
+                pay_to: "0x1234567890abcdef1234567890abcdef12345678",
+                asset: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+                scheme: "exact",
+                payload: {
+                  signature: "0xabcdef1234567890",
+                  authorization: {
+                    from: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                    to: "0x1234567890abcdef1234567890abcdef12345678",
+                    value: "10000",
+                    validAfter: "0",
+                    validBefore: "1999999999",
+                    nonce: "0x1234",
+                  },
+                },
+              },
+            },
+          }),
+        });
+        t.equal(res.status, 200);
+      },
+    );
+
+    await t.test(
+      "accepts paid transaction metadata with Solana payload",
+      async (t) => {
+        const org = await createOrg("Team", "team");
+        const tenant = await createTenant(org.id, "my-tenant");
+
+        const res = await app.request("/internal/transactions", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            tenant_name: tenant.name,
+            ngx_request_id: "req-meta-solana-001",
+            amount_usdc: 0.01,
+            tx_hash:
+              "5KxzZ9Nh7PjVkAqYqoxMjF8FcQjS9JfqNqXrKwYNJzQqBx1qKjYvNqXrKwYNJzQq",
+            network: "solana-mainnet-beta",
+            request_path: "/api/paid",
+            client_ip: "198.51.100.25",
+            request_method: "GET",
+            metadata: {
+              host: "myapi.api.corbits.dev",
+              query_string: "key=value",
+              user_agent: "SolanaWallet/2.0",
+              x_forwarded_for: null,
+              payment: {
+                pay_to: "9WzDXwBbmkg8ZTbNMqUxvQRAyrZzDsGYdLVL9zYtAWWM",
+                asset: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+                scheme: "exact",
+                payload: {
+                  transaction:
+                    "AQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABase64EncodedTransaction==",
+                },
+              },
+            },
+          }),
+        });
+        t.equal(res.status, 200);
+      },
+    );
+
+    await t.test("rejects metadata as string", async (t) => {
+      const org = await createOrg("Team", "team");
+      const tenant = await createTenant(org.id, "my-tenant");
+
+      const res = await app.request("/internal/transactions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          tenant_name: tenant.name,
+          ngx_request_id: "req-meta-string-001",
+          amount_usdc: 0,
+          request_path: "/api/test",
+          metadata: "not an object",
+        }),
+      });
+      t.equal(res.status, 400);
+    });
+
+    await t.test("rejects metadata as number", async (t) => {
+      const org = await createOrg("Team", "team");
+      const tenant = await createTenant(org.id, "my-tenant");
+
+      const res = await app.request("/internal/transactions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          tenant_name: tenant.name,
+          ngx_request_id: "req-meta-number-001",
+          amount_usdc: 0,
+          request_path: "/api/test",
+          metadata: 12345,
+        }),
+      });
+      t.equal(res.status, 400);
+    });
+  });
+
+  await t.test("combined metadata fields", async (t) => {
+    await t.test(
+      "accepts all metadata fields together for free transaction",
+      async (t) => {
+        const org = await createOrg("Team", "team");
+        const tenant = await createTenant(org.id, "my-tenant", "team");
+
+        const res = await app.request("/internal/transactions", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            tenant_name: tenant.name,
+            org_slug: "team",
+            ngx_request_id: "req-combined-free-001",
+            amount_usdc: 0,
+            request_path: "/api/free-endpoint",
+            client_ip: "10.0.0.1",
+            request_method: "GET",
+            metadata: {
+              host: "myapi.api.corbits.dev",
+              query_string: null,
+              user_agent: "TestClient/1.0",
+              x_forwarded_for: null,
+            },
+          }),
+        });
+        t.equal(res.status, 200);
+      },
+    );
+
+    await t.test(
+      "accepts all metadata fields together for paid transaction",
+      async (t) => {
+        const org = await createOrg("Team", "team");
+        const tenant = await createTenant(org.id, "my-tenant", "team");
+
+        const res = await app.request("/internal/transactions", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            tenant_name: tenant.name,
+            org_slug: "team",
+            ngx_request_id: "req-combined-paid-001",
+            amount_usdc: 0.05,
+            tx_hash: "0xfullhash123456789",
+            network: "base",
+            request_path: "/api/paid-endpoint",
+            client_ip: "2001:db8::1",
+            request_method: "POST",
+            metadata: {
+              host: "myapi.api.corbits.dev",
+              query_string: "action=test",
+              user_agent: "PaymentSDK/2.0",
+              x_forwarded_for: "192.168.1.1",
+              payment: {
+                pay_to: "0x1234567890abcdef1234567890abcdef12345678",
+                asset: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+                scheme: "exact",
+                payload: {
+                  signature: "0xsig",
+                  authorization: {
+                    from: "0xpayer",
+                    to: "0xpayee",
+                    value: "50000",
+                    validAfter: "0",
+                    validBefore: "9999999999",
+                    nonce: "0xabc",
+                  },
+                },
+              },
+            },
+          }),
+        });
+        t.equal(res.status, 200);
+      },
+    );
+
+    await t.test("backward compatibility - no new fields", async (t) => {
+      const org = await createOrg("Team", "team");
+      const tenant = await createTenant(org.id, "my-tenant");
+
+      const res = await app.request("/internal/transactions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          tenant_name: tenant.name,
+          ngx_request_id: "req-backward-compat-001",
+          amount_usdc: 0,
+          request_path: "/api/test",
+        }),
+      });
+      t.equal(res.status, 200);
+    });
+
+    await t.test(
+      "backward compatibility - paid transaction without new fields",
+      async (t) => {
+        const org = await createOrg("Team", "team");
+        const tenant = await createTenant(org.id, "my-tenant");
+
+        const res = await app.request("/internal/transactions", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            tenant_name: tenant.name,
+            ngx_request_id: "req-backward-paid-001",
+            amount_usdc: 0.1,
+            tx_hash: "oldhash123",
+            network: "solana",
+            request_path: "/api/paid",
+          }),
+        });
+        t.equal(res.status, 200);
+      },
+    );
+  });
 });

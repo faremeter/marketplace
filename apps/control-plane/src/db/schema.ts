@@ -136,6 +136,9 @@ export interface TransactionsTable {
   tx_hash: string | null;
   network: string | null;
   request_path: string;
+  client_ip: string | null;
+  request_method: string | null;
+  metadata: ColumnType<unknown, string | undefined, string> | null;
   created_at: AutoDateColumn;
 }
 

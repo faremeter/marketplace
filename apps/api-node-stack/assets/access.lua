@@ -83,6 +83,13 @@ ngx.req.read_body()
 local req_body = ngx.req.get_body_data()
 local req_headers = ngx.req.get_headers()
 
+local client_ip = ngx.var.remote_addr
+local request_method = ngx.req.get_method()
+local request_host = ngx.var.host
+local query_string = ngx.var.args
+local user_agent = req_headers["User-Agent"] or req_headers["user-agent"]
+local x_forwarded_for = req_headers["X-Forwarded-For"] or req_headers["x-forwarded-for"]
+
 local tenant_domain = canonicalize_tenant_domain(ngx.var.host)
 if not tenant_domain then
     ngx.status = 400
@@ -180,6 +187,14 @@ if scheme == "free" or price == 0 then
     local free_tenant_name = proxy_name
     local free_org_slug = tenant_org_slug
     local free_endpoint_id = matched_endpoint_id
+    local free_client_ip = client_ip
+    local free_request_method = request_method
+    local free_metadata = {
+        host = request_host,
+        query_string = query_string or cjson.null,
+        user_agent = user_agent or cjson.null,
+        x_forwarded_for = x_forwarded_for or cjson.null
+    }
     ngx.timer.at(0, function(premature)
         if premature then return end
         local free_body = cjson.encode({
@@ -190,7 +205,10 @@ if scheme == "free" or price == 0 then
             endpoint_id = free_endpoint_id or cjson.null,
             amount_usdc = 0,
             network = cjson.null,
-            request_path = free_request_path
+            request_path = free_request_path,
+            client_ip = free_client_ip,
+            request_method = free_request_method,
+            metadata = free_metadata
         })
         local free_res, free_err = request_control_plane("/internal/transactions", {
             method = "POST",
@@ -431,6 +449,20 @@ if tx_hash then
     local tx_tenant_name = proxy_name
     local tx_org_slug = tenant_org_slug
     local tx_endpoint_id = matched_endpoint_id
+    local tx_client_ip = client_ip
+    local tx_request_method = request_method
+    local tx_metadata = {
+        host = request_host,
+        query_string = query_string or cjson.null,
+        user_agent = user_agent or cjson.null,
+        x_forwarded_for = x_forwarded_for or cjson.null,
+        payment = {
+            pay_to = matching_req.payTo,
+            asset = matching_req.asset,
+            scheme = matching_req.scheme,
+            payload = payment_json.payload or cjson.null
+        }
+    }
     ngx.timer.at(0, function(premature)
         if premature then return end
         local tx_body = cjson.encode({
@@ -441,7 +473,10 @@ if tx_hash then
             endpoint_id = tx_endpoint_id or cjson.null,
             amount_usdc = tx_amount,
             network = tx_network,
-            request_path = tx_request_path
+            request_path = tx_request_path,
+            client_ip = tx_client_ip,
+            request_method = tx_request_method,
+            metadata = tx_metadata
         })
         local tx_res, tx_err = request_control_plane("/internal/transactions", {
             method = "POST",
