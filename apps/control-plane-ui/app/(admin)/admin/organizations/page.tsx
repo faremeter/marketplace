@@ -8,8 +8,10 @@ import {
   MagnifyingGlassIcon,
   ChevronLeftIcon,
   ChevronRightIcon,
+  UploadIcon,
 } from "@radix-ui/react-icons";
 import { useToast } from "@/components/ui/toast";
+import { ImportOrgsDialog } from "@/components/admin/import-orgs-dialog";
 
 const PAGE_SIZE = 10;
 
@@ -29,6 +31,7 @@ export default function AdminOrganizationsPage() {
   const [resettingOrgId, setResettingOrgId] = useState<number | null>(null);
   const [page, setPage] = useState(0);
   const [search, setSearch] = useState("");
+  const [importDialogOpen, setImportDialogOpen] = useState(false);
 
   const {
     data: organizations,
@@ -77,20 +80,35 @@ export default function AdminOrganizationsPage() {
           <h1 className="text-2xl font-semibold text-gray-12">Organizations</h1>
           <p className="text-sm text-gray-11">Manage all organizations</p>
         </div>
-        <div className="relative">
-          <MagnifyingGlassIcon className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-11" />
-          <input
-            type="text"
-            placeholder="Search organizations..."
-            value={search}
-            onChange={(e) => {
-              setSearch(e.target.value);
-              setPage(0);
-            }}
-            className="w-64 rounded-md border border-gray-6 bg-gray-3 py-2 pl-9 pr-3 text-sm text-gray-12 placeholder:text-gray-11 focus:border-accent-8 focus:outline-none"
-          />
+        <div className="flex items-center gap-3">
+          <div className="relative">
+            <MagnifyingGlassIcon className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-11" />
+            <input
+              type="text"
+              placeholder="Search organizations..."
+              value={search}
+              onChange={(e) => {
+                setSearch(e.target.value);
+                setPage(0);
+              }}
+              className="w-64 rounded-md border border-gray-6 bg-gray-3 py-2 pl-9 pr-3 text-sm text-gray-12 placeholder:text-gray-11 focus:border-accent-8 focus:outline-none"
+            />
+          </div>
+          <button
+            onClick={() => setImportDialogOpen(true)}
+            className="inline-flex items-center gap-2 rounded-md bg-white px-3 py-2 text-sm font-medium text-black shadow-button transition-colors hover:bg-white/90"
+          >
+            <UploadIcon className="h-4 w-4" />
+            Import
+          </button>
         </div>
       </div>
+
+      <ImportOrgsDialog
+        open={importDialogOpen}
+        onOpenChange={setImportDialogOpen}
+        onSuccess={() => mutate()}
+      />
 
       {isLoading ? (
         <div className="flex items-center justify-center py-12">

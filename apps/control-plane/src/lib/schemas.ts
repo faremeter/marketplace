@@ -210,6 +210,11 @@ export const CreateOrganizationSchema = type({
   "slug?": orgSlug.or(type("undefined")),
 });
 
+export const AdminImportOrgsSchema = type({
+  names: orgName.array(),
+  "skip_duplicates?": "boolean",
+});
+
 export const UpdateOrganizationSchema = type({
   "name?": orgName.or(type("undefined")),
   "slug?": orgSlug.or(type("undefined")),

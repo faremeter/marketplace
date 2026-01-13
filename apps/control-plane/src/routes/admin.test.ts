@@ -333,6 +333,532 @@ await t.test("GET /api/admin/organizations/:id", async (t) => {
   });
 });
 
+await t.test("POST /api/admin/organizations/import", async (t) => {
+  await t.test("returns 401 without auth", async (t) => {
+    const res = await app.request("/api/admin/organizations/import", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ names: ["Test Org"] }),
+    });
+    t.equal(res.status, 401);
+  });
+
+  await t.test("returns 403 for non-admin user", async (t) => {
+    const user = await createUser("user@example.com", false);
+    const res = await app.request("/api/admin/organizations/import", {
+      method: "POST",
+      headers: {
+        Cookie: `auth_token=${user.token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ names: ["Test Org"] }),
+    });
+    t.equal(res.status, 403);
+  });
+
+  await t.test("imports single organization", async (t) => {
+    const admin = await createUser("admin@example.com", true);
+    const res = await app.request("/api/admin/organizations/import", {
+      method: "POST",
+      headers: {
+        Cookie: `auth_token=${admin.token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ names: ["Test Org"] }),
+    });
+    t.equal(res.status, 200);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const data = (await res.json()) as any;
+    t.equal(data.created.length, 1);
+    t.equal(data.failed.length, 0);
+    t.equal(data.created[0].name, "Test Org");
+    t.equal(data.created[0].slug, "test-org");
+  });
+
+  await t.test("imports multiple organizations", async (t) => {
+    const admin = await createUser("admin@example.com", true);
+    const res = await app.request("/api/admin/organizations/import", {
+      method: "POST",
+      headers: {
+        Cookie: `auth_token=${admin.token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ names: ["Org One", "Org Two", "Org Three"] }),
+    });
+    t.equal(res.status, 200);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const data = (await res.json()) as any;
+    t.equal(data.created.length, 3);
+    t.equal(data.failed.length, 0);
+    t.equal(data.created[0].slug, "org-one");
+    t.equal(data.created[1].slug, "org-two");
+    t.equal(data.created[2].slug, "org-three");
+  });
+
+  await t.test("converts periods to dashes in slug", async (t) => {
+    const admin = await createUser("admin@example.com", true);
+    const res = await app.request("/api/admin/organizations/import", {
+      method: "POST",
+      headers: {
+        Cookie: `auth_token=${admin.token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ names: ["My.Company.Name"] }),
+    });
+    t.equal(res.status, 200);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const data = (await res.json()) as any;
+    t.equal(data.created.length, 1);
+    t.equal(data.created[0].slug, "my-company-name");
+  });
+
+  await t.test("converts spaces to dashes in slug", async (t) => {
+    const admin = await createUser("admin@example.com", true);
+    const res = await app.request("/api/admin/organizations/import", {
+      method: "POST",
+      headers: {
+        Cookie: `auth_token=${admin.token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ names: ["My Company Name"] }),
+    });
+    t.equal(res.status, 200);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const data = (await res.json()) as any;
+    t.equal(data.created.length, 1);
+    t.equal(data.created[0].slug, "my-company-name");
+  });
+
+  await t.test("handles slug collision by appending suffix", async (t) => {
+    const admin = await createUser("admin@example.com", true);
+    await createOrg("Existing Org", "existing-org");
+
+    const res = await app.request("/api/admin/organizations/import", {
+      method: "POST",
+      headers: {
+        Cookie: `auth_token=${admin.token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ names: ["Existing Org"] }),
+    });
+    t.equal(res.status, 200);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const data = (await res.json()) as any;
+    t.equal(data.created.length, 1);
+    t.ok(data.created[0].slug.startsWith("existing-org-"));
+    t.equal(data.created[0].slug.length, "existing-org-".length + 4);
+  });
+
+  await t.test("rejects name shorter than 4 chars", async (t) => {
+    const admin = await createUser("admin@example.com", true);
+    const res = await app.request("/api/admin/organizations/import", {
+      method: "POST",
+      headers: {
+        Cookie: `auth_token=${admin.token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ names: ["abc"] }),
+    });
+    t.equal(res.status, 400);
+  });
+
+  await t.test("rejects name longer than 58 chars", async (t) => {
+    const admin = await createUser("admin@example.com", true);
+    const longName = "a".repeat(59);
+    const res = await app.request("/api/admin/organizations/import", {
+      method: "POST",
+      headers: {
+        Cookie: `auth_token=${admin.token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ names: [longName] }),
+    });
+    t.equal(res.status, 400);
+  });
+
+  await t.test("rejects name with invalid characters", async (t) => {
+    const admin = await createUser("admin@example.com", true);
+    const res = await app.request("/api/admin/organizations/import", {
+      method: "POST",
+      headers: {
+        Cookie: `auth_token=${admin.token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ names: ["Test@Org!"] }),
+    });
+    t.equal(res.status, 400);
+  });
+
+  await t.test("rejects name with consecutive spaces", async (t) => {
+    const admin = await createUser("admin@example.com", true);
+    const res = await app.request("/api/admin/organizations/import", {
+      method: "POST",
+      headers: {
+        Cookie: `auth_token=${admin.token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ names: ["Test  Org"] }),
+    });
+    t.equal(res.status, 400);
+  });
+
+  await t.test("rejects name with consecutive periods", async (t) => {
+    const admin = await createUser("admin@example.com", true);
+    const res = await app.request("/api/admin/organizations/import", {
+      method: "POST",
+      headers: {
+        Cookie: `auth_token=${admin.token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ names: ["Test..Org"] }),
+    });
+    t.equal(res.status, 400);
+  });
+
+  await t.test("rejects name starting with hyphen", async (t) => {
+    const admin = await createUser("admin@example.com", true);
+    const res = await app.request("/api/admin/organizations/import", {
+      method: "POST",
+      headers: {
+        Cookie: `auth_token=${admin.token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ names: ["-Test Org"] }),
+    });
+    t.equal(res.status, 400);
+  });
+
+  await t.test("rejects name ending with hyphen", async (t) => {
+    const admin = await createUser("admin@example.com", true);
+    const res = await app.request("/api/admin/organizations/import", {
+      method: "POST",
+      headers: {
+        Cookie: `auth_token=${admin.token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ names: ["Test Org-"] }),
+    });
+    t.equal(res.status, 400);
+  });
+
+  await t.test("rejects name starting with period", async (t) => {
+    const admin = await createUser("admin@example.com", true);
+    const res = await app.request("/api/admin/organizations/import", {
+      method: "POST",
+      headers: {
+        Cookie: `auth_token=${admin.token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ names: [".Test Org"] }),
+    });
+    t.equal(res.status, 400);
+  });
+
+  await t.test("rejects name ending with period", async (t) => {
+    const admin = await createUser("admin@example.com", true);
+    const res = await app.request("/api/admin/organizations/import", {
+      method: "POST",
+      headers: {
+        Cookie: `auth_token=${admin.token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ names: ["Test Org."] }),
+    });
+    t.equal(res.status, 400);
+  });
+
+  await t.test("returns empty arrays for empty input", async (t) => {
+    const admin = await createUser("admin@example.com", true);
+    const res = await app.request("/api/admin/organizations/import", {
+      method: "POST",
+      headers: {
+        Cookie: `auth_token=${admin.token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ names: [] }),
+    });
+    t.equal(res.status, 200);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const data = (await res.json()) as any;
+    t.equal(data.created.length, 0);
+    t.equal(data.failed.length, 0);
+  });
+
+  await t.test("handles mixed valid and invalid in same batch", async (t) => {
+    const admin = await createUser("admin@example.com", true);
+    const res = await app.request("/api/admin/organizations/import", {
+      method: "POST",
+      headers: {
+        Cookie: `auth_token=${admin.token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        names: ["Valid Org", "ab", "Another Valid", "Test..Bad"],
+      }),
+    });
+    t.equal(res.status, 400);
+  });
+
+  await t.test(
+    "handles names that produce same slug in same batch",
+    async (t) => {
+      const admin = await createUser("admin@example.com", true);
+      const res = await app.request("/api/admin/organizations/import", {
+        method: "POST",
+        headers: {
+          Cookie: `auth_token=${admin.token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ names: ["My Org", "My.Org"] }),
+      });
+      t.equal(res.status, 200);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const data = (await res.json()) as any;
+      t.equal(data.created.length, 2);
+      t.equal(data.created[0].slug, "my-org");
+      t.ok(data.created[1].slug.startsWith("my-org-"));
+    },
+  );
+
+  await t.test("accepts name with period-hyphen combination", async (t) => {
+    const admin = await createUser("admin@example.com", true);
+    const res = await app.request("/api/admin/organizations/import", {
+      method: "POST",
+      headers: {
+        Cookie: `auth_token=${admin.token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ names: ["My.-Org"] }),
+    });
+    t.equal(res.status, 200);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const data = (await res.json()) as any;
+    t.equal(data.created.length, 1);
+    t.equal(data.created[0].slug, "my-org");
+  });
+
+  await t.test("accepts name at minimum length (4 chars)", async (t) => {
+    const admin = await createUser("admin@example.com", true);
+    const res = await app.request("/api/admin/organizations/import", {
+      method: "POST",
+      headers: {
+        Cookie: `auth_token=${admin.token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ names: ["Abcd"] }),
+    });
+    t.equal(res.status, 200);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const data = (await res.json()) as any;
+    t.equal(data.created.length, 1);
+    t.equal(data.created[0].slug, "abcd");
+  });
+
+  await t.test("accepts name at maximum length (58 chars)", async (t) => {
+    const admin = await createUser("admin@example.com", true);
+    const name = "a".repeat(58);
+    const res = await app.request("/api/admin/organizations/import", {
+      method: "POST",
+      headers: {
+        Cookie: `auth_token=${admin.token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ names: [name] }),
+    });
+    t.equal(res.status, 200);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const data = (await res.json()) as any;
+    t.equal(data.created.length, 1);
+  });
+
+  await t.test("persists organizations to database", async (t) => {
+    const admin = await createUser("admin@example.com", true);
+    await app.request("/api/admin/organizations/import", {
+      method: "POST",
+      headers: {
+        Cookie: `auth_token=${admin.token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ names: ["Persisted Org"] }),
+    });
+
+    const org = await db
+      .selectFrom("organizations")
+      .selectAll()
+      .where("slug", "=", "persisted-org")
+      .executeTakeFirst();
+
+    t.ok(org);
+    t.equal(org?.name, "Persisted Org");
+  });
+
+  await t.test("handles multiple slug collisions sequentially", async (t) => {
+    const admin = await createUser("admin@example.com", true);
+    await createOrg("Same Name", "same-name");
+
+    const res = await app.request("/api/admin/organizations/import", {
+      method: "POST",
+      headers: {
+        Cookie: `auth_token=${admin.token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ names: ["Same Name", "Same Name", "Same Name"] }),
+    });
+    t.equal(res.status, 200);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const data = (await res.json()) as any;
+    t.equal(data.created.length, 3);
+
+    const slugs = data.created.map((c: { slug: string }) => c.slug);
+    const uniqueSlugs = new Set(slugs);
+    t.equal(uniqueSlugs.size, 3);
+  });
+
+  await t.test(
+    "skips existing orgs when skip_duplicates is true",
+    async (t) => {
+      const admin = await createUser("admin@example.com", true);
+      await createOrg("Existing Org", "existing-org");
+
+      const res = await app.request("/api/admin/organizations/import", {
+        method: "POST",
+        headers: {
+          Cookie: `auth_token=${admin.token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          names: ["Existing Org", "New Org"],
+          skip_duplicates: true,
+        }),
+      });
+      t.equal(res.status, 200);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const data = (await res.json()) as any;
+      t.equal(data.created.length, 1);
+      t.equal(data.skipped.length, 1);
+      t.equal(data.skipped[0].name, "Existing Org");
+      t.equal(data.created[0].name, "New Org");
+    },
+  );
+
+  await t.test(
+    "creates orgs with suffix when skip_duplicates is false",
+    async (t) => {
+      const admin = await createUser("admin@example.com", true);
+      await createOrg("Existing Org", "existing-org");
+
+      const res = await app.request("/api/admin/organizations/import", {
+        method: "POST",
+        headers: {
+          Cookie: `auth_token=${admin.token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          names: ["Existing Org"],
+          skip_duplicates: false,
+        }),
+      });
+      t.equal(res.status, 200);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const data = (await res.json()) as any;
+      t.equal(data.created.length, 1);
+      t.equal(data.skipped.length, 0);
+      t.ok(data.created[0].slug.startsWith("existing-org-"));
+    },
+  );
+
+  await t.test("skip_duplicates defaults to true", async (t) => {
+    const admin = await createUser("admin@example.com", true);
+    await createOrg("Default Skip", "default-skip");
+
+    const res = await app.request("/api/admin/organizations/import", {
+      method: "POST",
+      headers: {
+        Cookie: `auth_token=${admin.token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ names: ["Default Skip"] }),
+    });
+    t.equal(res.status, 200);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const data = (await res.json()) as any;
+    t.equal(data.created.length, 0);
+    t.equal(data.skipped.length, 1);
+  });
+});
+
+await t.test("POST /api/admin/organizations/check-slugs", async (t) => {
+  await t.test("returns existing slugs", async (t) => {
+    const admin = await createUser("admin@example.com", true);
+    await createOrg("Org One", "org-one");
+    await createOrg("Org Two", "org-two");
+
+    const res = await app.request("/api/admin/organizations/check-slugs", {
+      method: "POST",
+      headers: {
+        Cookie: `auth_token=${admin.token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ slugs: ["org-one", "org-two", "org-three"] }),
+    });
+    t.equal(res.status, 200);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const data = (await res.json()) as any;
+    t.equal(data.existing.length, 2);
+    t.ok(data.existing.includes("org-one"));
+    t.ok(data.existing.includes("org-two"));
+    t.notOk(data.existing.includes("org-three"));
+  });
+
+  await t.test("returns empty array for no matches", async (t) => {
+    const admin = await createUser("admin@example.com", true);
+
+    const res = await app.request("/api/admin/organizations/check-slugs", {
+      method: "POST",
+      headers: {
+        Cookie: `auth_token=${admin.token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ slugs: ["nonexistent-one", "nonexistent-two"] }),
+    });
+    t.equal(res.status, 200);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const data = (await res.json()) as any;
+    t.equal(data.existing.length, 0);
+  });
+
+  await t.test("returns empty array for empty input", async (t) => {
+    const admin = await createUser("admin@example.com", true);
+
+    const res = await app.request("/api/admin/organizations/check-slugs", {
+      method: "POST",
+      headers: {
+        Cookie: `auth_token=${admin.token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ slugs: [] }),
+    });
+    t.equal(res.status, 200);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const data = (await res.json()) as any;
+    t.equal(data.existing.length, 0);
+  });
+
+  await t.test("requires admin authentication", async (t) => {
+    const nonAdmin = await createUser("user@example.com", false);
+
+    const res = await app.request("/api/admin/organizations/check-slugs", {
+      method: "POST",
+      headers: {
+        Cookie: `auth_token=${nonAdmin.token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ slugs: ["test"] }),
+    });
+    t.equal(res.status, 403);
+  });
+});
+
 await t.test("GET /api/admin/wallets", async (t) => {
   await t.test("returns list of wallets", async (t) => {
     const admin = await createUser("admin@example.com", true);

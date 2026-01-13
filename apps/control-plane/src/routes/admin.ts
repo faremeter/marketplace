@@ -38,7 +38,9 @@ import {
   AdminUpdateUserSchema,
   AdminUpdateSettingsSchema,
   AdminAssignNodeSchema,
+  AdminImportOrgsSchema,
 } from "../lib/schemas.js";
+import { slugify, generateSlugSuffix } from "../lib/slug.js";
 import {
   getPlatformEarnings,
   getOrganizationEarnings,
@@ -185,6 +187,80 @@ adminRoutes.get("/organizations", async (c) => {
     .execute();
 
   return c.json(organizations);
+});
+
+adminRoutes.post(
+  "/organizations/import",
+  arktypeValidator("json", AdminImportOrgsSchema),
+  async (c) => {
+    const { names, skip_duplicates = true } = c.req.valid("json");
+
+    const created: { name: string; slug: string }[] = [];
+    const skipped: { name: string; slug: string }[] = [];
+    const failed: { name: string; error: string }[] = [];
+
+    for (const name of names) {
+      try {
+        let slug = slugify(name);
+
+        const existing = await db
+          .selectFrom("organizations")
+          .select("id")
+          .where("slug", "=", slug)
+          .executeTakeFirst();
+
+        if (existing) {
+          if (skip_duplicates) {
+            skipped.push({ name, slug });
+            continue;
+          }
+
+          const maxRetries = 5;
+          for (let i = 0; i < maxRetries; i++) {
+            slug = `${slugify(name)}-${generateSlugSuffix()}`;
+            const exists = await db
+              .selectFrom("organizations")
+              .select("id")
+              .where("slug", "=", slug)
+              .executeTakeFirst();
+            if (!exists) break;
+            if (i === maxRetries - 1) {
+              throw new Error(
+                `Could not generate unique slug after ${maxRetries} attempts`,
+              );
+            }
+          }
+        }
+
+        await db.insertInto("organizations").values({ name, slug }).execute();
+
+        created.push({ name, slug });
+      } catch (err) {
+        failed.push({
+          name,
+          error: err instanceof Error ? err.message : "Unknown error",
+        });
+      }
+    }
+
+    return c.json({ created, skipped, failed });
+  },
+);
+
+adminRoutes.post("/organizations/check-slugs", async (c) => {
+  const { slugs } = await c.req.json<{ slugs: string[] }>();
+
+  if (!Array.isArray(slugs) || slugs.length === 0) {
+    return c.json({ existing: [] });
+  }
+
+  const existing = await db
+    .selectFrom("organizations")
+    .select("slug")
+    .where("slug", "in", slugs)
+    .execute();
+
+  return c.json({ existing: existing.map((o) => o.slug) });
 });
 
 adminRoutes.get("/organizations/:id", async (c) => {
