@@ -6,11 +6,7 @@ import useSWR from "swr";
 import { api } from "@/lib/api/client";
 import Link from "next/link";
 import { useOnboarding } from "@/lib/hooks/use-onboarding";
-import {
-  PlusIcon,
-  ExclamationTriangleIcon,
-  EyeOpenIcon,
-} from "@radix-ui/react-icons";
+import { PlusIcon, ExclamationTriangleIcon } from "@radix-ui/react-icons";
 import { InlineUrlEdit } from "@/components/shared/inline-url-edit";
 import { InlineAuthEdit } from "@/components/shared/inline-auth-edit";
 import { InlineActiveToggle } from "@/components/shared/inline-active-toggle";
@@ -148,7 +144,7 @@ export default function TenantsPage() {
         </div>
       ) : tenants?.length ? (
         <div className="max-h-[calc(100vh-200px)] overflow-auto rounded-lg border border-gray-6">
-          <table className="w-full min-w-[1000px]">
+          <table className="w-full">
             <thead className="sticky top-0 z-10 bg-gray-3">
               <tr>
                 <th className="px-4 py-3 text-left text-sm font-medium text-gray-11">
@@ -168,9 +164,6 @@ export default function TenantsPage() {
                 </th>
                 <th className="px-4 py-3 text-left text-sm font-medium text-gray-11">
                   Status
-                </th>
-                <th className="px-4 py-3 text-left text-sm font-medium text-gray-11">
-                  Actions
                 </th>
               </tr>
             </thead>
@@ -227,15 +220,6 @@ export default function TenantsPage() {
                     </td>
                     <td className="px-4 py-3">
                       <StatusBadge tenant={tenant} />
-                    </td>
-                    <td className="px-4 py-3">
-                      <Link
-                        href={`/proxies/${tenant.id}`}
-                        className="rounded p-1.5 text-gray-11 hover:bg-gray-4 hover:text-gray-12"
-                        title="View details"
-                      >
-                        <EyeOpenIcon className="h-4 w-4" />
-                      </Link>
                     </td>
                   </tr>
                 );
