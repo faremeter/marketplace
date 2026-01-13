@@ -100,6 +100,45 @@ await t.test("POST /api/auth/signup", async (t) => {
     t.equal(res.status, 400);
   });
 
+  await t.test("accepts password with special characters", async (t) => {
+    const res = await app.request("/api/auth/signup", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        email: "special@example.com",
+        password: "P@ssw0rd!#$%^&*()",
+      }),
+    });
+
+    t.equal(res.status, 201);
+  });
+
+  await t.test("accepts password with unicode characters", async (t) => {
+    const res = await app.request("/api/auth/signup", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        email: "unicode@example.com",
+        password: "password123",
+      }),
+    });
+
+    t.equal(res.status, 201);
+  });
+
+  await t.test("accepts password with spaces", async (t) => {
+    const res = await app.request("/api/auth/signup", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        email: "spaces@example.com",
+        password: "my secret passphrase",
+      }),
+    });
+
+    t.equal(res.status, 201);
+  });
+
   await t.test("returns 403 in production environment", async (t) => {
     const originalEnv = process.env.NODE_ENV;
     process.env.NODE_ENV = "production";
@@ -604,5 +643,608 @@ await t.test("GET /api/auth/me - organization edge cases", async (t) => {
     t.equal(data.organizations.length, 2);
     t.equal(data.organizations[0].name, "Alpha Org");
     t.equal(data.organizations[1].name, "Zeta Org");
+  });
+});
+
+await t.test("POST /api/auth/update-password", async (t) => {
+  await t.test("returns 401 without authentication", async (t) => {
+    const res = await app.request("/api/auth/update-password", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        current_password: "oldpassword",
+        new_password: "newpassword123",
+      }),
+    });
+
+    t.equal(res.status, 401);
+  });
+
+  await t.test("updates password with correct current password", async (t) => {
+    const passwordHash = await bcrypt.hash("oldpassword123", 10);
+    const user = await db
+      .insertInto("users")
+      .values({
+        email: "updatepw@example.com",
+        password_hash: passwordHash,
+      })
+      .returning(["id", "email"])
+      .executeTakeFirstOrThrow();
+
+    const token = signToken({
+      userId: user.id,
+      email: user.email,
+      isAdmin: false,
+    });
+
+    const res = await app.request("/api/auth/update-password", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Cookie: `auth_token=${token}`,
+      },
+      body: JSON.stringify({
+        current_password: "oldpassword123",
+        new_password: "newpassword123",
+      }),
+    });
+
+    t.equal(res.status, 200);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const data = (await res.json()) as any;
+    t.equal(data.success, true);
+
+    // Verify new password works
+    const updatedUser = await db
+      .selectFrom("users")
+      .select("password_hash")
+      .where("id", "=", user.id)
+      .executeTakeFirstOrThrow();
+
+    const newPasswordValid = await bcrypt.compare(
+      "newpassword123",
+      updatedUser.password_hash,
+    );
+    t.equal(newPasswordValid, true);
+  });
+
+  await t.test("returns 401 for incorrect current password", async (t) => {
+    const passwordHash = await bcrypt.hash("correctpassword", 10);
+    const user = await db
+      .insertInto("users")
+      .values({
+        email: "wrongcurrent@example.com",
+        password_hash: passwordHash,
+      })
+      .returning(["id", "email"])
+      .executeTakeFirstOrThrow();
+
+    const token = signToken({
+      userId: user.id,
+      email: user.email,
+      isAdmin: false,
+    });
+
+    const res = await app.request("/api/auth/update-password", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Cookie: `auth_token=${token}`,
+      },
+      body: JSON.stringify({
+        current_password: "wrongpassword",
+        new_password: "newpassword123",
+      }),
+    });
+
+    t.equal(res.status, 401);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const data = (await res.json()) as any;
+    t.equal(data.error, "Current password is incorrect");
+  });
+
+  await t.test("returns 400 for short new password", async (t) => {
+    const passwordHash = await bcrypt.hash("oldpassword123", 10);
+    const user = await db
+      .insertInto("users")
+      .values({
+        email: "shortpw@example.com",
+        password_hash: passwordHash,
+      })
+      .returning(["id", "email"])
+      .executeTakeFirstOrThrow();
+
+    const token = signToken({
+      userId: user.id,
+      email: user.email,
+      isAdmin: false,
+    });
+
+    const res = await app.request("/api/auth/update-password", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Cookie: `auth_token=${token}`,
+      },
+      body: JSON.stringify({
+        current_password: "oldpassword123",
+        new_password: "short",
+      }),
+    });
+
+    t.equal(res.status, 400);
+  });
+
+  await t.test("returns 400 for too long new password", async (t) => {
+    const passwordHash = await bcrypt.hash("oldpassword123", 10);
+    const user = await db
+      .insertInto("users")
+      .values({
+        email: "longpw@example.com",
+        password_hash: passwordHash,
+      })
+      .returning(["id", "email"])
+      .executeTakeFirstOrThrow();
+
+    const token = signToken({
+      userId: user.id,
+      email: user.email,
+      isAdmin: false,
+    });
+
+    const res = await app.request("/api/auth/update-password", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Cookie: `auth_token=${token}`,
+      },
+      body: JSON.stringify({
+        current_password: "oldpassword123",
+        new_password: "a".repeat(129),
+      }),
+    });
+
+    t.equal(res.status, 400);
+  });
+
+  await t.test("returns 400 for empty current_password", async (t) => {
+    const passwordHash = await bcrypt.hash("oldpassword123", 10);
+    const user = await db
+      .insertInto("users")
+      .values({
+        email: "emptycurrent@example.com",
+        password_hash: passwordHash,
+      })
+      .returning(["id", "email"])
+      .executeTakeFirstOrThrow();
+
+    const token = signToken({
+      userId: user.id,
+      email: user.email,
+      isAdmin: false,
+    });
+
+    const res = await app.request("/api/auth/update-password", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Cookie: `auth_token=${token}`,
+      },
+      body: JSON.stringify({
+        current_password: "",
+        new_password: "newpassword123",
+      }),
+    });
+
+    t.equal(res.status, 400);
+  });
+
+  await t.test("returns 400 for empty new_password", async (t) => {
+    const passwordHash = await bcrypt.hash("oldpassword123", 10);
+    const user = await db
+      .insertInto("users")
+      .values({
+        email: "emptynew@example.com",
+        password_hash: passwordHash,
+      })
+      .returning(["id", "email"])
+      .executeTakeFirstOrThrow();
+
+    const token = signToken({
+      userId: user.id,
+      email: user.email,
+      isAdmin: false,
+    });
+
+    const res = await app.request("/api/auth/update-password", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Cookie: `auth_token=${token}`,
+      },
+      body: JSON.stringify({
+        current_password: "oldpassword123",
+        new_password: "",
+      }),
+    });
+
+    t.equal(res.status, 400);
+  });
+
+  await t.test("returns 400 for missing current_password field", async (t) => {
+    const passwordHash = await bcrypt.hash("oldpassword123", 10);
+    const user = await db
+      .insertInto("users")
+      .values({
+        email: "missingcurrent@example.com",
+        password_hash: passwordHash,
+      })
+      .returning(["id", "email"])
+      .executeTakeFirstOrThrow();
+
+    const token = signToken({
+      userId: user.id,
+      email: user.email,
+      isAdmin: false,
+    });
+
+    const res = await app.request("/api/auth/update-password", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Cookie: `auth_token=${token}`,
+      },
+      body: JSON.stringify({
+        new_password: "newpassword123",
+      }),
+    });
+
+    t.equal(res.status, 400);
+  });
+
+  await t.test("returns 400 for missing new_password field", async (t) => {
+    const passwordHash = await bcrypt.hash("oldpassword123", 10);
+    const user = await db
+      .insertInto("users")
+      .values({
+        email: "missingnew@example.com",
+        password_hash: passwordHash,
+      })
+      .returning(["id", "email"])
+      .executeTakeFirstOrThrow();
+
+    const token = signToken({
+      userId: user.id,
+      email: user.email,
+      isAdmin: false,
+    });
+
+    const res = await app.request("/api/auth/update-password", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Cookie: `auth_token=${token}`,
+      },
+      body: JSON.stringify({
+        current_password: "oldpassword123",
+      }),
+    });
+
+    t.equal(res.status, 400);
+  });
+
+  await t.test("returns 400 for non-string password values", async (t) => {
+    const passwordHash = await bcrypt.hash("oldpassword123", 10);
+    const user = await db
+      .insertInto("users")
+      .values({
+        email: "nonstring@example.com",
+        password_hash: passwordHash,
+      })
+      .returning(["id", "email"])
+      .executeTakeFirstOrThrow();
+
+    const token = signToken({
+      userId: user.id,
+      email: user.email,
+      isAdmin: false,
+    });
+
+    // Test with number
+    const res1 = await app.request("/api/auth/update-password", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Cookie: `auth_token=${token}`,
+      },
+      body: JSON.stringify({
+        current_password: 12345678,
+        new_password: "newpassword123",
+      }),
+    });
+    t.equal(res1.status, 400);
+
+    // Test with null
+    const res2 = await app.request("/api/auth/update-password", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Cookie: `auth_token=${token}`,
+      },
+      body: JSON.stringify({
+        current_password: "oldpassword123",
+        new_password: null,
+      }),
+    });
+    t.equal(res2.status, 400);
+
+    // Test with object
+    const res3 = await app.request("/api/auth/update-password", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Cookie: `auth_token=${token}`,
+      },
+      body: JSON.stringify({
+        current_password: { password: "oldpassword123" },
+        new_password: "newpassword123",
+      }),
+    });
+    t.equal(res3.status, 400);
+  });
+
+  await t.test(
+    "accepts password at exactly min length (8 chars)",
+    async (t) => {
+      const passwordHash = await bcrypt.hash("oldpassword123", 10);
+      const user = await db
+        .insertInto("users")
+        .values({
+          email: "minlength@example.com",
+          password_hash: passwordHash,
+        })
+        .returning(["id", "email"])
+        .executeTakeFirstOrThrow();
+
+      const token = signToken({
+        userId: user.id,
+        email: user.email,
+        isAdmin: false,
+      });
+
+      const res = await app.request("/api/auth/update-password", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Cookie: `auth_token=${token}`,
+        },
+        body: JSON.stringify({
+          current_password: "oldpassword123",
+          new_password: "exactly8",
+        }),
+      });
+
+      t.equal(res.status, 200);
+    },
+  );
+
+  await t.test(
+    "accepts password at exactly max length (128 chars)",
+    async (t) => {
+      const passwordHash = await bcrypt.hash("oldpassword123", 10);
+      const user = await db
+        .insertInto("users")
+        .values({
+          email: "maxlength@example.com",
+          password_hash: passwordHash,
+        })
+        .returning(["id", "email"])
+        .executeTakeFirstOrThrow();
+
+      const token = signToken({
+        userId: user.id,
+        email: user.email,
+        isAdmin: false,
+      });
+
+      const res = await app.request("/api/auth/update-password", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Cookie: `auth_token=${token}`,
+        },
+        body: JSON.stringify({
+          current_password: "oldpassword123",
+          new_password: "a".repeat(128),
+        }),
+      });
+
+      t.equal(res.status, 200);
+    },
+  );
+
+  await t.test("accepts password with special characters", async (t) => {
+    const passwordHash = await bcrypt.hash("oldpassword123", 10);
+    const user = await db
+      .insertInto("users")
+      .values({
+        email: "specialchars@example.com",
+        password_hash: passwordHash,
+      })
+      .returning(["id", "email"])
+      .executeTakeFirstOrThrow();
+
+    const token = signToken({
+      userId: user.id,
+      email: user.email,
+      isAdmin: false,
+    });
+
+    const specialPassword = "P@ssw0rd!#$%^&*()";
+    const res = await app.request("/api/auth/update-password", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Cookie: `auth_token=${token}`,
+      },
+      body: JSON.stringify({
+        current_password: "oldpassword123",
+        new_password: specialPassword,
+      }),
+    });
+
+    t.equal(res.status, 200);
+
+    // Verify special character password works for login
+    const loginRes = await app.request("/api/auth/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        email: "specialchars@example.com",
+        password: specialPassword,
+      }),
+    });
+    t.equal(loginRes.status, 200);
+  });
+
+  await t.test("accepts password with unicode characters", async (t) => {
+    const passwordHash = await bcrypt.hash("oldpassword123", 10);
+    const user = await db
+      .insertInto("users")
+      .values({
+        email: "unicodepw@example.com",
+        password_hash: passwordHash,
+      })
+      .returning(["id", "email"])
+      .executeTakeFirstOrThrow();
+
+    const token = signToken({
+      userId: user.id,
+      email: user.email,
+      isAdmin: false,
+    });
+
+    const unicodePassword = "password123";
+    const res = await app.request("/api/auth/update-password", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Cookie: `auth_token=${token}`,
+      },
+      body: JSON.stringify({
+        current_password: "oldpassword123",
+        new_password: unicodePassword,
+      }),
+    });
+
+    t.equal(res.status, 200);
+
+    // Verify unicode password works for login
+    const loginRes = await app.request("/api/auth/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        email: "unicodepw@example.com",
+        password: unicodePassword,
+      }),
+    });
+    t.equal(loginRes.status, 200);
+  });
+
+  await t.test("accepts password with spaces", async (t) => {
+    const passwordHash = await bcrypt.hash("oldpassword123", 10);
+    const user = await db
+      .insertInto("users")
+      .values({
+        email: "spacespw@example.com",
+        password_hash: passwordHash,
+      })
+      .returning(["id", "email"])
+      .executeTakeFirstOrThrow();
+
+    const token = signToken({
+      userId: user.id,
+      email: user.email,
+      isAdmin: false,
+    });
+
+    const spacePassword = "my secret passphrase";
+    const res = await app.request("/api/auth/update-password", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Cookie: `auth_token=${token}`,
+      },
+      body: JSON.stringify({
+        current_password: "oldpassword123",
+        new_password: spacePassword,
+      }),
+    });
+
+    t.equal(res.status, 200);
+
+    // Verify password with spaces works for login
+    const loginRes = await app.request("/api/auth/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        email: "spacespw@example.com",
+        password: spacePassword,
+      }),
+    });
+    t.equal(loginRes.status, 200);
+  });
+
+  await t.test("new password works for subsequent login", async (t) => {
+    const passwordHash = await bcrypt.hash("oldpassword123", 10);
+    const user = await db
+      .insertInto("users")
+      .values({
+        email: "loginafter@example.com",
+        password_hash: passwordHash,
+      })
+      .returning(["id", "email"])
+      .executeTakeFirstOrThrow();
+
+    const token = signToken({
+      userId: user.id,
+      email: user.email,
+      isAdmin: false,
+    });
+
+    // Update password
+    await app.request("/api/auth/update-password", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Cookie: `auth_token=${token}`,
+      },
+      body: JSON.stringify({
+        current_password: "oldpassword123",
+        new_password: "newpassword123",
+      }),
+    });
+
+    // Old password should fail
+    const oldRes = await app.request("/api/auth/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        email: "loginafter@example.com",
+        password: "oldpassword123",
+      }),
+    });
+    t.equal(oldRes.status, 401);
+
+    // New password should work
+    const newRes = await app.request("/api/auth/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        email: "loginafter@example.com",
+        password: "newpassword123",
+      }),
+    });
+    t.equal(newRes.status, 200);
   });
 });

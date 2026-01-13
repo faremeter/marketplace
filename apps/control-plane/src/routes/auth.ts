@@ -15,6 +15,7 @@ import {
   SignupSchema,
   LoginSchema,
   VerifyEmailSchema,
+  UpdatePasswordSchema,
 } from "../lib/schemas.js";
 
 export const authRoutes = new Hono();
@@ -243,6 +244,44 @@ authRoutes.post(
         verification_token: null,
         verification_expires: null,
       })
+      .where("id", "=", user.id)
+      .execute();
+
+    return c.json({ success: true });
+  },
+);
+
+authRoutes.post(
+  "/update-password",
+  requireAuth,
+  arktypeValidator("json", UpdatePasswordSchema),
+  async (c) => {
+    const authUser = c.get("user");
+    const body = c.req.valid("json");
+
+    const user = await db
+      .selectFrom("users")
+      .select(["id", "password_hash"])
+      .where("id", "=", authUser.id)
+      .executeTakeFirst();
+
+    if (!user) {
+      return c.json({ error: "User not found" }, 404);
+    }
+
+    const validPassword = await bcrypt.compare(
+      body.current_password,
+      user.password_hash,
+    );
+    if (!validPassword) {
+      return c.json({ error: "Current password is incorrect" }, 401);
+    }
+
+    const newPasswordHash = await bcrypt.hash(body.new_password, SALT_ROUNDS);
+
+    await db
+      .updateTable("users")
+      .set({ password_hash: newPasswordHash })
       .where("id", "=", user.id)
       .execute();
 

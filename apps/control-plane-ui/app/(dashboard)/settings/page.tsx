@@ -6,6 +6,7 @@ import { useAuth } from "@/lib/auth/context";
 import useSWR from "swr";
 import { api, ApiError } from "@/lib/api/client";
 import { InviteMemberDialog } from "@/components/settings/invite-member-dialog";
+import { UpdatePasswordDialog } from "@/components/settings/update-password-dialog";
 import { Cross2Icon, CopyIcon, CheckIcon } from "@radix-ui/react-icons";
 import { useToast } from "@/components/ui/toast";
 import * as Dialog from "@radix-ui/react-dialog";
@@ -37,6 +38,7 @@ export default function SettingsPage() {
   const [inviteDialogOpen, setInviteDialogOpen] = useState(false);
   const [copiedId, setCopiedId] = useState<number | null>(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [passwordDialogOpen, setPasswordDialogOpen] = useState(false);
   const [deleteConfirmation, setDeleteConfirmation] = useState("");
   const [isDeleting, setIsDeleting] = useState(false);
 
@@ -165,33 +167,55 @@ export default function SettingsPage() {
 
       <div className="space-y-6">
         {activeTab === "account" && (
-          <section className="rounded-lg border border-gray-6 bg-gray-2 p-6">
-            <h2 className="mb-4 text-lg font-medium text-gray-12">
-              Account Information
-            </h2>
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm text-gray-11">Email</label>
-                <p className="mt-1 text-gray-12">{user?.email}</p>
-              </div>
-              <div>
-                <label className="block text-sm text-gray-11">
-                  Account Type
-                </label>
-                <div className="mt-1">
-                  {user?.is_admin ? (
-                    <span className="rounded-full border border-amber-800 bg-amber-900/50 px-2 py-0.5 text-xs text-amber-400">
-                      Administrator
-                    </span>
-                  ) : (
-                    <span className="rounded-full bg-gray-4 px-2 py-0.5 text-xs text-gray-11">
-                      User
-                    </span>
-                  )}
+          <>
+            <section className="rounded-lg border border-gray-6 bg-gray-2 p-6">
+              <h2 className="mb-4 text-lg font-medium text-gray-12">
+                Account Information
+              </h2>
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm text-gray-11">Email</label>
+                  <p className="mt-1 text-gray-12">{user?.email}</p>
+                </div>
+                <div>
+                  <label className="block text-sm text-gray-11">
+                    Account Type
+                  </label>
+                  <div className="mt-1">
+                    {user?.is_admin ? (
+                      <span className="rounded-full border border-amber-800 bg-amber-900/50 px-2 py-0.5 text-xs text-amber-400">
+                        Administrator
+                      </span>
+                    ) : (
+                      <span className="rounded-full bg-gray-4 px-2 py-0.5 text-xs text-gray-11">
+                        User
+                      </span>
+                    )}
+                  </div>
                 </div>
               </div>
-            </div>
-          </section>
+            </section>
+
+            <section className="rounded-lg border border-gray-6 bg-gray-2 p-6">
+              <h2 className="mb-4 text-lg font-medium text-gray-12">
+                Password
+              </h2>
+              <p className="mb-4 text-sm text-gray-11">
+                Update your password to keep your account secure.
+              </p>
+              <button
+                onClick={() => setPasswordDialogOpen(true)}
+                className="rounded-md border border-gray-6 px-4 py-2 text-sm font-medium text-gray-12 transition-colors hover:bg-gray-3"
+              >
+                Update Password
+              </button>
+            </section>
+
+            <UpdatePasswordDialog
+              open={passwordDialogOpen}
+              onOpenChange={setPasswordDialogOpen}
+            />
+          </>
         )}
 
         {activeTab === "organization" && currentOrg && (

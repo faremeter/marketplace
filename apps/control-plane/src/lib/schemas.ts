@@ -147,19 +147,25 @@ export const AdminUpdateEndpointSchema = type({
 });
 
 export const MIN_PASSWORD_LENGTH = 8;
+export const MAX_PASSWORD_LENGTH = 128;
 
 export const SignupSchema = type({
   email: "string.email",
-  password: `string >= ${MIN_PASSWORD_LENGTH}`,
+  password: `string >= ${MIN_PASSWORD_LENGTH} & string <= ${MAX_PASSWORD_LENGTH}`,
 });
 
 export const LoginSchema = type({
   email: "string.email",
-  password: "string > 0",
+  password: `string > 0 & string <= ${MAX_PASSWORD_LENGTH}`,
 });
 
 export const VerifyEmailSchema = type({
   token: "string > 0",
+});
+
+export const UpdatePasswordSchema = type({
+  current_password: `string > 0 & string <= ${MAX_PASSWORD_LENGTH}`,
+  new_password: `string >= ${MIN_PASSWORD_LENGTH} & string <= ${MAX_PASSWORD_LENGTH}`,
 });
 
 const ORG_NAME_PATTERN = /^[a-zA-Z0-9 .-]+$/;
