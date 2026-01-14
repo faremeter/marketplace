@@ -439,7 +439,7 @@ await t.test("POST /api/admin/organizations/import", async (t) => {
         Cookie: `auth_token=${admin.token}`,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ names: ["Existing Org"] }),
+      body: JSON.stringify({ names: ["Existing Org"], skip_duplicates: false }),
     });
     t.equal(res.status, 200);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -609,7 +609,10 @@ await t.test("POST /api/admin/organizations/import", async (t) => {
           Cookie: `auth_token=${admin.token}`,
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ names: ["My Org", "My.Org"] }),
+        body: JSON.stringify({
+          names: ["My Org", "My.Org"],
+          skip_duplicates: false,
+        }),
       });
       t.equal(res.status, 200);
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -702,7 +705,10 @@ await t.test("POST /api/admin/organizations/import", async (t) => {
         Cookie: `auth_token=${admin.token}`,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ names: ["Same Name", "Same Name", "Same Name"] }),
+      body: JSON.stringify({
+        names: ["Same Name", "Same Name", "Same Name"],
+        skip_duplicates: false,
+      }),
     });
     t.equal(res.status, 200);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
