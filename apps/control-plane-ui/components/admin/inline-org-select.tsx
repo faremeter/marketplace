@@ -31,6 +31,7 @@ interface InlineOrgSelectProps {
   tenantName: string;
   currentOrgId: number | null;
   currentOrgName: string | null;
+  currentOrgSlug: string | null;
   currentWalletId: number | null;
   currentWalletName: string | null;
   currentWalletOrgId: number | null;
@@ -42,6 +43,7 @@ export function InlineOrgSelect({
   tenantName,
   currentOrgId,
   currentOrgName,
+  currentOrgSlug,
   currentWalletId,
   currentWalletName,
   currentWalletOrgId,
@@ -51,8 +53,10 @@ export function InlineOrgSelect({
   const [isOpen, setIsOpen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [walletDialogOpen, setWalletDialogOpen] = useState(false);
+  const [domainDialogOpen, setDomainDialogOpen] = useState(false);
   const [pendingOrgId, setPendingOrgId] = useState<number | null>(null);
   const [pendingOrgName, setPendingOrgName] = useState<string | null>(null);
+  const [pendingOrgSlug, setPendingOrgSlug] = useState<string | null>(null);
   const [selectedWalletId, setSelectedWalletId] = useState<number | null>(null);
 
   const { data: organizations } = useSWR(
@@ -92,6 +96,10 @@ export function InlineOrgSelect({
     return true;
   };
 
+  const needsDomainChange = (newOrgSlug: string | null): boolean => {
+    return currentOrgSlug !== newOrgSlug;
+  };
+
   const handleOrgChange = async (value: string) => {
     const newOrgId = value === "none" ? null : parseInt(value);
 
@@ -100,10 +108,22 @@ export function InlineOrgSelect({
       return;
     }
 
-    if (needsWalletChange(newOrgId)) {
-      const org = organizations?.find((o) => o.id === newOrgId);
+    const org = organizations?.find((o) => o.id === newOrgId);
+    const newOrgSlug = org?.slug ?? null;
+
+    if (needsDomainChange(newOrgSlug)) {
       setPendingOrgId(newOrgId);
       setPendingOrgName(org?.name ?? null);
+      setPendingOrgSlug(newOrgSlug);
+      setIsOpen(false);
+      setDomainDialogOpen(true);
+      return;
+    }
+
+    if (needsWalletChange(newOrgId)) {
+      setPendingOrgId(newOrgId);
+      setPendingOrgName(org?.name ?? null);
+      setPendingOrgSlug(newOrgSlug);
       setIsOpen(false);
       setWalletDialogOpen(true);
       return;
@@ -139,13 +159,31 @@ export function InlineOrgSelect({
       setIsSaving(false);
       setIsOpen(false);
       setWalletDialogOpen(false);
+      setDomainDialogOpen(false);
       setPendingOrgId(null);
       setPendingOrgName(null);
+      setPendingOrgSlug(null);
     }
+  };
+
+  const handleDomainConfirm = () => {
+    if (needsWalletChange(pendingOrgId)) {
+      setDomainDialogOpen(false);
+      setWalletDialogOpen(true);
+      return;
+    }
+    saveOrgChange(pendingOrgId, undefined);
   };
 
   const handleWalletConfirm = () => {
     saveOrgChange(pendingOrgId, selectedWalletId);
+  };
+
+  const formatDomain = (slug: string | null) => {
+    if (slug) {
+      return `${tenantName}.${slug}.api.corbits.dev`;
+    }
+    return `${tenantName}.api.corbits.dev`;
   };
 
   const availableWallets = [...(masterWallets ?? []), ...(newOrgWallets ?? [])];
@@ -305,6 +343,65 @@ export function InlineOrgSelect({
               </button>
               <button
                 onClick={handleWalletConfirm}
+                disabled={isSaving}
+                className="rounded-md bg-white px-3 py-2 text-sm font-medium text-black shadow-button transition-colors hover:bg-white/90 disabled:opacity-50"
+              >
+                {isSaving ? "Saving..." : "Confirm"}
+              </button>
+            </div>
+          </Dialog.Content>
+        </Dialog.Portal>
+      </Dialog.Root>
+
+      <Dialog.Root open={domainDialogOpen} onOpenChange={setDomainDialogOpen}>
+        <Dialog.Portal>
+          <Dialog.Overlay className="fixed inset-0 bg-black/50" />
+          <Dialog.Content className="fixed left-1/2 top-1/2 w-full max-w-md -translate-x-1/2 -translate-y-1/2 rounded-lg border border-gray-6 bg-gray-2 p-6 shadow-lg">
+            <div className="flex items-center justify-between">
+              <Dialog.Title className="text-lg font-semibold text-gray-12">
+                Domain Change
+              </Dialog.Title>
+              <Dialog.Close className="rounded p-1 text-gray-11 hover:bg-gray-4 hover:text-gray-12">
+                <Cross2Icon className="h-4 w-4" />
+              </Dialog.Close>
+            </div>
+
+            <div className="mt-4 flex items-start gap-2 rounded-lg border border-amber-800 bg-amber-900/20 p-3">
+              <ExclamationTriangleIcon className="h-4 w-4 flex-shrink-0 text-amber-400 mt-0.5" />
+              <p className="text-sm text-amber-300">
+                Changing the organization will update the domain and trigger
+                certificate reprovisioning.
+              </p>
+            </div>
+
+            <div className="mt-4 space-y-3">
+              <div>
+                <p className="text-xs font-medium text-gray-11 mb-1">
+                  Current domain
+                </p>
+                <code className="block rounded bg-gray-3 px-3 py-2 text-sm text-gray-12">
+                  {formatDomain(currentOrgSlug)}
+                </code>
+              </div>
+              <div>
+                <p className="text-xs font-medium text-gray-11 mb-1">
+                  New domain
+                </p>
+                <code className="block rounded bg-gray-3 px-3 py-2 text-sm text-green-400">
+                  {formatDomain(pendingOrgSlug)}
+                </code>
+              </div>
+            </div>
+
+            <div className="mt-6 flex justify-end gap-3">
+              <button
+                onClick={() => setDomainDialogOpen(false)}
+                className="rounded-md px-3 py-2 text-sm font-medium text-gray-11 hover:bg-gray-4 hover:text-gray-12"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleDomainConfirm}
                 disabled={isSaving}
                 className="rounded-md bg-white px-3 py-2 text-sm font-medium text-black shadow-button transition-colors hover:bg-white/90 disabled:opacity-50"
               >

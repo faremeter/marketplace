@@ -11,82 +11,102 @@ import {
 } from "@radix-ui/react-icons";
 import { api, ApiError } from "@/lib/api/client";
 import { useToast } from "@/components/ui/toast";
-import { sanitizeProxyName } from "@/lib/proxy-name";
+import { getProxyUrlPattern } from "@/lib/format";
 
-interface InlineNameEditProps {
-  name: string;
-  onUpdate: () => void;
-  apiEndpoint: string;
-  fieldName?: string;
-  label?: string;
-  checkAvailabilityEndpoint?: string;
-  excludeId?: number;
-  organizationId?: number | null;
+const MIN_SLUG_LENGTH = 4;
+const MAX_SLUG_LENGTH = 58;
+const SLUG_PATTERN = /^[a-z0-9][a-z0-9-]*[a-z0-9]$/;
+
+function validateOrgSlug(slug: string): { valid: boolean; error?: string } {
+  if (slug.length < MIN_SLUG_LENGTH) {
+    return {
+      valid: false,
+      error: `Must be at least ${MIN_SLUG_LENGTH} characters`,
+    };
+  }
+  if (slug.length > MAX_SLUG_LENGTH) {
+    return {
+      valid: false,
+      error: `Must be at most ${MAX_SLUG_LENGTH} characters`,
+    };
+  }
+  if (!SLUG_PATTERN.test(slug)) {
+    return {
+      valid: false,
+      error: "Lowercase letters, numbers, and hyphens only",
+    };
+  }
+  return { valid: true };
 }
 
-export function InlineNameEdit({
-  name,
+interface InlineOrgSlugEditProps {
+  tenantId: number;
+  tenantName: string;
+  orgSlug: string | null | undefined;
+  onUpdate: () => void;
+}
+
+export function InlineOrgSlugEdit({
+  tenantId,
+  tenantName,
+  orgSlug,
   onUpdate,
-  apiEndpoint,
-  fieldName = "name",
-  label = "Name",
-  checkAvailabilityEndpoint,
-  excludeId,
-  organizationId,
-}: InlineNameEditProps) {
+}: InlineOrgSlugEditProps) {
   const { toast } = useToast();
   const [isOpen, setIsOpen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
-  const [value, setValue] = useState(name);
-  const [nameAvailable, setNameAvailable] = useState<boolean | null>(null);
-  const [isCheckingName, setIsCheckingName] = useState(false);
+  const [value, setValue] = useState(orgSlug ?? "");
+  const [isAvailable, setIsAvailable] = useState<boolean | null>(null);
+  const [isChecking, setIsChecking] = useState(false);
   const checkTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const lastCheckedRef = useRef<string>("");
 
+  const trimmed = value.trim();
+  const newOrgSlug = trimmed || null;
+  const hasChanged = newOrgSlug !== (orgSlug ?? null);
+  const formatValidation = trimmed ? validateOrgSlug(trimmed) : { valid: true };
+
   useEffect(() => {
-    if (!checkAvailabilityEndpoint || !isOpen) {
+    if (!isOpen || !hasChanged) {
+      setIsAvailable(null);
+      setIsChecking(false);
       return;
     }
 
-    const sanitized = sanitizeProxyName(value.trim());
-
-    if (!sanitized || sanitized === name) {
-      setNameAvailable(null);
-      setIsCheckingName(false);
+    // If format is invalid, don't check availability
+    if (trimmed && !formatValidation.valid) {
+      setIsAvailable(null);
+      setIsChecking(false);
       return;
     }
 
-    setIsCheckingName(true);
-    setNameAvailable(null);
+    setIsChecking(true);
+    setIsAvailable(null);
 
     if (checkTimeoutRef.current) {
       clearTimeout(checkTimeoutRef.current);
     }
 
+    const cacheKey = `${tenantName}:${trimmed}`;
+
     checkTimeoutRef.current = setTimeout(async () => {
-      lastCheckedRef.current = sanitized;
+      lastCheckedRef.current = cacheKey;
 
       try {
-        let url = `${checkAvailabilityEndpoint}?name=${encodeURIComponent(sanitized)}`;
-        if (excludeId !== undefined) {
-          url += `&excludeId=${excludeId}`;
-        }
-        if (organizationId) {
-          url += `&organization_id=${organizationId}`;
-        }
-
+        const orgSlugParam = trimmed ? encodeURIComponent(trimmed) : "null";
+        const url = `/api/admin/tenants/check-name?name=${encodeURIComponent(tenantName)}&org_slug=${orgSlugParam}&excludeId=${tenantId}`;
         const result = await api.get<{ available: boolean }>(url);
 
-        if (lastCheckedRef.current === sanitized) {
-          setNameAvailable(result.available);
+        if (lastCheckedRef.current === cacheKey) {
+          setIsAvailable(result.available);
         }
       } catch {
-        if (lastCheckedRef.current === sanitized) {
-          setNameAvailable(null);
+        if (lastCheckedRef.current === cacheKey) {
+          setIsAvailable(null);
         }
       } finally {
-        if (lastCheckedRef.current === sanitized) {
-          setIsCheckingName(false);
+        if (lastCheckedRef.current === cacheKey) {
+          setIsChecking(false);
         }
       }
     }, 500);
@@ -97,35 +117,36 @@ export function InlineNameEdit({
       }
     };
   }, [
-    value,
-    name,
-    checkAvailabilityEndpoint,
-    excludeId,
-    organizationId,
     isOpen,
+    hasChanged,
+    trimmed,
+    tenantName,
+    tenantId,
+    formatValidation.valid,
   ]);
 
   const handleSave = async () => {
-    const sanitized = sanitizeProxyName(value.trim());
-
-    if (!sanitized || sanitized === name) {
+    if (!hasChanged) {
       setIsOpen(false);
       return;
     }
 
-    if (
-      checkAvailabilityEndpoint &&
-      (nameAvailable === false || isCheckingName)
-    ) {
+    // Block if format invalid
+    if (trimmed && !formatValidation.valid) {
+      return;
+    }
+
+    // Block if availability check not passed
+    if (isAvailable === false || isChecking) {
       return;
     }
 
     setIsSaving(true);
     try {
-      await api.put(apiEndpoint, { [fieldName]: value.trim() });
+      await api.put(`/api/admin/tenants/${tenantId}`, { org_slug: newOrgSlug });
       toast({
-        title: `${label} updated`,
-        description: `${label} has been updated.`,
+        title: "Org slug updated",
+        description: `Domain will be reprovisioned.`,
         variant: "success",
       });
       onUpdate();
@@ -150,9 +171,9 @@ export function InlineNameEdit({
 
   const handleOpen = (open: boolean) => {
     if (open) {
-      setValue(name);
-      setNameAvailable(null);
-      setIsCheckingName(false);
+      setValue(orgSlug ?? "");
+      setIsAvailable(null);
+      setIsChecking(false);
     }
     setIsOpen(open);
   };
@@ -165,19 +186,18 @@ export function InlineNameEdit({
     }
   };
 
-  const sanitizedValue = sanitizeProxyName(value.trim());
-  const isNameChanged = sanitizedValue && sanitizedValue !== name;
-
   const canSave =
-    isNameChanged &&
+    hasChanged &&
     !isSaving &&
-    (!checkAvailabilityEndpoint || (nameAvailable === true && !isCheckingName));
+    (trimmed === "" || formatValidation.valid) &&
+    isAvailable === true &&
+    !isChecking;
 
   return (
     <Popover.Root open={isOpen} onOpenChange={handleOpen}>
       <Popover.Trigger asChild>
-        <button className="group flex items-center gap-1.5 rounded px-2 py-1 text-sm font-medium text-gray-12 hover:bg-gray-4 cursor-pointer text-left">
-          {name}
+        <button className="group flex items-center gap-1.5 rounded px-2 py-1 text-sm text-gray-11 hover:bg-gray-4 cursor-pointer text-left">
+          {orgSlug || <span className="text-gray-9">-</span>}
           <Pencil1Icon className="h-3 w-3 text-gray-11 opacity-0 group-hover:opacity-100" />
         </button>
       </Popover.Trigger>
@@ -190,7 +210,7 @@ export function InlineNameEdit({
           <div className="space-y-3">
             <div>
               <label className="block text-xs font-medium text-gray-11 mb-1">
-                {label}
+                Org Slug
               </label>
               <div className="relative">
                 <input
@@ -199,32 +219,47 @@ export function InlineNameEdit({
                   onChange={(e) => setValue(e.target.value)}
                   onKeyDown={handleKeyDown}
                   autoFocus
+                  placeholder="Leave empty for legacy mode"
                   className="w-full rounded border border-gray-6 bg-gray-3 px-2 py-1.5 pr-7 text-sm text-gray-12 placeholder:text-gray-8 focus:border-accent-8 focus:outline-none"
                 />
-                {checkAvailabilityEndpoint && isNameChanged && (
+                {hasChanged && (trimmed === "" || formatValidation.valid) && (
                   <div className="absolute right-2 top-1/2 -translate-y-1/2">
-                    {isCheckingName ? (
+                    {isChecking ? (
                       <div className="h-4 w-4 animate-spin rounded-full border-2 border-gray-6 border-t-gray-11" />
-                    ) : nameAvailable === true ? (
+                    ) : isAvailable === true ? (
                       <CheckCircledIcon className="h-4 w-4 text-green-500" />
-                    ) : nameAvailable === false ? (
+                    ) : isAvailable === false ? (
                       <CrossCircledIcon className="h-4 w-4 text-red-500" />
                     ) : null}
                   </div>
                 )}
               </div>
-              {checkAvailabilityEndpoint &&
-                nameAvailable === false &&
-                !isCheckingName && (
-                  <p className="mt-1 text-xs text-red-400">
-                    This name is already taken
-                  </p>
-                )}
-              {isNameChanged && nameAvailable !== false && (
-                <p className="mt-1 text-xs text-amber-400">
-                  Changing will trigger certificate reprovisioning
+              {trimmed && !formatValidation.valid && (
+                <p className="mt-1 text-xs text-red-400">
+                  {formatValidation.error}
                 </p>
               )}
+              {isAvailable === false && !isChecking && (
+                <p className="mt-1 text-xs text-red-400">
+                  Name already taken in this namespace
+                </p>
+              )}
+              <p className="mt-1.5 text-xs text-gray-11">
+                URL:{" "}
+                <code className="text-gray-9">
+                  {getProxyUrlPattern({
+                    proxyName: tenantName,
+                    orgSlug: newOrgSlug,
+                  })}
+                </code>
+              </p>
+              {hasChanged &&
+                isAvailable !== false &&
+                formatValidation.valid && (
+                  <p className="mt-1 text-xs text-amber-400">
+                    Changing will trigger certificate reprovisioning
+                  </p>
+                )}
             </div>
             <div className="flex justify-end gap-2">
               <button

@@ -18,6 +18,7 @@ import { api, ApiError } from "@/lib/api/client";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { CreateTenantDialog } from "@/components/admin/create-tenant-dialog";
 import { InlineOrgSelect } from "@/components/admin/inline-org-select";
+import { InlineOrgSlugEdit } from "@/components/admin/inline-org-slug-edit";
 import { InlineWalletSelect } from "@/components/admin/inline-wallet-select";
 import { InlineActiveToggle } from "@/components/shared/inline-active-toggle";
 import { InlineAuthEdit } from "@/components/shared/inline-auth-edit";
@@ -177,6 +178,9 @@ export default function AdminTenantsPage() {
                     Name
                   </th>
                   <th className="px-4 py-3 text-left text-sm font-medium text-gray-11">
+                    Org Slug
+                  </th>
+                  <th className="px-4 py-3 text-left text-sm font-medium text-gray-11">
                     URL
                   </th>
                   <th className="px-4 py-3 text-left text-sm font-medium text-gray-11">
@@ -223,7 +227,14 @@ export default function AdminTenantsPage() {
                         checkAvailabilityEndpoint="/api/admin/tenants/check-name"
                         excludeId={tenant.id}
                         organizationId={tenant.organization_id}
+                      />
+                    </td>
+                    <td className="px-4 py-3">
+                      <InlineOrgSlugEdit
+                        tenantId={tenant.id}
+                        tenantName={tenant.name}
                         orgSlug={tenant.org_slug}
+                        onUpdate={() => mutate()}
                       />
                     </td>
                     <td className="px-4 py-3">
@@ -281,6 +292,7 @@ export default function AdminTenantsPage() {
                         tenantName={tenant.name}
                         currentOrgId={tenant.organization_id}
                         currentOrgName={tenant.organization_name ?? null}
+                        currentOrgSlug={tenant.org_slug ?? null}
                         currentWalletId={tenant.wallet_id}
                         currentWalletName={tenant.wallet_name}
                         currentWalletOrgId={tenant.wallet_organization_id}
