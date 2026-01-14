@@ -127,11 +127,18 @@ async function createAdminSettings() {
   `.execute(db);
 }
 
-async function addToWaitlist(email: string) {
+async function addToWaitlist(
+  email: string,
+  opts?: { whitelisted?: boolean; signed_up?: boolean },
+) {
   return db
     .insertInto("waitlist")
-    .values({ email })
-    .returning(["id"])
+    .values({
+      email,
+      whitelisted: opts?.whitelisted ?? false,
+      signed_up: opts?.signed_up ?? false,
+    })
+    .returning(["id", "whitelisted", "signed_up"])
     .executeTakeFirstOrThrow();
 }
 
@@ -2498,6 +2505,78 @@ await t.test("DELETE /api/admin/waitlist/:id", async (t) => {
     const res = await app.request("/api/admin/waitlist/999", {
       method: "DELETE",
       headers: { Cookie: `auth_token=${admin.token}` },
+    });
+    t.equal(res.status, 404);
+  });
+});
+
+await t.test("PATCH /api/admin/waitlist/:id", async (t) => {
+  await t.test("whitelists a user", async (t) => {
+    const admin = await createUser("admin@example.com", true);
+    const entry = await addToWaitlist("user@example.com");
+
+    const res = await app.request(`/api/admin/waitlist/${entry.id}`, {
+      method: "PATCH",
+      headers: {
+        Cookie: `auth_token=${admin.token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ whitelisted: true }),
+    });
+    t.equal(res.status, 200);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const data = (await res.json()) as any;
+    t.ok(data.whitelisted);
+  });
+
+  await t.test("un-whitelists a user who has not signed up", async (t) => {
+    const admin = await createUser("admin@example.com", true);
+    const entry = await addToWaitlist("user@example.com", {
+      whitelisted: true,
+    });
+
+    const res = await app.request(`/api/admin/waitlist/${entry.id}`, {
+      method: "PATCH",
+      headers: {
+        Cookie: `auth_token=${admin.token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ whitelisted: false }),
+    });
+    t.equal(res.status, 200);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const data = (await res.json()) as any;
+    t.notOk(data.whitelisted);
+  });
+
+  await t.test("cannot un-whitelist a user who has signed up", async (t) => {
+    const admin = await createUser("admin@example.com", true);
+    const entry = await addToWaitlist("user@example.com", {
+      whitelisted: true,
+      signed_up: true,
+    });
+
+    const res = await app.request(`/api/admin/waitlist/${entry.id}`, {
+      method: "PATCH",
+      headers: {
+        Cookie: `auth_token=${admin.token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ whitelisted: false }),
+    });
+    t.equal(res.status, 400);
+  });
+
+  await t.test("returns 404 for non-existent entry", async (t) => {
+    const admin = await createUser("admin@example.com", true);
+
+    const res = await app.request("/api/admin/waitlist/999", {
+      method: "PATCH",
+      headers: {
+        Cookie: `auth_token=${admin.token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ whitelisted: true }),
     });
     t.equal(res.status, 404);
   });

@@ -165,5 +165,7 @@ export interface WalletsTable {
 export interface WaitlistTable {
   id: ColumnType<number, never, never>;
   email: string;
+  whitelisted: ColumnType<boolean, boolean | undefined, boolean>;
+  signed_up: ColumnType<boolean, boolean | undefined, boolean>;
   created_at: AutoDateColumn;
 }

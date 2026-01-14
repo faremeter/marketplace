@@ -44,18 +44,9 @@ export default function LandingPage() {
               </p>
 
               <div className="mt-10 flex flex-col items-center justify-center gap-4 sm:flex-row">
-                {process.env.NODE_ENV === "development" ? (
-                  <Link
-                    href="/signup"
-                    className="inline-flex h-11 items-center justify-center rounded-md bg-white px-6 text-[14px] font-medium text-black shadow-button transition-colors hover:bg-white/90"
-                  >
-                    Get Started
-                  </Link>
-                ) : (
-                  <BetaSignupButton className="inline-flex h-11 items-center justify-center rounded-md bg-white px-6 text-[14px] font-medium text-black shadow-button transition-colors hover:bg-white/90">
-                    Sign Up for Beta
-                  </BetaSignupButton>
-                )}
+                <BetaSignupButton className="inline-flex h-11 items-center justify-center rounded-md bg-white px-6 text-[14px] font-medium text-black shadow-button transition-colors hover:bg-white/90">
+                  Join the Waitlist
+                </BetaSignupButton>
                 <Link
                   href="https://docs.corbits.dev"
                   className="inline-flex h-11 items-center justify-center rounded-md border border-white/10 bg-white/5 px-6 text-[14px] font-medium text-white transition-colors hover:bg-white/10"
@@ -256,18 +247,9 @@ export default function LandingPage() {
                 Start accepting payments in seconds. No billing required.
               </p>
               <div className="mt-8">
-                {process.env.NODE_ENV === "development" ? (
-                  <Link
-                    href="/signup"
-                    className="inline-flex h-11 items-center justify-center rounded-md bg-white px-8 text-[14px] font-medium text-black shadow-button transition-colors hover:bg-white/90"
-                  >
-                    Get Started
-                  </Link>
-                ) : (
-                  <BetaSignupButton className="inline-flex h-11 items-center justify-center rounded-md bg-white px-8 text-[14px] font-medium text-black shadow-button transition-colors hover:bg-white/90">
-                    Sign Up for Beta
-                  </BetaSignupButton>
-                )}
+                <BetaSignupButton className="inline-flex h-11 items-center justify-center rounded-md bg-white px-8 text-[14px] font-medium text-black shadow-button transition-colors hover:bg-white/90">
+                  Join the Waitlist
+                </BetaSignupButton>
               </div>
             </div>
           </div>

@@ -27,12 +27,23 @@ authRoutes.post(
   signupLimiter,
   arktypeValidator("json", SignupSchema),
   async (c) => {
-    if (process.env.NODE_ENV === "production") {
-      return c.json({ error: "Signups are temporarily disabled" }, 403);
-    }
-
     const body = c.req.valid("json");
     const email = normalizeEmail(body.email);
+
+    if (process.env.NODE_ENV === "production") {
+      const waitlistEntry = await db
+        .selectFrom("waitlist")
+        .select(["id", "whitelisted"])
+        .where("email", "=", email)
+        .executeTakeFirst();
+
+      if (!waitlistEntry || !waitlistEntry.whitelisted) {
+        return c.json(
+          { error: "Please join the waitlist first to get access" },
+          403,
+        );
+      }
+    }
 
     const existing = await db
       .selectFrom("users")
@@ -80,6 +91,12 @@ authRoutes.post(
         organization_id: org.id,
         role: "owner",
       })
+      .execute();
+
+    await db
+      .updateTable("waitlist")
+      .set({ signed_up: true })
+      .where("email", "=", email)
       .execute();
 
     const token = signToken({

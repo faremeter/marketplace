@@ -3,7 +3,6 @@
 import Link from "next/link";
 import Image from "next/image";
 import { useAuth } from "@/lib/auth/context";
-import { BetaSignupButton } from "@/components/landing/beta-signup-dialog";
 
 export function Header() {
   const { user } = useAuth();
@@ -37,18 +36,12 @@ export function Header() {
               >
                 Log in
               </Link>
-              {process.env.NODE_ENV === "development" ? (
-                <Link
-                  href="/signup"
-                  className="rounded-md bg-white px-3 py-1.5 text-[13px] font-medium text-black shadow-button transition-colors hover:bg-white/90"
-                >
-                  Sign up
-                </Link>
-              ) : (
-                <BetaSignupButton className="rounded-md bg-white px-3 py-1.5 text-[13px] font-medium text-black shadow-button transition-colors hover:bg-white/90">
-                  Sign up
-                </BetaSignupButton>
-              )}
+              <Link
+                href="/signup"
+                className="rounded-md bg-white px-3 py-1.5 text-[13px] font-medium text-black shadow-button transition-colors hover:bg-white/90"
+              >
+                Sign up
+              </Link>
             </>
           )}
         </nav>

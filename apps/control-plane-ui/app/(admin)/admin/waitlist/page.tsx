@@ -13,6 +13,8 @@ import {
 interface WaitlistEntry {
   id: number;
   email: string;
+  whitelisted: boolean;
+  signed_up: boolean;
   created_at: string;
 }
 
@@ -33,6 +35,15 @@ export default function AdminWaitlistPage() {
 
     try {
       await api.delete(`/api/admin/waitlist/${id}`);
+      mutate();
+    } catch {
+      // Silently fail
+    }
+  };
+
+  const handleToggleWhitelist = async (id: number, whitelisted: boolean) => {
+    try {
+      await api.patch(`/api/admin/waitlist/${id}`, { whitelisted });
       mutate();
     } catch {
       // Silently fail
@@ -90,7 +101,13 @@ export default function AdminWaitlistPage() {
                     Email
                   </th>
                   <th className="px-4 py-3 text-left text-sm font-medium text-gray-11">
+                    Whitelisted
+                  </th>
+                  <th className="px-4 py-3 text-left text-sm font-medium text-gray-11">
                     Signed Up
+                  </th>
+                  <th className="px-4 py-3 text-left text-sm font-medium text-gray-11">
+                    Joined
                   </th>
                   <th className="px-4 py-3 text-right text-sm font-medium text-gray-11">
                     Actions
@@ -103,6 +120,35 @@ export default function AdminWaitlistPage() {
                     <td className="px-4 py-3 text-sm text-gray-12">
                       {entry.email}
                     </td>
+                    <td className="px-4 py-3">
+                      <button
+                        onClick={() =>
+                          handleToggleWhitelist(entry.id, !entry.whitelisted)
+                        }
+                        disabled={entry.signed_up && entry.whitelisted}
+                        className={`rounded px-2 py-1 text-xs font-medium transition-colors ${
+                          entry.whitelisted
+                            ? "bg-green-900/30 text-green-400"
+                            : "bg-gray-6 text-gray-11 hover:bg-gray-7"
+                        } ${entry.signed_up && entry.whitelisted ? "cursor-not-allowed opacity-70" : "hover:bg-green-900/50"}`}
+                        title={
+                          entry.signed_up && entry.whitelisted
+                            ? "Cannot un-whitelist a user who has signed up"
+                            : undefined
+                        }
+                      >
+                        {entry.whitelisted ? "Yes" : "No"}
+                      </button>
+                    </td>
+                    <td className="px-4 py-3">
+                      {entry.signed_up ? (
+                        <span className="rounded bg-accent-9/20 px-2 py-1 text-xs font-medium text-accent-11">
+                          Yes
+                        </span>
+                      ) : (
+                        <span className="text-sm text-gray-11">No</span>
+                      )}
+                    </td>
                     <td className="px-4 py-3 text-sm text-gray-11">
                       {new Date(entry.created_at).toLocaleDateString(
                         undefined,
@@ -110,8 +156,6 @@ export default function AdminWaitlistPage() {
                           year: "numeric",
                           month: "short",
                           day: "numeric",
-                          hour: "2-digit",
-                          minute: "2-digit",
                         },
                       )}
                     </td>

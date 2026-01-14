@@ -1596,11 +1596,42 @@ adminRoutes.put(
 adminRoutes.get("/waitlist", async (c) => {
   const waitlist = await db
     .selectFrom("waitlist")
-    .select(["id", "email", "created_at"])
+    .select(["id", "email", "whitelisted", "signed_up", "created_at"])
     .orderBy("created_at", "desc")
     .execute();
 
   return c.json(waitlist);
+});
+
+adminRoutes.patch("/waitlist/:id", async (c) => {
+  const id = parseInt(c.req.param("id"));
+  const body = await c.req.json<{ whitelisted: boolean }>();
+
+  const entry = await db
+    .selectFrom("waitlist")
+    .select(["id", "signed_up"])
+    .where("id", "=", id)
+    .executeTakeFirst();
+
+  if (!entry) {
+    return c.json({ error: "Entry not found" }, 404);
+  }
+
+  if (entry.signed_up && !body.whitelisted) {
+    return c.json(
+      { error: "Cannot un-whitelist a user who has signed up" },
+      400,
+    );
+  }
+
+  const result = await db
+    .updateTable("waitlist")
+    .set({ whitelisted: body.whitelisted })
+    .where("id", "=", id)
+    .returningAll()
+    .executeTakeFirst();
+
+  return c.json(result);
 });
 
 adminRoutes.delete("/waitlist/:id", async (c) => {

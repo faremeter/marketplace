@@ -139,32 +139,90 @@ await t.test("POST /api/auth/signup", async (t) => {
     t.equal(res.status, 201);
   });
 
-  await t.test("returns 403 in production environment", async (t) => {
-    const originalEnv = process.env.NODE_ENV;
-    process.env.NODE_ENV = "production";
+  await t.test(
+    "returns 403 in production for non-waitlisted user",
+    async (t) => {
+      const originalEnv = process.env.NODE_ENV;
+      process.env.NODE_ENV = "production";
 
-    try {
-      const res = await app.request("/api/auth/signup", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          email: "prod-test@example.com",
-          password: "password123",
-        }),
-      });
+      try {
+        const res = await app.request("/api/auth/signup", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            email: "not-on-waitlist@example.com",
+            password: "password123",
+          }),
+        });
 
-      // In production, signups should be blocked
-      t.not(res.status, 201, "should not succeed in production");
-      // If we get past rate limiter, should be 403
-      if (res.status === 403) {
+        t.equal(res.status, 403);
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const data = (await res.json()) as any;
-        t.ok(data.error.includes("disabled"));
+        t.ok(data.error.includes("waitlist"));
+      } finally {
+        process.env.NODE_ENV = originalEnv;
       }
-    } finally {
-      process.env.NODE_ENV = originalEnv;
-    }
-  });
+    },
+  );
+
+  await t.test(
+    "allows signup in production for whitelisted user",
+    async (t) => {
+      const originalEnv = process.env.NODE_ENV;
+      process.env.NODE_ENV = "production";
+
+      try {
+        await db
+          .insertInto("waitlist")
+          .values({ email: "whitelisted@example.com", whitelisted: true })
+          .execute();
+
+        const res = await app.request("/api/auth/signup", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            email: "whitelisted@example.com",
+            password: "password123",
+          }),
+        });
+
+        t.equal(res.status, 201);
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const data = (await res.json()) as any;
+        t.equal(data.user.email, "whitelisted@example.com");
+      } finally {
+        process.env.NODE_ENV = originalEnv;
+      }
+    },
+  );
+
+  await t.test(
+    "returns 403 for waitlisted but not whitelisted user",
+    async (t) => {
+      const originalEnv = process.env.NODE_ENV;
+      process.env.NODE_ENV = "production";
+
+      try {
+        await db
+          .insertInto("waitlist")
+          .values({ email: "not-whitelisted@example.com", whitelisted: false })
+          .execute();
+
+        const res = await app.request("/api/auth/signup", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            email: "not-whitelisted@example.com",
+            password: "password123",
+          }),
+        });
+
+        t.equal(res.status, 403);
+      } finally {
+        process.env.NODE_ENV = originalEnv;
+      }
+    },
+  );
 });
 
 await t.test("POST /api/auth/login", async (t) => {
