@@ -24,7 +24,7 @@ retry=0
 
 while [[ $retry -lt "$MAX_RETRIES" ]]; do
     for addr in "${addrs[@]}"; do
-        if curl -sf "http://${addr}/api/nodes/${NODE_ID}/sync" -o /etc/nginx/tenant-config.json; then
+        if curl -sf "http://${addr}/internal/nodes/${NODE_ID}/sync" -o /etc/nginx/tenant-config.json; then
             chown www-data:tenantmgr /etc/nginx/tenant-config.json
             chmod 640 /etc/nginx/tenant-config.json
             /usr/local/bin/regen-tenant-nginx
