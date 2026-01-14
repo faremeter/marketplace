@@ -128,6 +128,19 @@ export const AdminCreateTenantSchema = type({
   "upstream_auth_value?": `string <= ${MAX_AUTH_VALUE_LENGTH} | null`,
 });
 
+const orgSlug = type(
+  `string >= ${MIN_ORG_NAME_LENGTH} & string <= ${MAX_ORG_NAME_LENGTH}`,
+).narrow((s, ctx) => {
+  if (!/^[a-z0-9][a-z0-9-]*[a-z0-9]$/.test(s)) {
+    return ctx.mustBe(
+      "lowercase alphanumeric, starting and ending with letter or number",
+    );
+  }
+  return true;
+});
+
+const adminOrgSlug = orgSlug.or(type("null | ''"));
+
 export const AdminUpdateTenantSchema = type({
   "name?": "string > 0",
   "backend_url?": "string | null",
@@ -136,6 +149,7 @@ export const AdminUpdateTenantSchema = type({
   "is_active?": "boolean",
   "upstream_auth_header?": `string <= ${MAX_AUTH_HEADER_LENGTH} | null`,
   "upstream_auth_value?": `string <= ${MAX_AUTH_VALUE_LENGTH} | null`,
+  "org_slug?": adminOrgSlug,
 });
 
 export const AdminUpdateEndpointSchema = type({
@@ -196,17 +210,6 @@ const orgName = type(
   }
   if (s.endsWith(".")) {
     return ctx.mustBe("not ending with a period");
-  }
-  return true;
-});
-
-const orgSlug = type(
-  `string >= ${MIN_ORG_NAME_LENGTH} & string <= ${MAX_ORG_NAME_LENGTH}`,
-).narrow((s, ctx) => {
-  if (!/^[a-z0-9][a-z0-9-]*[a-z0-9]$/.test(s)) {
-    return ctx.mustBe(
-      "lowercase alphanumeric, starting and ending with letter or number",
-    );
   }
   return true;
 });

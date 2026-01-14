@@ -16,7 +16,7 @@ import { fetchWalletBalances, extractAddresses } from "./balances.js";
 import { cleanupAccount, renameAccount } from "./corbits-dash.js";
 import { logger } from "../logger.js";
 import { db } from "../db/instance.js";
-import { toDomainInfo } from "./domain.js";
+import { toDomainInfo, buildTenantDomain } from "./domain.js";
 
 let boss: PgBoss | null = null;
 
@@ -43,7 +43,8 @@ interface TenantRenameJob {
   tenantId: number;
   oldName: string;
   newName: string;
-  orgSlug: string | null;
+  oldOrgSlug: string | null;
+  newOrgSlug: string | null;
 }
 
 interface BalanceCheckJob {
@@ -326,17 +327,19 @@ export async function startQueue(config: {
     { batchSize: 1 },
     async (jobs) => {
       for (const job of jobs) {
-        const { tenantId, oldName, newName, orgSlug } = job.data;
+        const { tenantId, oldName, newName, oldOrgSlug, newOrgSlug } = job.data;
         const oldDomainInfo = toDomainInfo({
           name: oldName,
-          org_slug: orgSlug,
+          org_slug: oldOrgSlug,
         });
         const newDomainInfo = toDomainInfo({
           name: newName,
-          org_slug: orgSlug,
+          org_slug: newOrgSlug,
         });
+        const oldDomain = buildTenantDomain(oldDomainInfo);
+        const newDomain = buildTenantDomain(newDomainInfo);
         logger.info(
-          `Processing tenant rename job ${job.id}: ${oldName} -> ${newName}`,
+          `Processing tenant rename job ${job.id}: ${oldDomain} -> ${newDomain}`,
         );
 
         try {
@@ -415,7 +418,7 @@ export async function startQueue(config: {
 
           if (activeNodeIds.length > 0) {
             try {
-              await enqueueCertProvisioning(activeNodeIds, newName, orgSlug);
+              await enqueueCertProvisioning(activeNodeIds, newName, newOrgSlug);
             } catch (err) {
               logger.error(
                 `Failed to enqueue cert provisioning for nodes [${activeNodeIds.join(", ")}]: ${err}`,
@@ -435,11 +438,13 @@ export async function startQueue(config: {
             );
           }
 
-          await renameAccount(oldName, newName).catch((err) =>
-            logger.error(
-              `Failed to rename Corbits account from ${oldName} to ${newName}: ${err}`,
-            ),
-          );
+          if (oldName !== newName) {
+            await renameAccount(oldName, newName).catch((err) =>
+              logger.error(
+                `Failed to rename Corbits account from ${oldName} to ${newName}: ${err}`,
+              ),
+            );
+          }
 
           if (activeNodeIds.length === 0) {
             await db
@@ -453,16 +458,16 @@ export async function startQueue(config: {
             }
 
             logger.info(
-              `Tenant renamed from ${oldName} to ${newName} (no certs needed)`,
+              `Tenant domain changed: ${oldDomain} -> ${newDomain} (no certs needed)`,
             );
           } else {
             logger.info(
-              `Tenant renamed from ${oldName} to ${newName}, awaiting cert provisioning for ${activeNodeIds.length} node(s)`,
+              `Tenant domain changed: ${oldDomain} -> ${newDomain}, awaiting cert provisioning for ${activeNodeIds.length} node(s)`,
             );
           }
         } catch (error) {
           logger.error(
-            `Tenant rename failed for ${oldName} -> ${newName}: ${error}`,
+            `Tenant rename failed: ${oldDomain} -> ${newDomain}: ${error}`,
           );
 
           await db
@@ -820,7 +825,8 @@ export async function enqueueTenantRename(
   tenantId: number,
   oldName: string,
   newName: string,
-  orgSlug: string | null,
+  oldOrgSlug: string | null,
+  newOrgSlug: string | null,
 ): Promise<void> {
   if (process.env.NODE_ENV === "test") {
     return;
@@ -832,7 +838,7 @@ export async function enqueueTenantRename(
 
   const jobId = await boss.send(
     TENANT_RENAME_QUEUE,
-    { tenantId, oldName, newName, orgSlug },
+    { tenantId, oldName, newName, oldOrgSlug, newOrgSlug },
     {
       retryLimit: 3,
       retryDelay: 60,
@@ -847,7 +853,15 @@ export async function enqueueTenantRename(
     );
   }
 
-  logger.info(`Enqueued tenant rename job ${jobId}: ${oldName} -> ${newName}`);
+  const oldDomain = oldOrgSlug
+    ? `${oldName}.${oldOrgSlug}.api.corbits.dev`
+    : `${oldName}.api.corbits.dev`;
+  const newDomain = newOrgSlug
+    ? `${newName}.${newOrgSlug}.api.corbits.dev`
+    : `${newName}.api.corbits.dev`;
+  logger.info(
+    `Enqueued tenant rename job ${jobId}: ${oldDomain} -> ${newDomain}`,
+  );
 }
 
 export async function enqueueBalanceCheck(

@@ -46,7 +46,7 @@ async function createOrg(name: string, slug: string) {
 }
 
 async function createTenant(
-  orgId: number,
+  orgId: number | null,
   name: string,
   opts: { wallet_id?: number; status?: string; org_slug?: string } = {},
 ) {
@@ -1055,6 +1055,130 @@ await t.test("GET /api/admin/tenants/check-name", async (t) => {
       t.equal(data.available, true);
     },
   );
+
+  await t.test("with org_slug=null: checks legacy namespace", async (t) => {
+    const admin = await createUser("admin@example.com", true);
+    const org = await createOrg("Team", "team");
+    await createTenant(org.id, "legacy-api");
+
+    const res = await app.request(
+      "/api/admin/tenants/check-name?name=legacy-api&org_slug=null",
+      { headers: { Cookie: `auth_token=${admin.token}` } },
+    );
+    t.equal(res.status, 200);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const data = (await res.json()) as any;
+    t.equal(data.available, false);
+  });
+
+  await t.test(
+    "with org_slug=null: returns available for name in org namespace",
+    async (t) => {
+      const admin = await createUser("admin@example.com", true);
+      const org = await createOrg("Team", "team");
+      await createTenant(org.id, "org-api", { org_slug: "team" });
+
+      const res = await app.request(
+        "/api/admin/tenants/check-name?name=org-api&org_slug=null",
+        { headers: { Cookie: `auth_token=${admin.token}` } },
+      );
+      t.equal(res.status, 200);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const data = (await res.json()) as any;
+      t.equal(data.available, true);
+    },
+  );
+
+  await t.test(
+    "with org_slug=<slug>: checks specific org namespace",
+    async (t) => {
+      const admin = await createUser("admin@example.com", true);
+      const org = await createOrg("Team", "team");
+      await createTenant(org.id, "my-api", { org_slug: "team" });
+
+      const res = await app.request(
+        "/api/admin/tenants/check-name?name=my-api&org_slug=team",
+        { headers: { Cookie: `auth_token=${admin.token}` } },
+      );
+      t.equal(res.status, 200);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const data = (await res.json()) as any;
+      t.equal(data.available, false);
+    },
+  );
+
+  await t.test(
+    "with org_slug=<slug>: returns available for name in legacy namespace",
+    async (t) => {
+      const admin = await createUser("admin@example.com", true);
+      const org = await createOrg("Team", "team");
+      await createTenant(org.id, "legacy-only");
+
+      const res = await app.request(
+        "/api/admin/tenants/check-name?name=legacy-only&org_slug=team",
+        { headers: { Cookie: `auth_token=${admin.token}` } },
+      );
+      t.equal(res.status, 200);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const data = (await res.json()) as any;
+      t.equal(data.available, true);
+    },
+  );
+
+  await t.test(
+    "with org_slug=<slug>: returns available for name in different org",
+    async (t) => {
+      const admin = await createUser("admin@example.com", true);
+      const org1 = await createOrg("Org One", "org-one");
+      await createOrg("Org Two", "org-two");
+      await createTenant(org1.id, "shared-name", { org_slug: "org-one" });
+
+      const res = await app.request(
+        "/api/admin/tenants/check-name?name=shared-name&org_slug=org-two",
+        { headers: { Cookie: `auth_token=${admin.token}` } },
+      );
+      t.equal(res.status, 200);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const data = (await res.json()) as any;
+      t.equal(data.available, true);
+    },
+  );
+
+  await t.test(
+    "with org_slug and excludeId: excludes tenant from check",
+    async (t) => {
+      const admin = await createUser("admin@example.com", true);
+      const org = await createOrg("Team", "team");
+      const tenant = await createTenant(org.id, "my-api", { org_slug: "team" });
+
+      const res = await app.request(
+        `/api/admin/tenants/check-name?name=my-api&org_slug=team&excludeId=${tenant.id}`,
+        { headers: { Cookie: `auth_token=${admin.token}` } },
+      );
+      t.equal(res.status, 200);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const data = (await res.json()) as any;
+      t.equal(data.available, true);
+    },
+  );
+
+  await t.test(
+    "with org_slug=null and excludeId: excludes tenant from check",
+    async (t) => {
+      const admin = await createUser("admin@example.com", true);
+      const org = await createOrg("Team", "team");
+      const tenant = await createTenant(org.id, "legacy-api");
+
+      const res = await app.request(
+        `/api/admin/tenants/check-name?name=legacy-api&org_slug=null&excludeId=${tenant.id}`,
+        { headers: { Cookie: `auth_token=${admin.token}` } },
+      );
+      t.equal(res.status, 200);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const data = (await res.json()) as any;
+      t.equal(data.available, true);
+    },
+  );
 });
 
 await t.test("POST /api/admin/tenants", async (t) => {
@@ -1258,6 +1382,562 @@ await t.test("PUT /api/admin/tenants/:id", async (t) => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const data = (await res.json()) as any;
       t.ok(data.error.includes("Only wallet assignment"));
+    },
+  );
+
+  await t.test(
+    "switches from org mode to legacy mode with org_slug=null",
+    async (t) => {
+      const admin = await createUser("admin@example.com", true);
+      const org = await createOrg("Team", "team");
+      const tenant = await createTenant(org.id, "my-tenant", {
+        org_slug: "team",
+      });
+
+      const res = await app.request(`/api/admin/tenants/${tenant.id}`, {
+        method: "PUT",
+        headers: {
+          Cookie: `auth_token=${admin.token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ name: "my-tenant", org_slug: null }),
+      });
+      t.equal(res.status, 200);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const data = (await res.json()) as any;
+      t.equal(data.status, "pending");
+
+      const updated = await db
+        .selectFrom("tenants")
+        .select(["org_slug"])
+        .where("id", "=", tenant.id)
+        .executeTakeFirst();
+      t.equal(updated?.org_slug, null);
+    },
+  );
+
+  await t.test(
+    "switches from legacy mode to org mode with org_slug",
+    async (t) => {
+      const admin = await createUser("admin@example.com", true);
+      const org = await createOrg("Team", "team");
+      const tenant = await createTenant(org.id, "my-tenant");
+
+      const res = await app.request(`/api/admin/tenants/${tenant.id}`, {
+        method: "PUT",
+        headers: {
+          Cookie: `auth_token=${admin.token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ name: "my-tenant", org_slug: "team" }),
+      });
+      t.equal(res.status, 200);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const data = (await res.json()) as any;
+      t.equal(data.status, "pending");
+
+      const updated = await db
+        .selectFrom("tenants")
+        .select(["org_slug"])
+        .where("id", "=", tenant.id)
+        .executeTakeFirst();
+      t.equal(updated?.org_slug, "team");
+    },
+  );
+
+  await t.test(
+    "rejects switch to legacy if name collision in legacy namespace",
+    async (t) => {
+      const admin = await createUser("admin@example.com", true);
+      const org = await createOrg("Team", "team");
+      await createTenant(org.id, "taken-name");
+      const tenant = await createTenant(org.id, "taken-name", {
+        org_slug: "team",
+      });
+
+      const res = await app.request(`/api/admin/tenants/${tenant.id}`, {
+        method: "PUT",
+        headers: {
+          Cookie: `auth_token=${admin.token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ name: "taken-name", org_slug: null }),
+      });
+      t.equal(res.status, 400);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const data = (await res.json()) as any;
+      t.ok(data.error.includes("already taken"));
+    },
+  );
+
+  await t.test(
+    "rejects switch to org mode if name collision in org namespace",
+    async (t) => {
+      const admin = await createUser("admin@example.com", true);
+      const org = await createOrg("Team", "team");
+      await createTenant(org.id, "taken-name", { org_slug: "team" });
+      const tenant = await createTenant(org.id, "taken-name");
+
+      const res = await app.request(`/api/admin/tenants/${tenant.id}`, {
+        method: "PUT",
+        headers: {
+          Cookie: `auth_token=${admin.token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ name: "taken-name", org_slug: "team" }),
+      });
+      t.equal(res.status, 400);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const data = (await res.json()) as any;
+      t.ok(data.error.includes("already taken"));
+    },
+  );
+
+  await t.test(
+    "allows same name when switching modes if available in target namespace",
+    async (t) => {
+      const admin = await createUser("admin@example.com", true);
+      const org = await createOrg("Team", "team");
+      const tenant = await createTenant(org.id, "unique-api", {
+        org_slug: "team",
+      });
+
+      const res = await app.request(`/api/admin/tenants/${tenant.id}`, {
+        method: "PUT",
+        headers: {
+          Cookie: `auth_token=${admin.token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ name: "unique-api", org_slug: null }),
+      });
+      t.equal(res.status, 200);
+    },
+  );
+
+  await t.test("changes name and org_slug simultaneously", async (t) => {
+    const admin = await createUser("admin@example.com", true);
+    const org = await createOrg("Team", "team");
+    const tenant = await createTenant(org.id, "old-name", {
+      org_slug: "team",
+    });
+
+    const res = await app.request(`/api/admin/tenants/${tenant.id}`, {
+      method: "PUT",
+      headers: {
+        Cookie: `auth_token=${admin.token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ name: "new-name", org_slug: null }),
+    });
+    t.equal(res.status, 200);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const data = (await res.json()) as any;
+    t.equal(data.name, "new-name");
+    t.equal(data.status, "pending");
+
+    const updated = await db
+      .selectFrom("tenants")
+      .select(["name", "org_slug"])
+      .where("id", "=", tenant.id)
+      .executeTakeFirst();
+    t.equal(updated?.org_slug, null);
+  });
+
+  await t.test("no-op when org_slug matches current value", async (t) => {
+    const admin = await createUser("admin@example.com", true);
+    const org = await createOrg("Team", "team");
+    const tenant = await createTenant(org.id, "my-tenant", {
+      org_slug: "team",
+    });
+
+    const res = await app.request(`/api/admin/tenants/${tenant.id}`, {
+      method: "PUT",
+      headers: {
+        Cookie: `auth_token=${admin.token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ name: "my-tenant", org_slug: "team" }),
+    });
+    t.equal(res.status, 200);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const data = (await res.json()) as any;
+    t.equal(data.status, "active");
+  });
+
+  await t.test(
+    "changes org_slug without name field (triggers rename for cert reprovisioning)",
+    async (t) => {
+      const admin = await createUser("admin@example.com", true);
+      const org = await createOrg("Team", "team");
+      const tenant = await createTenant(org.id, "my-tenant", {
+        org_slug: "team",
+      });
+
+      const res = await app.request(`/api/admin/tenants/${tenant.id}`, {
+        method: "PUT",
+        headers: {
+          Cookie: `auth_token=${admin.token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ org_slug: null }),
+      });
+      t.equal(res.status, 200);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const data = (await res.json()) as any;
+      t.equal(data.status, "pending");
+      t.equal(data.name, "my-tenant");
+
+      const updated = await db
+        .selectFrom("tenants")
+        .select(["org_slug"])
+        .where("id", "=", tenant.id)
+        .executeTakeFirst();
+      t.equal(updated?.org_slug, null);
+    },
+  );
+
+  await t.test("rejects org_slug change when status is pending", async (t) => {
+    const admin = await createUser("admin@example.com", true);
+    const org = await createOrg("Team", "team");
+    const tenant = await createTenant(org.id, "my-tenant", {
+      org_slug: "team",
+      status: "pending",
+    });
+
+    const res = await app.request(`/api/admin/tenants/${tenant.id}`, {
+      method: "PUT",
+      headers: {
+        Cookie: `auth_token=${admin.token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ org_slug: null }),
+    });
+    t.equal(res.status, 400);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const data = (await res.json()) as any;
+    t.ok(data.error.includes("operation is in progress"));
+  });
+
+  await t.test(
+    "org_slug-only change checks collision in target namespace",
+    async (t) => {
+      const admin = await createUser("admin@example.com", true);
+      const org = await createOrg("Team", "team");
+      await createTenant(org.id, "collision-test");
+      const tenant = await createTenant(org.id, "collision-test", {
+        org_slug: "team",
+      });
+
+      const res = await app.request(`/api/admin/tenants/${tenant.id}`, {
+        method: "PUT",
+        headers: {
+          Cookie: `auth_token=${admin.token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ org_slug: null }),
+      });
+      t.equal(res.status, 400);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const data = (await res.json()) as any;
+      t.ok(data.error.includes("already taken"));
+    },
+  );
+
+  await t.test("normalizes empty string org_slug to null", async (t) => {
+    const admin = await createUser("admin@example.com", true);
+    const org = await createOrg("Team", "team");
+    const tenant = await createTenant(org.id, "my-tenant", {
+      org_slug: "team",
+    });
+
+    const res = await app.request(`/api/admin/tenants/${tenant.id}`, {
+      method: "PUT",
+      headers: {
+        Cookie: `auth_token=${admin.token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ org_slug: "" }),
+    });
+    t.equal(res.status, 200);
+
+    const updated = await db
+      .selectFrom("tenants")
+      .select(["org_slug"])
+      .where("id", "=", tenant.id)
+      .executeTakeFirst();
+    t.equal(updated?.org_slug, null);
+  });
+
+  await t.test(
+    "changing organization_id auto-derives org_slug from new org",
+    async (t) => {
+      const admin = await createUser("admin@example.com", true);
+      const org1 = await createOrg("Old Org", "old-org");
+      const org2 = await createOrg("New Org", "new-org");
+      const tenant = await createTenant(org1.id, "my-tenant", {
+        org_slug: "old-org",
+      });
+
+      const res = await app.request(`/api/admin/tenants/${tenant.id}`, {
+        method: "PUT",
+        headers: {
+          Cookie: `auth_token=${admin.token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ organization_id: org2.id }),
+      });
+      t.equal(res.status, 200);
+
+      const updated = await db
+        .selectFrom("tenants")
+        .select(["organization_id", "org_slug"])
+        .where("id", "=", tenant.id)
+        .executeTakeFirst();
+      t.equal(updated?.organization_id, org2.id);
+      t.equal(updated?.org_slug, "new-org");
+    },
+  );
+
+  await t.test(
+    "changing organization_id to null auto-sets org_slug to null",
+    async (t) => {
+      const admin = await createUser("admin@example.com", true);
+      const org = await createOrg("Team", "team");
+      const tenant = await createTenant(org.id, "my-tenant", {
+        org_slug: "team",
+      });
+
+      const res = await app.request(`/api/admin/tenants/${tenant.id}`, {
+        method: "PUT",
+        headers: {
+          Cookie: `auth_token=${admin.token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ organization_id: null }),
+      });
+      t.equal(res.status, 200);
+
+      const updated = await db
+        .selectFrom("tenants")
+        .select(["organization_id", "org_slug"])
+        .where("id", "=", tenant.id)
+        .executeTakeFirst();
+      t.equal(updated?.organization_id, null);
+      t.equal(updated?.org_slug, null);
+    },
+  );
+
+  await t.test(
+    "explicit org_slug overrides auto-derived slug when changing org",
+    async (t) => {
+      const admin = await createUser("admin@example.com", true);
+      const org1 = await createOrg("Old Org", "old-org");
+      const org2 = await createOrg("New Org", "new-org");
+      const tenant = await createTenant(org1.id, "my-tenant", {
+        org_slug: "old-org",
+      });
+
+      const res = await app.request(`/api/admin/tenants/${tenant.id}`, {
+        method: "PUT",
+        headers: {
+          Cookie: `auth_token=${admin.token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ organization_id: org2.id, org_slug: null }),
+      });
+      t.equal(res.status, 200);
+
+      const updated = await db
+        .selectFrom("tenants")
+        .select(["organization_id", "org_slug"])
+        .where("id", "=", tenant.id)
+        .executeTakeFirst();
+      t.equal(updated?.organization_id, org2.id);
+      t.equal(updated?.org_slug, null);
+    },
+  );
+
+  await t.test(
+    "legacy tenant (null org_slug) changing org_id derives org_slug and triggers rename",
+    async (t) => {
+      const admin = await createUser("admin@example.com", true);
+      const org1 = await createOrg("Old Org", "old-org");
+      const org2 = await createOrg("New Org", "new-org");
+      // Tenant has org but NO org_slug (legacy mode)
+      const tenant = await createTenant(org1.id, "my-tenant");
+
+      const res = await app.request(`/api/admin/tenants/${tenant.id}`, {
+        method: "PUT",
+        headers: {
+          Cookie: `auth_token=${admin.token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ organization_id: org2.id }),
+      });
+      t.equal(res.status, 200);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const data = (await res.json()) as any;
+      t.equal(data.status, "pending", "should trigger rename flow");
+
+      const updated = await db
+        .selectFrom("tenants")
+        .select(["organization_id", "org_slug"])
+        .where("id", "=", tenant.id)
+        .executeTakeFirst();
+      t.equal(updated?.organization_id, org2.id);
+      t.equal(updated?.org_slug, "new-org");
+    },
+  );
+
+  await t.test(
+    "tenant with no org getting one assigned derives org_slug",
+    async (t) => {
+      const admin = await createUser("admin@example.com", true);
+      const org = await createOrg("New Org", "new-org");
+      // Tenant has NO organization
+      const tenant = await createTenant(null, "orphan-tenant");
+
+      const res = await app.request(`/api/admin/tenants/${tenant.id}`, {
+        method: "PUT",
+        headers: {
+          Cookie: `auth_token=${admin.token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ organization_id: org.id }),
+      });
+      t.equal(res.status, 200);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const data = (await res.json()) as any;
+      t.equal(data.status, "pending", "should trigger rename flow");
+
+      const updated = await db
+        .selectFrom("tenants")
+        .select(["organization_id", "org_slug"])
+        .where("id", "=", tenant.id)
+        .executeTakeFirst();
+      t.equal(updated?.organization_id, org.id);
+      t.equal(updated?.org_slug, "new-org");
+    },
+  );
+
+  await t.test(
+    "org_id change with derived slug collision is rejected",
+    async (t) => {
+      const admin = await createUser("admin@example.com", true);
+      const org1 = await createOrg("Org One", "org-one");
+      const org2 = await createOrg("Org Two", "org-two");
+      // Existing tenant in org2's namespace
+      await createTenant(org2.id, "my-api", { org_slug: "org-two" });
+      // Legacy tenant we want to move
+      const tenant = await createTenant(org1.id, "my-api");
+
+      const res = await app.request(`/api/admin/tenants/${tenant.id}`, {
+        method: "PUT",
+        headers: {
+          Cookie: `auth_token=${admin.token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ organization_id: org2.id }),
+      });
+      t.equal(res.status, 400);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const data = (await res.json()) as any;
+      t.ok(data.error.includes("already taken"));
+    },
+  );
+
+  await t.test("rejects invalid org_slug format (uppercase)", async (t) => {
+    const admin = await createUser("admin@example.com", true);
+    const org = await createOrg("Team", "team");
+    const tenant = await createTenant(org.id, "my-tenant");
+
+    const res = await app.request(`/api/admin/tenants/${tenant.id}`, {
+      method: "PUT",
+      headers: {
+        Cookie: `auth_token=${admin.token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ org_slug: "UPPERCASE" }),
+    });
+    t.equal(res.status, 400);
+  });
+
+  await t.test("rejects invalid org_slug format (spaces)", async (t) => {
+    const admin = await createUser("admin@example.com", true);
+    const org = await createOrg("Team", "team");
+    const tenant = await createTenant(org.id, "my-tenant");
+
+    const res = await app.request(`/api/admin/tenants/${tenant.id}`, {
+      method: "PUT",
+      headers: {
+        Cookie: `auth_token=${admin.token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ org_slug: "invalid slug" }),
+    });
+    t.equal(res.status, 400);
+  });
+
+  await t.test("rejects org_slug that is too short", async (t) => {
+    const admin = await createUser("admin@example.com", true);
+    const org = await createOrg("Team", "team");
+    const tenant = await createTenant(org.id, "my-tenant");
+
+    const res = await app.request(`/api/admin/tenants/${tenant.id}`, {
+      method: "PUT",
+      headers: {
+        Cookie: `auth_token=${admin.token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ org_slug: "ab" }),
+    });
+    t.equal(res.status, 400);
+  });
+
+  await t.test("rejects org_slug that is too long", async (t) => {
+    const admin = await createUser("admin@example.com", true);
+    const org = await createOrg("Team", "team");
+    const tenant = await createTenant(org.id, "my-tenant");
+    const longSlug = "a".repeat(60);
+
+    const res = await app.request(`/api/admin/tenants/${tenant.id}`, {
+      method: "PUT",
+      headers: {
+        Cookie: `auth_token=${admin.token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ org_slug: longSlug }),
+    });
+    t.equal(res.status, 400);
+  });
+
+  await t.test(
+    "org_id change verifies status is pending in response",
+    async (t) => {
+      const admin = await createUser("admin@example.com", true);
+      const org1 = await createOrg("Old Org", "old-org");
+      const org2 = await createOrg("New Org", "new-org");
+      const tenant = await createTenant(org1.id, "my-tenant", {
+        org_slug: "old-org",
+      });
+
+      const res = await app.request(`/api/admin/tenants/${tenant.id}`, {
+        method: "PUT",
+        headers: {
+          Cookie: `auth_token=${admin.token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ organization_id: org2.id }),
+      });
+      t.equal(res.status, 200);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const data = (await res.json()) as any;
+      t.equal(
+        data.status,
+        "pending",
+        "rename flow should set status to pending",
+      );
+      t.equal(data.name, "my-tenant");
     },
   );
 });

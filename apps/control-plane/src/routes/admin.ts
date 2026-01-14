@@ -393,6 +393,7 @@ adminRoutes.get("/tenants/check-name", async (c) => {
   const name = c.req.query("name");
   const excludeId = c.req.query("excludeId");
   const organizationId = c.req.query("organization_id");
+  const orgSlug = c.req.query("org_slug");
 
   if (!name?.trim()) {
     return c.json({ available: false });
@@ -400,7 +401,33 @@ adminRoutes.get("/tenants/check-name", async (c) => {
 
   let existing;
 
-  if (organizationId) {
+  if (orgSlug !== undefined) {
+    if (orgSlug === "" || orgSlug === "null") {
+      let query = db
+        .selectFrom("tenants")
+        .select("id")
+        .where("name", "=", name.trim())
+        .where("org_slug", "is", null);
+
+      if (excludeId) {
+        query = query.where("id", "!=", parseInt(excludeId));
+      }
+
+      existing = await query.executeTakeFirst();
+    } else {
+      let query = db
+        .selectFrom("tenants")
+        .select("id")
+        .where("name", "=", name.trim())
+        .where("org_slug", "=", orgSlug);
+
+      if (excludeId) {
+        query = query.where("id", "!=", parseInt(excludeId));
+      }
+
+      existing = await query.executeTakeFirst();
+    }
+  } else if (organizationId) {
     let query = db
       .selectFrom("tenants")
       .select("id")
@@ -414,7 +441,6 @@ adminRoutes.get("/tenants/check-name", async (c) => {
 
     existing = await query.executeTakeFirst();
   } else {
-    // legacy format: check against other legacy tenants
     let query = db
       .selectFrom("tenants")
       .select("id")
@@ -605,13 +631,50 @@ adminRoutes.put(
       return c.json({ error: "Tenant not found" }, 404);
     }
 
-    if (body.name !== undefined) {
-      const nameValidation = validateProxyName(body.name);
-      if (!nameValidation.valid) {
-        return c.json({ error: nameValidation.error }, 400);
+    // If organization_id is changing and org_slug not provided, derive org_slug from new org
+    let derivedOrgSlug: string | null | undefined;
+    if (body.organization_id !== undefined && body.org_slug === undefined) {
+      if (body.organization_id === null) {
+        derivedOrgSlug = null;
+      } else {
+        const org = await db
+          .selectFrom("organizations")
+          .select(["id", "slug"])
+          .where("id", "=", body.organization_id)
+          .executeTakeFirst();
+        if (!org) {
+          return c.json({ error: "Organization not found" }, 404);
+        }
+        derivedOrgSlug = org.slug;
+      }
+    }
+
+    if (
+      body.name !== undefined ||
+      body.org_slug !== undefined ||
+      derivedOrgSlug !== undefined
+    ) {
+      let targetName = tenant.name;
+
+      if (body.name !== undefined) {
+        const nameValidation = validateProxyName(body.name);
+        if (!nameValidation.valid) {
+          return c.json({ error: nameValidation.error }, 400);
+        }
+        targetName = nameValidation.sanitized;
       }
 
-      if (nameValidation.sanitized !== tenant.name) {
+      const targetOrgSlug =
+        body.org_slug !== undefined
+          ? body.org_slug || null
+          : derivedOrgSlug !== undefined
+            ? derivedOrgSlug
+            : tenant.org_slug;
+
+      const isNameChanging = targetName !== tenant.name;
+      const isOrgSlugChanging = targetOrgSlug !== tenant.org_slug;
+
+      if (isNameChanging || isOrgSlugChanging) {
         if (tenant.status !== "active") {
           return c.json(
             {
@@ -622,23 +685,20 @@ adminRoutes.put(
           );
         }
 
-        // Check name collision based on org_slug
         let existing: { id: number } | undefined;
-        if (tenant.org_slug) {
-          // org_slug: check within same organization
+        if (targetOrgSlug) {
           existing = await db
             .selectFrom("tenants")
             .select(["id"])
-            .where("name", "=", nameValidation.sanitized)
-            .where("org_slug", "=", tenant.org_slug)
+            .where("name", "=", targetName)
+            .where("org_slug", "=", targetOrgSlug)
             .where("id", "!=", id)
             .executeTakeFirst();
         } else {
-          // legacy: check against all legacy tenants
           existing = await db
             .selectFrom("tenants")
             .select("id")
-            .where("name", "=", nameValidation.sanitized)
+            .where("name", "=", targetName)
             .where("org_slug", "is", null)
             .where("id", "!=", id)
             .executeTakeFirst();
@@ -648,22 +708,37 @@ adminRoutes.put(
           return c.json({ error: "Name already taken" }, 400);
         }
 
+        const updateFields: {
+          status: string;
+          org_slug?: string | null;
+          organization_id?: number | null;
+        } = {
+          status: "pending",
+        };
+        if (isOrgSlugChanging) {
+          updateFields.org_slug = targetOrgSlug;
+        }
+        if (body.organization_id !== undefined) {
+          updateFields.organization_id = body.organization_id;
+        }
+
         await db
           .updateTable("tenants")
-          .set({ status: "pending" })
+          .set(updateFields)
           .where("id", "=", id)
           .execute();
 
         await enqueueTenantRename(
           id,
           tenant.name,
-          nameValidation.sanitized,
+          targetName,
           tenant.org_slug ?? null,
+          targetOrgSlug ?? null,
         );
 
         return c.json({
           id: tenant.id,
-          name: nameValidation.sanitized,
+          name: targetName,
           status: "pending",
         });
       }
@@ -700,24 +775,6 @@ adminRoutes.put(
     const updateData: Record<string, unknown> = {};
     if (body.backend_url !== undefined)
       updateData.backend_url = body.backend_url;
-    if (body.organization_id !== undefined) {
-      updateData.organization_id = body.organization_id;
-      if (body.organization_id === null) {
-        updateData.org_slug = null;
-      } else {
-        const org = await db
-          .selectFrom("organizations")
-          .select(["id", "slug"])
-          .where("id", "=", body.organization_id)
-          .executeTakeFirst();
-
-        if (!org) {
-          return c.json({ error: "Organization not found" }, 404);
-        }
-
-        updateData.org_slug = org.slug;
-      }
-    }
     if (body.is_active !== undefined) updateData.is_active = body.is_active;
     if (body.upstream_auth_header !== undefined)
       updateData.upstream_auth_header = body.upstream_auth_header;
@@ -735,6 +792,15 @@ adminRoutes.put(
           .executeTakeFirst();
         newWalletConfig = wallet?.wallet_config as WalletConfig | null;
       }
+    }
+
+    if (Object.keys(updateData).length === 0) {
+      const current = await db
+        .selectFrom("tenants")
+        .selectAll()
+        .where("id", "=", id)
+        .executeTakeFirst();
+      return c.json(current);
     }
 
     const result = await db
