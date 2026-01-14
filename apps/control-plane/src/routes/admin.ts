@@ -1219,10 +1219,15 @@ adminRoutes.get("/tenants/:id/transactions", async (c) => {
       "id",
       "endpoint_id",
       "tenant_id",
+      "organization_id",
       "amount_usdc",
       "tx_hash",
       "network",
       "request_path",
+      "client_ip",
+      "request_method",
+      "metadata",
+      "ngx_request_id",
       "created_at",
     ])
     .where("tenant_id", "=", tenantId)
