@@ -2,9 +2,11 @@
 set -euo pipefail
 
 DOMAIN="${1:-}"
+FULLCHAIN_B64="${2:-}"
+PRIVKEY_B64="${3:-}"
 
-if [[ -z "$DOMAIN" ]]; then
-    echo "Usage: install-tenant-cert <domain>" >&2
+if [[ -z "$DOMAIN" ]] || [[ -z "$FULLCHAIN_B64" ]] || [[ -z "$PRIVKEY_B64" ]]; then
+    echo "Usage: install-tenant-cert <domain> <fullchain_b64> <privkey_b64>" >&2
     exit 1
 fi
 
@@ -18,9 +20,8 @@ if [[ "$DOMAIN" == *".."* ]] || [[ "$DOMAIN" == *"/"* ]]; then
     exit 1
 fi
 
-CERT_DATA=$(cat)
-FULLCHAIN=$(echo "$CERT_DATA" | jq -r '.fullchain // empty')
-PRIVKEY=$(echo "$CERT_DATA" | jq -r '.privkey // empty')
+FULLCHAIN=$(echo "$FULLCHAIN_B64" | base64 -d)
+PRIVKEY=$(echo "$PRIVKEY_B64" | base64 -d)
 
 if [[ -z "$FULLCHAIN" ]] || [[ -z "$PRIVKEY" ]]; then
     echo "Missing certificate data in stdin" >&2
