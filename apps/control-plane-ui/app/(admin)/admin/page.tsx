@@ -160,35 +160,46 @@ function RecentUsersList() {
 }
 
 function RecentTransactionsList() {
-  const { data: transactions } = useSWR(
+  const { data } = useSWR(
     "/api/admin/transactions?limit=5",
-    api.get<
-      {
+    api.get<{
+      transactions: {
         id: number;
         amount_usdc: string;
         created_at: string;
-        resource_address: string;
-      }[]
-    >,
+        tenant_name: string | null;
+        request_path: string | null;
+      }[];
+      total: number;
+    }>,
   );
 
-  if (!transactions?.length) {
+  if (!data?.transactions?.length) {
     return <p className="text-sm text-gray-11">No transactions yet.</p>;
   }
 
   return (
     <ul className="space-y-2">
-      {transactions.map((tx) => (
+      {data.transactions.map((tx) => (
         <li
           key={tx.id}
-          className="flex items-center justify-between rounded border border-gray-6 bg-gray-3 px-3 py-2"
+          className="rounded border border-gray-6 bg-gray-3 px-3 py-2"
         >
-          <span className="text-sm text-gray-12">
-            {formatUSDC(parseFloat(tx.amount_usdc))}
-          </span>
-          <span className="text-xs text-gray-9">
-            {new Date(tx.created_at).toLocaleDateString()}
-          </span>
+          <div className="flex items-center justify-between">
+            <span className="text-sm font-medium text-gray-12">
+              {formatUSDC(parseFloat(tx.amount_usdc))}
+            </span>
+            <span className="text-xs text-gray-9">
+              {new Date(tx.created_at).toLocaleDateString()}
+            </span>
+          </div>
+          <div className="mt-1 truncate text-xs text-gray-11">
+            {tx.tenant_name}
+            {tx.tenant_name && tx.request_path && " "}
+            {tx.request_path && (
+              <span className="text-gray-9">{tx.request_path}</span>
+            )}
+          </div>
         </li>
       ))}
     </ul>
