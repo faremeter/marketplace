@@ -6,7 +6,14 @@ import useSWR from "swr";
 import { api } from "@/lib/api/client";
 import Link from "next/link";
 import { useOnboarding } from "@/lib/hooks/use-onboarding";
-import { PlusIcon, ExclamationTriangleIcon } from "@radix-ui/react-icons";
+import {
+  PlusIcon,
+  ExclamationTriangleIcon,
+  CopyIcon,
+  ExternalLinkIcon,
+} from "@radix-ui/react-icons";
+import { useToast } from "@/components/ui/toast";
+import { getProxyUrl } from "@/lib/format";
 import { InlineUrlEdit } from "@/components/shared/inline-url-edit";
 import { InlineAuthEdit } from "@/components/shared/inline-auth-edit";
 import { InlineActiveToggle } from "@/components/shared/inline-active-toggle";
@@ -34,6 +41,7 @@ export default function TenantsPage() {
   const { currentOrg } = useAuth();
   const { status: onboardingStatus } = useOnboarding();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const { toast } = useToast();
 
   const isFirstProxy =
     !onboardingStatus?.onboarding_completed && !onboardingStatus?.steps.proxy;
@@ -151,6 +159,9 @@ export default function TenantsPage() {
                   Name
                 </th>
                 <th className="px-4 py-3 text-left text-sm font-medium text-gray-11">
+                  Proxy URL
+                </th>
+                <th className="px-4 py-3 text-left text-sm font-medium text-gray-11">
                   Backend URL
                 </th>
                 <th className="px-4 py-3 text-left text-sm font-medium text-gray-11">
@@ -179,6 +190,39 @@ export default function TenantsPage() {
                       >
                         {tenant.name}
                       </Link>
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => {
+                            const url = getProxyUrl({
+                              proxyName: tenant.name,
+                              orgSlug: currentOrg.slug,
+                            });
+                            navigator.clipboard.writeText(url);
+                            toast({
+                              title: "Proxy URL copied to clipboard",
+                              variant: "success",
+                            });
+                          }}
+                          className="rounded border border-gray-6 p-1.5 text-gray-11 hover:bg-gray-4 hover:text-gray-12"
+                          title="Copy proxy URL"
+                        >
+                          <CopyIcon className="h-4 w-4" />
+                        </button>
+                        <a
+                          href={getProxyUrl({
+                            proxyName: tenant.name,
+                            orgSlug: currentOrg.slug,
+                          })}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="rounded border border-gray-6 p-1.5 text-gray-11 hover:bg-gray-4 hover:text-gray-12"
+                          title="Open proxy URL"
+                        >
+                          <ExternalLinkIcon className="h-4 w-4" />
+                        </a>
+                      </div>
                     </td>
                     <td className="px-4 py-3">
                       <InlineUrlEdit
