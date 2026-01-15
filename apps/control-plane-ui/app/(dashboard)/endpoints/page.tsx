@@ -253,6 +253,7 @@ function TenantCard({
                 <thead>
                   <tr className="border-b border-gray-6 text-xs font-medium text-gray-11">
                     <th className="pb-2 text-left">Path</th>
+                    <th className="w-16 pb-2 text-center">URL</th>
                     <th className="w-20 pb-2 text-right">Price</th>
                     <th className="w-20 pb-2 text-right">Scheme</th>
                     <th className="w-20 pb-2 text-right">Earned</th>
@@ -312,6 +313,11 @@ function CatchAllRow({
   apiEndpoint: string;
   onUpdate: () => void;
 }) {
+  const { toast } = useToast();
+  const proxyUrl = getProxyUrl({
+    proxyName: tenant.name,
+    orgSlug: tenant.org_slug,
+  });
   const { data: analytics, isLoading } = useSWR(
     `/api/organizations/${orgId}/tenants/${tenant.id}/catch-all/analytics`,
     api.get<EarningsAnalytics>,
@@ -324,6 +330,29 @@ function CatchAllRow({
           /
         </code>
         <span className="ml-2 text-xs text-gray-11">(catch-all)</span>
+      </td>
+      <td className="py-2 align-middle text-center">
+        <div className="inline-flex items-center gap-1">
+          <button
+            onClick={() => {
+              navigator.clipboard.writeText(proxyUrl);
+              toast({ title: "URL copied to clipboard", variant: "success" });
+            }}
+            className="rounded border border-gray-6 p-1 text-gray-11 hover:bg-gray-4 hover:text-gray-12"
+            title="Copy URL"
+          >
+            <CopyIcon className="h-3 w-3" />
+          </button>
+          <a
+            href={proxyUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="rounded border border-gray-6 p-1 text-gray-11 hover:bg-gray-4 hover:text-gray-12"
+            title="Open URL"
+          >
+            <ExternalLinkIcon className="h-3 w-3" />
+          </a>
+        </div>
       </td>
       <td className="whitespace-nowrap py-2 pl-4 text-right align-middle">
         <div className="flex items-center justify-end gap-2">
@@ -385,6 +414,13 @@ function EndpointRow({
   orgId: number;
   onUpdate: () => void;
 }) {
+  const { toast } = useToast();
+  const proxyUrl = getProxyUrl({
+    proxyName: tenant.name,
+    orgSlug: tenant.org_slug,
+  });
+  const endpointPath = endpoint.path ?? endpoint.path_pattern;
+  const fullUrl = `${proxyUrl}${endpointPath}`;
   const { data: analytics, isLoading } = useSWR(
     `/api/organizations/${orgId}/tenants/${tenant.id}/endpoints/${endpoint.id}/analytics`,
     api.get<EarningsAnalytics>,
@@ -394,8 +430,31 @@ function EndpointRow({
     <tr className="bg-gray-3/50">
       <td className="py-2 align-middle">
         <code className="rounded bg-accent-4 px-1.5 py-0.5 text-xs text-accent-11">
-          {endpoint.path ?? endpoint.path_pattern}
+          {endpointPath}
         </code>
+      </td>
+      <td className="py-2 align-middle text-center">
+        <div className="inline-flex items-center gap-1">
+          <button
+            onClick={() => {
+              navigator.clipboard.writeText(fullUrl);
+              toast({ title: "URL copied to clipboard", variant: "success" });
+            }}
+            className="rounded border border-gray-6 p-1 text-gray-11 hover:bg-gray-4 hover:text-gray-12"
+            title="Copy URL"
+          >
+            <CopyIcon className="h-3 w-3" />
+          </button>
+          <a
+            href={fullUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="rounded border border-gray-6 p-1 text-gray-11 hover:bg-gray-4 hover:text-gray-12"
+            title="Open URL"
+          >
+            <ExternalLinkIcon className="h-3 w-3" />
+          </a>
+        </div>
       </td>
       <td className="whitespace-nowrap py-2 pl-4 text-right align-middle">
         <div className="flex items-center justify-end gap-2">
