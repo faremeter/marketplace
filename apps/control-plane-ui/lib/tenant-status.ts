@@ -135,3 +135,41 @@ export function getDeleteDisabledReason(
 
   return null;
 }
+
+export function isEditDisabled(tenant: TenantStatusInput): boolean {
+  if (tenant.status !== "active") return true;
+  const hasCertInFlight = tenant.nodes?.some(
+    (n) => n.cert_status === "pending" || n.cert_status === "deleting",
+  );
+  return !!hasCertInFlight;
+}
+
+export function getEditDisabledReason(
+  tenant: TenantStatusInput,
+): string | null {
+  if (tenant.status === "deleting") {
+    return "Cannot edit while tenant is being deleted";
+  }
+
+  if (tenant.status === "pending") {
+    return "Cannot edit while tenant is being set up";
+  }
+
+  if (tenant.status === "failed") {
+    return "Cannot edit while tenant is in failed state";
+  }
+
+  const hasCertPending = tenant.nodes?.some((n) => n.cert_status === "pending");
+  if (hasCertPending) {
+    return "Cannot edit while TLS certificate is being provisioned";
+  }
+
+  const hasCertDeleting = tenant.nodes?.some(
+    (n) => n.cert_status === "deleting",
+  );
+  if (hasCertDeleting) {
+    return "Cannot edit while node removal is in progress";
+  }
+
+  return null;
+}

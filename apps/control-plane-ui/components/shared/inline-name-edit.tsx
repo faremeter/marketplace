@@ -22,6 +22,8 @@ interface InlineNameEditProps {
   checkAvailabilityEndpoint?: string;
   excludeId?: number;
   organizationId?: number | null;
+  disabled?: boolean;
+  disabledReason?: string | null;
 }
 
 export function InlineNameEdit({
@@ -33,6 +35,8 @@ export function InlineNameEdit({
   checkAvailabilityEndpoint,
   excludeId,
   organizationId,
+  disabled,
+  disabledReason,
 }: InlineNameEditProps) {
   const { toast } = useToast();
   const [isOpen, setIsOpen] = useState(false);
@@ -176,9 +180,15 @@ export function InlineNameEdit({
   return (
     <Popover.Root open={isOpen} onOpenChange={handleOpen}>
       <Popover.Trigger asChild>
-        <button className="group flex items-center gap-1.5 rounded px-2 py-1 text-sm font-medium text-gray-12 hover:bg-gray-4 cursor-pointer text-left">
+        <button
+          className={`group flex items-center gap-1.5 rounded px-2 py-1 text-sm font-medium text-gray-12 hover:bg-gray-4 text-left ${disabled ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}`}
+          disabled={disabled}
+          title={disabledReason ?? undefined}
+        >
           {name}
-          <Pencil1Icon className="h-3 w-3 text-gray-11 opacity-0 group-hover:opacity-100" />
+          {!disabled && (
+            <Pencil1Icon className="h-3 w-3 text-gray-11 opacity-0 group-hover:opacity-100" />
+          )}
         </button>
       </Popover.Trigger>
       <Popover.Portal>

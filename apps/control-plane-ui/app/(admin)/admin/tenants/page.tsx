@@ -29,6 +29,8 @@ import { useToast } from "@/components/ui/toast";
 import {
   type TenantNode as BaseTenantNode,
   isDeleteDisabled,
+  isEditDisabled,
+  getEditDisabledReason,
 } from "@/lib/tenant-status";
 import { getProxyUrl } from "@/lib/format";
 
@@ -227,6 +229,8 @@ export default function AdminTenantsPage() {
                         checkAvailabilityEndpoint="/api/admin/tenants/check-name"
                         excludeId={tenant.id}
                         organizationId={tenant.organization_id}
+                        disabled={isEditDisabled(tenant)}
+                        disabledReason={getEditDisabledReason(tenant)}
                       />
                     </td>
                     <td className="px-4 py-3">
@@ -235,6 +239,8 @@ export default function AdminTenantsPage() {
                         tenantName={tenant.name}
                         orgSlug={tenant.org_slug}
                         onUpdate={() => mutate()}
+                        disabled={isEditDisabled(tenant)}
+                        disabledReason={getEditDisabledReason(tenant)}
                       />
                     </td>
                     <td className="px-4 py-3">
@@ -297,6 +303,8 @@ export default function AdminTenantsPage() {
                         currentWalletName={tenant.wallet_name}
                         currentWalletOrgId={tenant.wallet_organization_id}
                         onUpdate={() => mutate()}
+                        disabled={isEditDisabled(tenant)}
+                        disabledReason={getEditDisabledReason(tenant)}
                       />
                     </td>
                     <td className="px-4 py-3">

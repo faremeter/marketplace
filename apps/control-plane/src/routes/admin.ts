@@ -685,6 +685,26 @@ adminRoutes.put(
           );
         }
 
+        const tenantNodes = await db
+          .selectFrom("tenant_nodes")
+          .select(["cert_status"])
+          .where("tenant_id", "=", id)
+          .execute();
+
+        const hasCertInFlight = tenantNodes.some(
+          (n) => n.cert_status === "pending" || n.cert_status === "deleting",
+        );
+
+        if (hasCertInFlight) {
+          return c.json(
+            {
+              error:
+                "Cannot rename tenant while certificate operations are in progress",
+            },
+            400,
+          );
+        }
+
         let existing: { id: number } | undefined;
         if (targetOrgSlug) {
           existing = await db

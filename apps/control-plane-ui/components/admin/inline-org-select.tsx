@@ -36,6 +36,8 @@ interface InlineOrgSelectProps {
   currentWalletName: string | null;
   currentWalletOrgId: number | null;
   onUpdate: () => void;
+  disabled?: boolean;
+  disabledReason?: string | null;
 }
 
 export function InlineOrgSelect({
@@ -48,6 +50,8 @@ export function InlineOrgSelect({
   currentWalletName,
   currentWalletOrgId,
   onUpdate,
+  disabled,
+  disabledReason,
 }: InlineOrgSelectProps) {
   const { toast } = useToast();
   const [isOpen, setIsOpen] = useState(false);
@@ -198,13 +202,14 @@ export function InlineOrgSelect({
       >
         <Select.Trigger
           className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs transition-colors focus:outline-none focus:ring-1 focus:ring-accent-8 ${
-            isSaving
-              ? "opacity-50 border-gray-6 bg-gray-3 text-gray-11"
+            isSaving || disabled
+              ? "opacity-50 border-gray-6 bg-gray-3 text-gray-11 cursor-not-allowed"
               : currentOrgName
                 ? "border-accent-7 bg-accent-3 text-accent-11 hover:bg-accent-4"
                 : "border-gray-6 bg-gray-3 text-gray-10 hover:bg-gray-4 hover:text-gray-11"
           }`}
-          disabled={isSaving}
+          disabled={isSaving || disabled}
+          title={disabledReason ?? undefined}
         >
           <Select.Value>
             {isSaving ? "Saving..." : (currentOrgName ?? "Add org")}

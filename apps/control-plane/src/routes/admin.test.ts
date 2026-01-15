@@ -1346,6 +1346,67 @@ await t.test("PUT /api/admin/tenants/:id", async (t) => {
     t.ok(data.error.includes("operation is in progress"));
   });
 
+  await t.test("rejects rename when cert operation in progress", async (t) => {
+    const admin = await createUser("admin@example.com", true);
+    const org = await createOrg("Team", "team");
+    const tenant = await createTenant(org.id, "my-tenant");
+    const node = await createNode("node-1");
+
+    await db
+      .insertInto("tenant_nodes")
+      .values({
+        tenant_id: tenant.id,
+        node_id: node.id,
+        cert_status: "pending",
+      })
+      .execute();
+
+    const res = await app.request(`/api/admin/tenants/${tenant.id}`, {
+      method: "PUT",
+      headers: {
+        Cookie: `auth_token=${admin.token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ name: "new-name" }),
+    });
+    t.equal(res.status, 400);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const data = (await res.json()) as any;
+    t.ok(data.error.includes("certificate operations"));
+  });
+
+  await t.test(
+    "rejects org_slug change when cert operation in progress",
+    async (t) => {
+      const admin = await createUser("admin@example.com", true);
+      const org = await createOrg("Team", "team");
+      const tenant = await createTenant(org.id, "my-tenant");
+      const node = await createNode("node-1");
+
+      await db
+        .insertInto("tenant_nodes")
+        .values({
+          tenant_id: tenant.id,
+          node_id: node.id,
+          cert_status: "deleting",
+        })
+        .execute();
+
+      const res = await app.request(`/api/admin/tenants/${tenant.id}`, {
+        method: "PUT",
+        headers: {
+          Cookie: `auth_token=${admin.token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ org_slug: "new-slug" }),
+      });
+      t.equal(res.status, 400);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const data = (await res.json()) as any;
+      t.ok(data.error.includes("certificate operations"));
+    },
+  );
+
   await t.test(
     "allows wallet_id assignment when status is pending",
     async (t) => {
