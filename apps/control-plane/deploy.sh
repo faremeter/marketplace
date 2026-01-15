@@ -5,8 +5,12 @@ lib::import step-runner
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 STACK_DIR="$SCRIPT_DIR/../control-plane-stack"
-REMOTE_DIR="/home/admin/control-plane"
 SERVER_INDEX=0
+
+# Blue-green deployment directories
+BLUE_DIR="/home/admin/control-plane-blue"
+GREEN_DIR="/home/admin/control-plane-green"
+SYMLINK_DIR="/home/admin/control-plane"
 
 CONTROL_PLANE_STACKS=("production-1" "production-2")
 
@@ -37,7 +41,24 @@ remote::exec() {
     ssh -o StrictHostKeyChecking=off -o UserKnownHostsFile=/dev/null -i "$PRIVKEY" "$SSH_USER@$SSH_HOST" "$@" </dev/null
 }
 
+get_active_release() {
+    remote::exec "readlink $SYMLINK_DIR 2>/dev/null || echo ''"
+}
+
+get_inactive_release() {
+    local active
+    active=$(get_active_release)
+    if [[ "$active" == "$BLUE_DIR" ]]; then
+        echo "$GREEN_DIR"
+    else
+        echo "$BLUE_DIR"
+    fi
+}
+
 remote::sync() {
+    local target_dir
+    target_dir=$(get_inactive_release)
+    log::info "  -> syncing to $target_dir"
     rsync -avz --delete \
         --exclude='node_modules' \
         --exclude='.git' \
@@ -49,7 +70,7 @@ remote::sync() {
         --exclude='*.swp' \
         --exclude='backups' \
         -e "ssh -o StrictHostKeyChecking=off -o UserKnownHostsFile=/dev/null -i $PRIVKEY" \
-        "$SCRIPT_DIR/" "$SSH_USER@$SSH_HOST:$REMOTE_DIR/"
+        "$SCRIPT_DIR/" "$SSH_USER@$SSH_HOST:$target_dir/"
 }
 
 for_each_stack() {
@@ -90,6 +111,11 @@ step::10::verify-environment() {
     cd "$STACK_DIR" || log::fatal "failed to cd to $STACK_DIR"
 }
 
+step::15::setup-blue-green() {
+    # shellcheck disable=SC2016
+    for_each_stack "setting up blue-green directories..." 'remote::exec "mkdir -p $BLUE_DIR $GREEN_DIR && if [ -d $SYMLINK_DIR ] && [ ! -L $SYMLINK_DIR ]; then rm -rf $BLUE_DIR; mv $SYMLINK_DIR $BLUE_DIR; fi && [ -L $SYMLINK_DIR ] || ln -sfn $BLUE_DIR $SYMLINK_DIR"'
+}
+
 step::20::typecheck() {
     log::info "typechecking locally..."
     cd "$SCRIPT_DIR" || log::fatal "failed to cd to $SCRIPT_DIR"
@@ -103,23 +129,36 @@ step::30::sync() {
 
 step::40::install() {
     # shellcheck disable=SC2016
-    for_each_stack "installing dependencies..." 'remote::exec "cd $REMOTE_DIR && npm install"'
+    for_each_stack "installing dependencies..." '
+        target_dir=$(get_inactive_release)
+        log::info "  -> installing in $target_dir"
+        remote::exec "cp $SYMLINK_DIR/.env $target_dir/.env 2>/dev/null || true"
+        remote::exec "cd $target_dir && npm install"
+    '
 }
 
 step::50::migrate() {
     # shellcheck disable=SC2016
-    # Only run on first stack - all stacks share the same database
-    first_stack_only "running migrations..." 'remote::exec "cd $REMOTE_DIR && npm run migrate"'
+    first_stack_only "running migrations..." '
+        target_dir=$(get_inactive_release)
+        log::info "  -> migrating from $target_dir"
+        remote::exec "cd $target_dir && npm run migrate"
+    '
 }
 
 step::60::deploy() {
     # shellcheck disable=SC2016
-    # Restart each stack before moving to next (minimizes per-stack downtime)
-    for_each_stack "restarting service..." 'remote::exec "sudo systemctl restart control-plane"'
+    for_each_stack "switching release and restarting..." '
+        target_dir=$(get_inactive_release)
+        log::info "  -> switching to $target_dir"
+        remote::exec "cp $SYMLINK_DIR/.env $target_dir/.env 2>/dev/null || true"
+        remote::exec "ln -sfn $target_dir $SYMLINK_DIR"
+        remote::exec "sudo systemctl restart control-plane"
+    '
 }
 
 step::70::verify() {
-    for_each_stack "verifying service..." 'remote::exec "sudo systemctl status control-plane --no-pager || true"'
+    for_each_stack "verifying service..." 'remote::exec "sudo systemctl status control-plane --no-pager" || true'
 }
 
 steps::run "step" "$@"
