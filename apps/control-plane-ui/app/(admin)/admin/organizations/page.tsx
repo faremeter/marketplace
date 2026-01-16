@@ -4,7 +4,6 @@ import { useState, useMemo } from "react";
 import useSWR from "swr";
 import { api } from "@/lib/api/client";
 import {
-  ReloadIcon,
   MagnifyingGlassIcon,
   ChevronLeftIcon,
   ChevronRightIcon,
@@ -14,9 +13,9 @@ import {
   CaretDownIcon,
   CaretSortIcon,
 } from "@radix-ui/react-icons";
-import { useToast } from "@/components/ui/toast";
 import { ImportOrgsDialog } from "@/components/admin/import-orgs-dialog";
 import { CreateOrgDialog } from "@/components/admin/create-org-dialog";
+import { InlineOnboardingEdit } from "@/components/admin/inline-onboarding-edit";
 
 const PAGE_SIZE = 10;
 
@@ -42,8 +41,6 @@ interface Organization {
 }
 
 export default function AdminOrganizationsPage() {
-  const { toast } = useToast();
-  const [resettingOrgId, setResettingOrgId] = useState<number | null>(null);
   const [page, setPage] = useState(0);
   const [search, setSearch] = useState("");
   const [importDialogOpen, setImportDialogOpen] = useState(false);
@@ -124,27 +121,6 @@ export default function AdminOrganizationsPage() {
   const paginatedOrgs = sortedOrgs.slice(offset, offset + PAGE_SIZE);
   const hasNextPage = page < totalPages - 1;
   const hasPrevPage = page > 0;
-
-  const handleResetOnboarding = async (org: Organization) => {
-    setResettingOrgId(org.id);
-    try {
-      await api.post(`/api/organizations/${org.id}/reset-onboarding`, {});
-      await mutate();
-      toast({
-        title: "Onboarding reset",
-        description: `Onboarding has been reset for ${org.name}`,
-        variant: "success",
-      });
-    } catch {
-      toast({
-        title: "Error",
-        description: "Failed to reset onboarding",
-        variant: "error",
-      });
-    } finally {
-      setResettingOrgId(null);
-    }
-  };
 
   return (
     <div className="space-y-6">
@@ -269,9 +245,6 @@ export default function AdminOrganizationsPage() {
                       <SortIcon column="created" />
                     </button>
                   </th>
-                  <th className="px-4 py-3 text-left text-sm font-medium text-gray-11">
-                    Actions
-                  </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-6 bg-gray-2">
@@ -300,31 +273,15 @@ export default function AdminOrganizationsPage() {
                       {org.tenant_count ?? "-"}
                     </td>
                     <td className="px-4 py-3">
-                      {org.onboarding_completed ? (
-                        <span className="inline-flex rounded-full border border-green-800 bg-green-900/30 px-2 py-0.5 text-xs text-green-400">
-                          Complete
-                        </span>
-                      ) : (
-                        <span className="inline-flex rounded-full border border-yellow-800 bg-yellow-900/30 px-2 py-0.5 text-xs text-yellow-400">
-                          Incomplete
-                        </span>
-                      )}
+                      <InlineOnboardingEdit
+                        orgId={org.id}
+                        orgName={org.name}
+                        isCompleted={org.onboarding_completed ?? false}
+                        onUpdate={() => mutate()}
+                      />
                     </td>
                     <td className="px-4 py-3 text-sm text-gray-11">
                       {new Date(org.created_at).toLocaleDateString()}
-                    </td>
-                    <td className="px-4 py-3">
-                      <button
-                        onClick={() => handleResetOnboarding(org)}
-                        disabled={resettingOrgId === org.id}
-                        className="inline-flex items-center gap-1.5 rounded-md border border-gray-6 px-2.5 py-1.5 text-xs text-gray-11 hover:bg-gray-3 hover:text-gray-12 disabled:opacity-50"
-                        title="Reset onboarding"
-                      >
-                        <ReloadIcon
-                          className={`h-3 w-3 ${resettingOrgId === org.id ? "animate-spin" : ""}`}
-                        />
-                        Reset Onboarding
-                      </button>
                     </td>
                   </tr>
                 ))}
