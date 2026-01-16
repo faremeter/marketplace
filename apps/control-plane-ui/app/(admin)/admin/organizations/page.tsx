@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import useSWR from "swr";
 import { api } from "@/lib/api/client";
 import {
@@ -10,12 +10,25 @@ import {
   ChevronRightIcon,
   UploadIcon,
   PlusIcon,
+  CaretUpIcon,
+  CaretDownIcon,
+  CaretSortIcon,
 } from "@radix-ui/react-icons";
 import { useToast } from "@/components/ui/toast";
 import { ImportOrgsDialog } from "@/components/admin/import-orgs-dialog";
 import { CreateOrgDialog } from "@/components/admin/create-org-dialog";
 
 const PAGE_SIZE = 10;
+
+type SortColumn =
+  | "id"
+  | "name"
+  | "slug"
+  | "members"
+  | "tenants"
+  | "onboarding"
+  | "created";
+type SortDirection = "asc" | "desc";
 
 interface Organization {
   id: number;
@@ -35,6 +48,8 @@ export default function AdminOrganizationsPage() {
   const [search, setSearch] = useState("");
   const [importDialogOpen, setImportDialogOpen] = useState(false);
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
+  const [sortColumn, setSortColumn] = useState<SortColumn>("id");
+  const [sortDirection, setSortDirection] = useState<SortDirection>("asc");
 
   const {
     data: organizations,
@@ -42,16 +57,71 @@ export default function AdminOrganizationsPage() {
     mutate,
   } = useSWR("/api/admin/organizations", api.get<Organization[]>);
 
+  const handleSort = (column: SortColumn) => {
+    if (sortColumn === column) {
+      setSortDirection(sortDirection === "asc" ? "desc" : "asc");
+    } else {
+      setSortColumn(column);
+      setSortDirection("desc");
+    }
+  };
+
+  const SortIcon = ({ column }: { column: SortColumn }) => {
+    if (sortColumn !== column) {
+      return <CaretSortIcon className="h-3 w-3 text-gray-9" />;
+    }
+    return sortDirection === "asc" ? (
+      <CaretUpIcon className="h-3 w-3" />
+    ) : (
+      <CaretDownIcon className="h-3 w-3" />
+    );
+  };
+
   const filteredOrgs =
     organizations?.filter(
       (org) =>
         org.name.toLowerCase().includes(search.toLowerCase()) ||
         org.slug.toLowerCase().includes(search.toLowerCase()),
     ) ?? [];
-  const totalCount = filteredOrgs.length;
+
+  const sortedOrgs = useMemo(() => {
+    return [...filteredOrgs].sort((a, b) => {
+      let comparison = 0;
+
+      switch (sortColumn) {
+        case "id":
+          comparison = a.id - b.id;
+          break;
+        case "name":
+          comparison = a.name.localeCompare(b.name);
+          break;
+        case "slug":
+          comparison = a.slug.localeCompare(b.slug);
+          break;
+        case "members":
+          comparison = (a.member_count ?? 0) - (b.member_count ?? 0);
+          break;
+        case "tenants":
+          comparison = (a.tenant_count ?? 0) - (b.tenant_count ?? 0);
+          break;
+        case "onboarding":
+          comparison =
+            (a.onboarding_completed ? 1 : 0) - (b.onboarding_completed ? 1 : 0);
+          break;
+        case "created":
+          comparison =
+            new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+          break;
+      }
+
+      return sortDirection === "asc" ? comparison : -comparison;
+    });
+  }, [filteredOrgs, sortColumn, sortDirection]);
+
+  const totalCount = sortedOrgs.length;
   const totalPages = Math.ceil(totalCount / PAGE_SIZE);
   const offset = page * PAGE_SIZE;
-  const paginatedOrgs = filteredOrgs.slice(offset, offset + PAGE_SIZE);
+  const paginatedOrgs = sortedOrgs.slice(offset, offset + PAGE_SIZE);
   const hasNextPage = page < totalPages - 1;
   const hasPrevPage = page > 0;
 
@@ -137,25 +207,67 @@ export default function AdminOrganizationsPage() {
               <thead className="bg-gray-3">
                 <tr>
                   <th className="px-4 py-3 text-left text-sm font-medium text-gray-11">
-                    ID
+                    <button
+                      onClick={() => handleSort("id")}
+                      className="inline-flex items-center gap-1 hover:text-gray-12"
+                    >
+                      ID
+                      <SortIcon column="id" />
+                    </button>
                   </th>
                   <th className="px-4 py-3 text-left text-sm font-medium text-gray-11">
-                    Name
+                    <button
+                      onClick={() => handleSort("name")}
+                      className="inline-flex items-center gap-1 hover:text-gray-12"
+                    >
+                      Name
+                      <SortIcon column="name" />
+                    </button>
                   </th>
                   <th className="px-4 py-3 text-left text-sm font-medium text-gray-11">
-                    Slug
+                    <button
+                      onClick={() => handleSort("slug")}
+                      className="inline-flex items-center gap-1 hover:text-gray-12"
+                    >
+                      Slug
+                      <SortIcon column="slug" />
+                    </button>
                   </th>
                   <th className="px-4 py-3 text-left text-sm font-medium text-gray-11">
-                    Members
+                    <button
+                      onClick={() => handleSort("members")}
+                      className="inline-flex items-center gap-1 hover:text-gray-12"
+                    >
+                      Members
+                      <SortIcon column="members" />
+                    </button>
                   </th>
                   <th className="px-4 py-3 text-left text-sm font-medium text-gray-11">
-                    Tenants
+                    <button
+                      onClick={() => handleSort("tenants")}
+                      className="inline-flex items-center gap-1 hover:text-gray-12"
+                    >
+                      Tenants
+                      <SortIcon column="tenants" />
+                    </button>
                   </th>
                   <th className="px-4 py-3 text-left text-sm font-medium text-gray-11">
-                    Onboarding
+                    <button
+                      onClick={() => handleSort("onboarding")}
+                      className="inline-flex items-center gap-1 hover:text-gray-12"
+                    >
+                      Onboarding
+                      <SortIcon column="onboarding" />
+                    </button>
                   </th>
                   <th className="px-4 py-3 text-left text-sm font-medium text-gray-11">
-                    Created
+                    <button
+                      onClick={() => handleSort("created")}
+                      className="inline-flex items-center gap-1 hover:text-gray-12"
+                    >
+                      Created
+                      <SortIcon column="created" />
+                    </button>
                   </th>
                   <th className="px-4 py-3 text-left text-sm font-medium text-gray-11">
                     Actions
