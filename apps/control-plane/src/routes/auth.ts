@@ -73,7 +73,16 @@ authRoutes.post(
     const username = email.split("@")[0] ?? "user";
     const orgName = `${username} Org`;
     const baseSlug = username.toLowerCase().replace(/[^a-z0-9]/g, "-");
-    const slug = `${baseSlug}-${crypto.randomBytes(3).toString("hex")}`;
+
+    const existingOrg = await db
+      .selectFrom("organizations")
+      .select("id")
+      .where("slug", "=", baseSlug)
+      .executeTakeFirst();
+
+    const slug = existingOrg
+      ? `${baseSlug}-${crypto.randomBytes(3).toString("hex")}`
+      : baseSlug;
 
     const org = await db
       .insertInto("organizations")

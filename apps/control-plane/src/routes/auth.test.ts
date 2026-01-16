@@ -223,6 +223,48 @@ await t.test("POST /api/auth/signup", async (t) => {
       }
     },
   );
+
+  await t.test("uses username as org slug when no collision", async (t) => {
+    const res = await app.request("/api/auth/signup", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        email: "uniqueuser@example.com",
+        password: "password123",
+      }),
+    });
+
+    t.equal(res.status, 201);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const data = (await res.json()) as any;
+    t.equal(data.user.organizations[0].slug, "uniqueuser");
+  });
+
+  await t.test("adds suffix to org slug when collision exists", async (t) => {
+    await db
+      .insertInto("organizations")
+      .values({ name: "Existing Org", slug: "colliding" })
+      .execute();
+
+    const res = await app.request("/api/auth/signup", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        email: "colliding@example.com",
+        password: "password123",
+      }),
+    });
+
+    t.equal(res.status, 201);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const data = (await res.json()) as any;
+    const slug = data.user.organizations[0].slug;
+    t.ok(
+      slug.startsWith("colliding-"),
+      `slug should start with 'colliding-': ${slug}`,
+    );
+    t.ok(slug.length > "colliding-".length, "slug should have random suffix");
+  });
 });
 
 await t.test("POST /api/auth/login", async (t) => {
