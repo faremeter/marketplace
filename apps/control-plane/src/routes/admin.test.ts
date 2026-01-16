@@ -340,6 +340,95 @@ await t.test("GET /api/admin/organizations/:id", async (t) => {
   });
 });
 
+await t.test("POST /api/admin/organizations", async (t) => {
+  await t.test("returns 401 without auth", async (t) => {
+    const res = await app.request("/api/admin/organizations", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: "Test Org" }),
+    });
+    t.equal(res.status, 401);
+  });
+
+  await t.test("returns 403 for non-admin user", async (t) => {
+    const user = await createUser("user@example.com", false);
+    const res = await app.request("/api/admin/organizations", {
+      method: "POST",
+      headers: {
+        Cookie: `auth_token=${user.token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ name: "Test Org" }),
+    });
+    t.equal(res.status, 403);
+  });
+
+  await t.test("creates organization", async (t) => {
+    const admin = await createUser("admin@example.com", true);
+    const res = await app.request("/api/admin/organizations", {
+      method: "POST",
+      headers: {
+        Cookie: `auth_token=${admin.token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ name: "New Org" }),
+    });
+    t.equal(res.status, 201);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const data = (await res.json()) as any;
+    t.equal(data.name, "New Org");
+    t.equal(data.slug, "new-org");
+  });
+
+  await t.test("creates organization with custom slug", async (t) => {
+    const admin = await createUser("admin@example.com", true);
+    const res = await app.request("/api/admin/organizations", {
+      method: "POST",
+      headers: {
+        Cookie: `auth_token=${admin.token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ name: "Custom Org", slug: "my-custom-slug" }),
+    });
+    t.equal(res.status, 201);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const data = (await res.json()) as any;
+    t.equal(data.name, "Custom Org");
+    t.equal(data.slug, "my-custom-slug");
+  });
+
+  await t.test("generates unique slug on conflict", async (t) => {
+    const admin = await createUser("admin@example.com", true);
+    await createOrg("Existing", "existing-org");
+    const res = await app.request("/api/admin/organizations", {
+      method: "POST",
+      headers: {
+        Cookie: `auth_token=${admin.token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ name: "Existing Org" }),
+    });
+    t.equal(res.status, 201);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const data = (await res.json()) as any;
+    t.equal(data.name, "Existing Org");
+    t.ok(data.slug.startsWith("existing-org-"));
+  });
+
+  await t.test("returns 400 for missing name", async (t) => {
+    const admin = await createUser("admin@example.com", true);
+    const res = await app.request("/api/admin/organizations", {
+      method: "POST",
+      headers: {
+        Cookie: `auth_token=${admin.token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({}),
+    });
+    t.equal(res.status, 400);
+  });
+});
+
 await t.test("POST /api/admin/organizations/import", async (t) => {
   await t.test("returns 401 without auth", async (t) => {
     const res = await app.request("/api/admin/organizations/import", {

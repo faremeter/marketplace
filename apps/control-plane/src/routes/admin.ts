@@ -158,6 +158,41 @@ adminRoutes.delete("/users/:id", async (c) => {
   return c.json({ deleted: true });
 });
 
+adminRoutes.post("/organizations", async (c) => {
+  const body = await c.req.json<{ name: string; slug?: string }>();
+
+  if (!body.name?.trim()) {
+    return c.json({ error: "Name is required" }, 400);
+  }
+
+  let slug = body.slug || slugify(body.name);
+
+  const maxRetries = 5;
+  for (let i = 0; i < maxRetries; i++) {
+    const existingSlug = await db
+      .selectFrom("organizations")
+      .select("id")
+      .where("slug", "=", slug)
+      .executeTakeFirst();
+
+    if (!existingSlug) break;
+
+    const baseSlug = body.slug || slugify(body.name);
+    slug = `${baseSlug}-${generateSlugSuffix()}`;
+  }
+
+  const org = await db
+    .insertInto("organizations")
+    .values({
+      name: body.name.trim(),
+      slug,
+    })
+    .returningAll()
+    .executeTakeFirstOrThrow();
+
+  return c.json(org, 201);
+});
+
 adminRoutes.get("/organizations", async (c) => {
   const organizations = await db
     .selectFrom("organizations")

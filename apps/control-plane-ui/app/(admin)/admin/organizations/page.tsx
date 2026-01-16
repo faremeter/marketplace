@@ -9,9 +9,11 @@ import {
   ChevronLeftIcon,
   ChevronRightIcon,
   UploadIcon,
+  PlusIcon,
 } from "@radix-ui/react-icons";
 import { useToast } from "@/components/ui/toast";
 import { ImportOrgsDialog } from "@/components/admin/import-orgs-dialog";
+import { CreateOrgDialog } from "@/components/admin/create-org-dialog";
 
 const PAGE_SIZE = 10;
 
@@ -32,6 +34,7 @@ export default function AdminOrganizationsPage() {
   const [page, setPage] = useState(0);
   const [search, setSearch] = useState("");
   const [importDialogOpen, setImportDialogOpen] = useState(false);
+  const [createDialogOpen, setCreateDialogOpen] = useState(false);
 
   const {
     data: organizations,
@@ -96,10 +99,17 @@ export default function AdminOrganizationsPage() {
           </div>
           <button
             onClick={() => setImportDialogOpen(true)}
-            className="inline-flex items-center gap-2 rounded-md bg-white px-3 py-2 text-sm font-medium text-black shadow-button transition-colors hover:bg-white/90"
+            className="inline-flex items-center gap-2 rounded-md border border-gray-6 px-3 py-2 text-sm font-medium text-gray-11 transition-colors hover:bg-gray-3 hover:text-gray-12"
           >
             <UploadIcon className="h-4 w-4" />
             Import
+          </button>
+          <button
+            onClick={() => setCreateDialogOpen(true)}
+            className="inline-flex items-center gap-2 rounded-md bg-white px-3 py-2 text-sm font-medium text-black shadow-button transition-colors hover:bg-white/90"
+          >
+            <PlusIcon className="h-4 w-4" />
+            Create
           </button>
         </div>
       </div>
@@ -107,6 +117,12 @@ export default function AdminOrganizationsPage() {
       <ImportOrgsDialog
         open={importDialogOpen}
         onOpenChange={setImportDialogOpen}
+        onSuccess={() => mutate()}
+      />
+
+      <CreateOrgDialog
+        open={createDialogOpen}
+        onOpenChange={setCreateDialogOpen}
         onSuccess={() => mutate()}
       />
 
