@@ -22,6 +22,15 @@ export interface StatusDisplay {
 }
 
 export function getTenantStatus(tenant: TenantStatusInput): StatusDisplay {
+  if (tenant.status === "registered") {
+    return {
+      label: "Registered",
+      tooltip: "Proxy is registered but not live",
+      color: "bg-blue-900/50 text-blue-400 border-blue-800",
+      pulse: false,
+    };
+  }
+
   if (tenant.status === "deleting") {
     return {
       label: "Deleting",
@@ -137,6 +146,8 @@ export function getDeleteDisabledReason(
 }
 
 export function isEditDisabled(tenant: TenantStatusInput): boolean {
+  // Allow editing registered tenants (they need configuration before going live)
+  if (tenant.status === "registered") return false;
   if (tenant.status !== "active") return true;
   const hasCertInFlight = tenant.nodes?.some(
     (n) => n.cert_status === "pending" || n.cert_status === "deleting",
@@ -147,6 +158,8 @@ export function isEditDisabled(tenant: TenantStatusInput): boolean {
 export function getEditDisabledReason(
   tenant: TenantStatusInput,
 ): string | null {
+  if (tenant.status === "registered") return null;
+
   if (tenant.status === "deleting") {
     return "Cannot edit while tenant is being deleted";
   }

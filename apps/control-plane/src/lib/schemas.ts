@@ -43,6 +43,7 @@ export const CreateTenantSchema = type({
   "upstream_auth_value?": `string <= ${MAX_AUTH_VALUE_LENGTH} | null`,
   "is_active?": "boolean",
   "organization_id?": "number | null",
+  "register_only?": "boolean",
 });
 
 export const UpdateTenantSchema = type({
@@ -88,11 +89,12 @@ export const UpdateWalletSchema = type({
 export const OrgCreateTenantSchema = type({
   name: "string > 0",
   backend_url: "string",
-  wallet_id: "number",
+  "wallet_id?": "number | null",
   "default_price_usdc?": `0 <= number <= ${MAX_PRICE_USDC}`,
   "default_scheme?": "'exact' | 'per_request' | 'per_byte' | null",
   "upstream_auth_header?": `string <= ${MAX_AUTH_HEADER_LENGTH} | null`,
   "upstream_auth_value?": `string <= ${MAX_AUTH_VALUE_LENGTH} | null`,
+  "register_only?": "boolean",
 });
 
 export const OrgUpdateTenantSchema = type({
@@ -126,6 +128,7 @@ export const AdminCreateTenantSchema = type({
   "default_scheme?": "'exact' | 'per_request' | 'per_byte' | null",
   "upstream_auth_header?": `string <= ${MAX_AUTH_HEADER_LENGTH} | null`,
   "upstream_auth_value?": `string <= ${MAX_AUTH_VALUE_LENGTH} | null`,
+  "register_only?": "boolean",
 });
 
 const orgSlug = type(

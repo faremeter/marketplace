@@ -264,6 +264,15 @@ await t.test("CreateTenantSchema", async (t) => {
       t.equal(isError(result), true);
     });
   });
+
+  await t.test("accepts register_only flag", async (t) => {
+    const result = CreateTenantSchema({
+      name: "my-tenant",
+      backend_url: "https://api.example.com",
+      register_only: true,
+    });
+    t.equal(isError(result), false);
+  });
 });
 
 await t.test("CreateOrganizationSchema", async (t) => {

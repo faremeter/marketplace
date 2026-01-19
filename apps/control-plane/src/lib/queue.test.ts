@@ -415,6 +415,47 @@ await t.test("checkAndUpdateTenantStatus", async (t) => {
     t.equal(updatedTenant.status, "pending");
   });
 
+  await t.test("does nothing for registered tenant", async (t) => {
+    const org = await createOrg("Test Org", "test-org");
+
+    const wallet = await db
+      .insertInto("wallets")
+      .values({
+        name: "Funded Wallet",
+        organization_id: org.id,
+        wallet_config: JSON.stringify(evmOnlyConfig()),
+        funding_status: "funded",
+      })
+      .returning("id")
+      .executeTakeFirstOrThrow();
+
+    const tenant = await db
+      .insertInto("tenants")
+      .values({
+        name: "test-proxy",
+        backend_url: "http://backend.com",
+        organization_id: org.id,
+        wallet_id: wallet.id,
+        default_price_usdc: 0.01,
+        default_scheme: "exact",
+        status: "registered",
+      })
+      .returning("id")
+      .executeTakeFirstOrThrow();
+
+    // Should not throw or change anything
+    await checkAndUpdateTenantStatus(tenant.id);
+
+    const updatedTenant = await db
+      .selectFrom("tenants")
+      .select("status")
+      .where("id", "=", tenant.id)
+      .executeTakeFirstOrThrow();
+
+    // Status should remain "registered"
+    t.equal(updatedTenant.status, "registered");
+  });
+
   await t.test("waits for cert provisioning before activating", async (t) => {
     const org = await createOrg("Test Org", "test-org");
 

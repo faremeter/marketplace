@@ -426,6 +426,42 @@ await t.test("POST /api/tenants/:tenantId/endpoints", async (t) => {
     t.equal(data.priority, 10);
   });
 
+  await t.test("allows creating endpoint on registered tenant", async (t) => {
+    const user = await createUser("member@example.com");
+    const org = await createOrg("Team", "team");
+    await addMember(user.id, org.id);
+
+    const tenant = await db
+      .insertInto("tenants")
+      .values({
+        name: "registered-tenant",
+        organization_id: org.id,
+        backend_url: "http://backend.example.com",
+        default_price_usdc: 0.01,
+        default_scheme: "exact",
+        status: "registered",
+      })
+      .returning(["id"])
+      .executeTakeFirstOrThrow();
+
+    const res = await app.request(`/api/tenants/${tenant.id}/endpoints`, {
+      method: "POST",
+      headers: {
+        Cookie: `auth_token=${user.token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        path: "/api/test",
+        price_usdc: 0.05,
+      }),
+    });
+
+    t.equal(res.status, 201);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const data = (await res.json()) as any;
+    t.equal(data.path, "/api/test");
+  });
+
   await t.test("rejects invalid JSON", async (t) => {
     const user = await createUser("member@example.com");
     const org = await createOrg("Team", "team");

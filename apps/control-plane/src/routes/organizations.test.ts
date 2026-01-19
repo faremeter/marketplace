@@ -1732,6 +1732,57 @@ await t.test("PUT /api/organizations/:id/tenants/:tenantId", async (t) => {
     t.ok(data.error.includes("another operation"));
   });
 
+  await t.test("allows editing registered tenant", async (t) => {
+    const owner = await createUser("owner@example.com");
+    const org = await createOrg("Team", "team");
+    await addMember(owner.id, org.id, "owner");
+
+    const wallet = await db
+      .insertInto("wallets")
+      .values({
+        name: "Test Wallet",
+        organization_id: org.id,
+        wallet_config: JSON.stringify({ type: "solana" }),
+      })
+      .returning("id")
+      .executeTakeFirstOrThrow();
+
+    const tenant = await db
+      .insertInto("tenants")
+      .values({
+        name: "registered-proxy",
+        backend_url: "http://backend.com",
+        organization_id: org.id,
+        default_price_usdc: 0.01,
+        default_scheme: "exact",
+        status: "registered",
+        org_slug: "team",
+      })
+      .returning("id")
+      .executeTakeFirstOrThrow();
+
+    const res = await app.request(
+      `/api/organizations/${org.id}/tenants/${tenant.id}`,
+      {
+        method: "PUT",
+        headers: {
+          Cookie: `auth_token=${owner.token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          backend_url: "http://new-backend.com",
+          wallet_id: wallet.id,
+        }),
+      },
+    );
+
+    t.equal(res.status, 200);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const data = (await res.json()) as any;
+    t.equal(data.backend_url, "http://new-backend.com");
+    t.equal(data.wallet_id, wallet.id);
+  });
+
   await t.test("returns 404 for invalid wallet_id", async (t) => {
     const owner = await createUser("owner@example.com");
     const org = await createOrg("Team", "team");
@@ -2538,7 +2589,445 @@ await t.test("POST /api/organizations/:id/tenants", async (t) => {
       t.equal(res2.status, 409);
     },
   );
+
+  await t.test(
+    "creates registered tenant without wallet when register_only is true",
+    async (t) => {
+      const owner = await createUser("owner@example.com");
+      const org = await createOrg("Team", "team");
+      await addMember(owner.id, org.id, "owner");
+
+      await db
+        .insertInto("nodes")
+        .values([
+          {
+            name: "node1",
+            internal_ip: "10.0.0.1",
+            public_ip: "1.2.3.4",
+            status: "active",
+          },
+          {
+            name: "node2",
+            internal_ip: "10.0.0.2",
+            public_ip: "2.3.4.5",
+            status: "active",
+          },
+        ])
+        .execute();
+
+      const res = await app.request(`/api/organizations/${org.id}/tenants`, {
+        method: "POST",
+        headers: {
+          Cookie: `auth_token=${owner.token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          name: "registered-proxy",
+          backend_url: "http://backend.com",
+          register_only: true,
+        }),
+      });
+
+      t.equal(res.status, 201);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const data = (await res.json()) as any;
+      t.equal(data.name, "registered-proxy");
+      t.equal(data.status, "registered");
+      t.equal(data.is_active, false);
+      t.equal(data.wallet_id, null);
+    },
+  );
+
+  await t.test(
+    "rejects tenant without wallet when not register_only",
+    async (t) => {
+      const owner = await createUser("owner@example.com");
+      const org = await createOrg("Team", "team");
+      await addMember(owner.id, org.id, "owner");
+
+      await db
+        .insertInto("nodes")
+        .values([
+          {
+            name: "node1",
+            internal_ip: "10.0.0.1",
+            public_ip: "1.2.3.4",
+            status: "active",
+          },
+          {
+            name: "node2",
+            internal_ip: "10.0.0.2",
+            public_ip: "2.3.4.5",
+            status: "active",
+          },
+        ])
+        .execute();
+
+      const res = await app.request(`/api/organizations/${org.id}/tenants`, {
+        method: "POST",
+        headers: {
+          Cookie: `auth_token=${owner.token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          name: "no-wallet-proxy",
+          backend_url: "http://backend.com",
+        }),
+      });
+
+      t.equal(res.status, 400);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const data = (await res.json()) as any;
+      t.ok(data.error.toLowerCase().includes("wallet"));
+    },
+  );
 });
+
+await t.test(
+  "POST /api/organizations/:id/tenants/:tenantId/activate",
+  async (t) => {
+    await t.test("activates a registered tenant", async (t) => {
+      const owner = await createUser("owner@example.com");
+      const org = await createOrg("Team", "team");
+      await addMember(owner.id, org.id, "owner");
+
+      const wallet = await db
+        .insertInto("wallets")
+        .values({
+          name: "Test Wallet",
+          organization_id: org.id,
+          wallet_config: JSON.stringify({ type: "solana" }),
+          funding_status: "funded",
+        })
+        .returning("id")
+        .executeTakeFirstOrThrow();
+
+      const node = await db
+        .insertInto("nodes")
+        .values({
+          name: "node1",
+          internal_ip: "10.0.0.1",
+          public_ip: "1.2.3.4",
+          status: "active",
+        })
+        .returning("id")
+        .executeTakeFirstOrThrow();
+
+      const tenant = await db
+        .insertInto("tenants")
+        .values({
+          name: "registered-proxy",
+          backend_url: "http://backend.com",
+          organization_id: org.id,
+          wallet_id: wallet.id,
+          default_price_usdc: 0.01,
+          default_scheme: "exact",
+          status: "registered",
+          org_slug: "team",
+        })
+        .returning("id")
+        .executeTakeFirstOrThrow();
+
+      await db
+        .insertInto("tenant_nodes")
+        .values({
+          tenant_id: tenant.id,
+          node_id: node.id,
+          cert_status: null,
+          is_primary: true,
+        })
+        .execute();
+
+      const res = await app.request(
+        `/api/organizations/${org.id}/tenants/${tenant.id}/activate`,
+        {
+          method: "POST",
+          headers: {
+            Cookie: `auth_token=${owner.token}`,
+          },
+        },
+      );
+
+      t.equal(res.status, 200);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const data = (await res.json()) as any;
+      t.equal(data.status, "pending");
+
+      const updatedTenant = await db
+        .selectFrom("tenants")
+        .select(["status", "is_active"])
+        .where("id", "=", tenant.id)
+        .executeTakeFirstOrThrow();
+      t.equal(updatedTenant.status, "pending");
+      t.equal(updatedTenant.is_active, true);
+
+      const tenantNode = await db
+        .selectFrom("tenant_nodes")
+        .select("cert_status")
+        .where("tenant_id", "=", tenant.id)
+        .executeTakeFirstOrThrow();
+      t.equal(tenantNode.cert_status, "pending");
+    });
+
+    await t.test("returns 400 if tenant is not registered", async (t) => {
+      const owner = await createUser("owner@example.com");
+      const org = await createOrg("Team", "team");
+      await addMember(owner.id, org.id, "owner");
+
+      const tenant = await db
+        .insertInto("tenants")
+        .values({
+          name: "active-proxy",
+          backend_url: "http://backend.com",
+          organization_id: org.id,
+          default_price_usdc: 0.01,
+          default_scheme: "exact",
+          status: "active",
+          org_slug: "team",
+        })
+        .returning("id")
+        .executeTakeFirstOrThrow();
+
+      const res = await app.request(
+        `/api/organizations/${org.id}/tenants/${tenant.id}/activate`,
+        {
+          method: "POST",
+          headers: {
+            Cookie: `auth_token=${owner.token}`,
+          },
+        },
+      );
+
+      t.equal(res.status, 400);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const data = (await res.json()) as any;
+      t.ok(data.error.includes("registered"));
+    });
+
+    await t.test("returns 400 if no wallet assigned", async (t) => {
+      const owner = await createUser("owner@example.com");
+      const org = await createOrg("Team", "team");
+      await addMember(owner.id, org.id, "owner");
+
+      const tenant = await db
+        .insertInto("tenants")
+        .values({
+          name: "no-wallet-proxy",
+          backend_url: "http://backend.com",
+          organization_id: org.id,
+          wallet_id: null,
+          default_price_usdc: 0.01,
+          default_scheme: "exact",
+          status: "registered",
+          org_slug: "team",
+        })
+        .returning("id")
+        .executeTakeFirstOrThrow();
+
+      const res = await app.request(
+        `/api/organizations/${org.id}/tenants/${tenant.id}/activate`,
+        {
+          method: "POST",
+          headers: {
+            Cookie: `auth_token=${owner.token}`,
+          },
+        },
+      );
+
+      t.equal(res.status, 400);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const data = (await res.json()) as any;
+      t.ok(data.error.toLowerCase().includes("wallet"));
+    });
+
+    await t.test("returns 400 if wallet not funded", async (t) => {
+      const owner = await createUser("owner@example.com");
+      const org = await createOrg("Team", "team");
+      await addMember(owner.id, org.id, "owner");
+
+      const wallet = await db
+        .insertInto("wallets")
+        .values({
+          name: "Unfunded Wallet",
+          organization_id: org.id,
+          wallet_config: JSON.stringify({ type: "solana" }),
+          funding_status: "pending",
+        })
+        .returning("id")
+        .executeTakeFirstOrThrow();
+
+      const tenant = await db
+        .insertInto("tenants")
+        .values({
+          name: "unfunded-proxy",
+          backend_url: "http://backend.com",
+          organization_id: org.id,
+          wallet_id: wallet.id,
+          default_price_usdc: 0.01,
+          default_scheme: "exact",
+          status: "registered",
+          org_slug: "team",
+        })
+        .returning("id")
+        .executeTakeFirstOrThrow();
+
+      const res = await app.request(
+        `/api/organizations/${org.id}/tenants/${tenant.id}/activate`,
+        {
+          method: "POST",
+          headers: {
+            Cookie: `auth_token=${owner.token}`,
+          },
+        },
+      );
+
+      t.equal(res.status, 400);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const data = (await res.json()) as any;
+      t.ok(data.error.toLowerCase().includes("funded"));
+    });
+
+    await t.test("returns 400 if backend_url is empty", async (t) => {
+      const owner = await createUser("owner@example.com");
+      const org = await createOrg("Team", "team");
+      await addMember(owner.id, org.id, "owner");
+
+      const wallet = await db
+        .insertInto("wallets")
+        .values({
+          name: "Funded Wallet",
+          organization_id: org.id,
+          wallet_config: JSON.stringify({ type: "solana" }),
+          funding_status: "funded",
+        })
+        .returning("id")
+        .executeTakeFirstOrThrow();
+
+      const tenant = await db
+        .insertInto("tenants")
+        .values({
+          name: "no-backend-proxy",
+          backend_url: "",
+          organization_id: org.id,
+          wallet_id: wallet.id,
+          default_price_usdc: 0.01,
+          default_scheme: "exact",
+          status: "registered",
+          org_slug: "team",
+        })
+        .returning("id")
+        .executeTakeFirstOrThrow();
+
+      const res = await app.request(
+        `/api/organizations/${org.id}/tenants/${tenant.id}/activate`,
+        {
+          method: "POST",
+          headers: {
+            Cookie: `auth_token=${owner.token}`,
+          },
+        },
+      );
+
+      t.equal(res.status, 400);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const data = (await res.json()) as any;
+      t.ok(data.error.toLowerCase().includes("backend"));
+    });
+
+    await t.test(
+      "returns 403 for member without owner/admin role",
+      async (t) => {
+        const owner = await createUser("owner@example.com");
+        const member = await createUser("member@example.com");
+        const org = await createOrg("Team", "team");
+        await addMember(owner.id, org.id, "owner");
+        await addMember(member.id, org.id, "member");
+
+        const wallet = await db
+          .insertInto("wallets")
+          .values({
+            name: "Test Wallet",
+            organization_id: org.id,
+            wallet_config: JSON.stringify({ type: "solana" }),
+            funding_status: "funded",
+          })
+          .returning("id")
+          .executeTakeFirstOrThrow();
+
+        const tenant = await db
+          .insertInto("tenants")
+          .values({
+            name: "registered-proxy",
+            backend_url: "http://backend.com",
+            organization_id: org.id,
+            wallet_id: wallet.id,
+            default_price_usdc: 0.01,
+            default_scheme: "exact",
+            status: "registered",
+            org_slug: "team",
+          })
+          .returning("id")
+          .executeTakeFirstOrThrow();
+
+        const res = await app.request(
+          `/api/organizations/${org.id}/tenants/${tenant.id}/activate`,
+          {
+            method: "POST",
+            headers: {
+              Cookie: `auth_token=${member.token}`,
+            },
+          },
+        );
+
+        t.equal(res.status, 403);
+      },
+    );
+  },
+);
+
+await t.test(
+  "DELETE /api/organizations/:id/tenants/:tenantId - registered tenant",
+  async (t) => {
+    await t.test("deletes registered tenant immediately", async (t) => {
+      const owner = await createUser("owner@example.com");
+      const org = await createOrg("Team", "team");
+      await addMember(owner.id, org.id, "owner");
+
+      const tenant = await db
+        .insertInto("tenants")
+        .values({
+          name: "registered-proxy",
+          backend_url: "http://backend.com",
+          organization_id: org.id,
+          default_price_usdc: 0.01,
+          default_scheme: "exact",
+          status: "registered",
+          org_slug: "team",
+        })
+        .returning("id")
+        .executeTakeFirstOrThrow();
+
+      const res = await app.request(
+        `/api/organizations/${org.id}/tenants/${tenant.id}`,
+        {
+          method: "DELETE",
+          headers: {
+            Cookie: `auth_token=${owner.token}`,
+          },
+        },
+      );
+
+      t.equal(res.status, 200);
+
+      const deletedTenant = await db
+        .selectFrom("tenants")
+        .select("id")
+        .where("id", "=", tenant.id)
+        .executeTakeFirst();
+      t.equal(deletedTenant, undefined);
+    });
+  },
+);
 
 await t.test(
   "GET /api/organizations/:id/tenants/:tenantId/analytics",

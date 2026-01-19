@@ -75,7 +75,11 @@ export async function checkAndUpdateTenantStatus(
     .where("id", "=", tenantId)
     .executeTakeFirst();
 
-  if (!tenant || (tenant.status !== "pending" && tenant.status !== "failed")) {
+  if (
+    !tenant ||
+    tenant.status === "registered" ||
+    (tenant.status !== "pending" && tenant.status !== "failed")
+  ) {
     return;
   }
 

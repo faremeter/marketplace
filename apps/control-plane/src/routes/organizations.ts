@@ -534,7 +534,7 @@ organizationsRoutes.put(
       return c.json({ error: "Tenant not found" }, 404);
     }
 
-    if (tenant.status !== "active") {
+    if (tenant.status !== "active" && tenant.status !== "registered") {
       return c.json(
         {
           error: "Cannot modify tenant while another operation is in progress",
@@ -589,36 +589,212 @@ organizationsRoutes.put(
       return c.json({ error: "Tenant not found" }, 404);
     }
 
-    const tenantNodes = await db
-      .selectFrom("tenant_nodes")
-      .select("node_id")
-      .where("tenant_id", "=", tenantId)
-      .execute();
+    // Skip syncing for registered tenants (not provisioned yet)
+    if (tenant.status !== "registered") {
+      const tenantNodes = await db
+        .selectFrom("tenant_nodes")
+        .select("node_id")
+        .where("tenant_id", "=", tenantId)
+        .execute();
 
-    for (const tn of tenantNodes) {
-      syncToNode(tn.node_id).catch((err) => logger.error(String(err)));
-    }
+      for (const tn of tenantNodes) {
+        syncToNode(tn.node_id).catch((err) => logger.error(String(err)));
+      }
 
-    if (newWalletConfig) {
-      const addresses = {
-        solana: newWalletConfig.solana?.["mainnet-beta"]?.address,
-        base: newWalletConfig.evm?.base?.address,
-        polygon: newWalletConfig.evm?.polygon?.address,
-        monad: newWalletConfig.evm?.monad?.address,
-      };
+      if (newWalletConfig) {
+        const addresses = {
+          solana: newWalletConfig.solana?.["mainnet-beta"]?.address,
+          base: newWalletConfig.evm?.base?.address,
+          polygon: newWalletConfig.evm?.polygon?.address,
+          monad: newWalletConfig.evm?.monad?.address,
+        };
 
-      updateAccountAddresses(tenant.name, addresses).catch((err) =>
-        logger.error(
-          `Failed to update corbits dash addresses for ${tenant.name}: ${err}`,
-        ),
-      );
-    }
+        updateAccountAddresses(tenant.name, addresses).catch((err) =>
+          logger.error(
+            `Failed to update corbits dash addresses for ${tenant.name}: ${err}`,
+          ),
+        );
+      }
 
-    if (body.wallet_id !== undefined && body.wallet_id !== null) {
-      await checkAndUpdateTenantStatus(tenantId);
+      if (body.wallet_id !== undefined && body.wallet_id !== null) {
+        await checkAndUpdateTenantStatus(tenantId);
+      }
     }
 
     return c.json(result);
+  },
+);
+
+// Activate a registered tenant (go live)
+organizationsRoutes.post(
+  "/:id/tenants/:tenantId/activate",
+  modifyResourceLimiter,
+  async (c) => {
+    const user = c.get("user");
+    const orgId = parseInt(c.req.param("id"));
+    const tenantId = parseInt(c.req.param("tenantId"));
+
+    const membership = await db
+      .selectFrom("user_organizations")
+      .select("role")
+      .where("user_id", "=", user.id)
+      .where("organization_id", "=", orgId)
+      .executeTakeFirst();
+
+    if (!membership && !user.is_admin) {
+      return c.json({ error: "Organization not found" }, 404);
+    }
+
+    // Require owner/admin role to activate
+    if (
+      membership &&
+      membership.role !== "owner" &&
+      membership.role !== "admin" &&
+      !user.is_admin
+    ) {
+      return c.json(
+        { error: "Only owners or admins can activate proxies" },
+        403,
+      );
+    }
+
+    const tenant = await db
+      .selectFrom("tenants")
+      .leftJoin("wallets", "wallets.id", "tenants.wallet_id")
+      .select([
+        "tenants.id",
+        "tenants.name",
+        "tenants.status",
+        "tenants.organization_id",
+        "tenants.org_slug",
+        "tenants.backend_url",
+        "tenants.wallet_id",
+        "wallets.wallet_config",
+        "wallets.funding_status",
+      ])
+      .where("tenants.id", "=", tenantId)
+      .executeTakeFirst();
+
+    if (!tenant || tenant.organization_id !== orgId) {
+      return c.json({ error: "Tenant not found" }, 404);
+    }
+
+    if (tenant.status !== "registered") {
+      return c.json({ error: "Only registered tenants can be activated" }, 400);
+    }
+
+    if (!tenant.backend_url) {
+      return c.json(
+        { error: "A backend URL must be configured before going live" },
+        400,
+      );
+    }
+
+    if (!tenant.wallet_id) {
+      return c.json(
+        { error: "A wallet must be assigned before going live" },
+        400,
+      );
+    }
+
+    if (tenant.funding_status !== "funded") {
+      return c.json(
+        {
+          error:
+            "Wallet must be funded before going live. Add SOL and USDC to your wallet.",
+        },
+        400,
+      );
+    }
+
+    await db
+      .updateTable("tenants")
+      .set({ status: "pending", is_active: true })
+      .where("id", "=", tenantId)
+      .execute();
+
+    const tenantNodes = await db
+      .selectFrom("tenant_nodes")
+      .innerJoin("nodes", "nodes.id", "tenant_nodes.node_id")
+      .select([
+        "tenant_nodes.id as tn_id",
+        "tenant_nodes.node_id",
+        "nodes.public_ip",
+        "nodes.status as node_status",
+      ])
+      .where("tenant_nodes.tenant_id", "=", tenantId)
+      .execute();
+
+    const domainInfo = toDomainInfo({
+      name: tenant.name,
+      org_slug: tenant.org_slug,
+    });
+
+    const activeNodeIds: number[] = [];
+
+    for (const tn of tenantNodes) {
+      await db
+        .updateTable("tenant_nodes")
+        .set({ cert_status: "pending" })
+        .where("id", "=", tn.tn_id)
+        .execute();
+
+      if (tn.public_ip) {
+        const healthCheckId = await createHealthCheck(domainInfo, tn.public_ip);
+        if (healthCheckId) {
+          await db
+            .updateTable("tenant_nodes")
+            .set({ health_check_id: healthCheckId })
+            .where("id", "=", tn.tn_id)
+            .execute();
+        }
+
+        upsertNodeDnsRecord(
+          domainInfo,
+          tn.node_id,
+          tn.public_ip,
+          healthCheckId,
+        ).catch((err) => logger.error(`Failed to create DNS record: ${err}`));
+      }
+
+      if (tn.node_status === "active") {
+        activeNodeIds.push(tn.node_id);
+      }
+
+      syncToNode(tn.node_id).catch((err) => logger.error(String(err)));
+    }
+
+    if (activeNodeIds.length > 0) {
+      enqueueCertProvisioning(
+        activeNodeIds,
+        tenant.name,
+        tenant.org_slug ?? null,
+      ).catch((err) =>
+        logger.error(`Failed to enqueue cert provisioning: ${err}`),
+      );
+    }
+
+    const walletConfig = tenant.wallet_config as WalletConfig | null;
+    if (walletConfig) {
+      const accessToken = Math.random().toString(36).substring(2, 7);
+      const addresses = {
+        solana: walletConfig.solana?.["mainnet-beta"]?.address,
+        base: walletConfig.evm?.base?.address,
+        polygon: walletConfig.evm?.polygon?.address,
+        monad: walletConfig.evm?.monad?.address,
+      };
+
+      setupAccountWithAddresses(tenant.name, accessToken, addresses).catch(
+        (err) =>
+          logger.error(
+            `Failed to setup corbits dash account for ${tenant.name}: ${err}`,
+          ),
+      );
+    }
+
+    await checkAndUpdateTenantStatus(tenantId);
+
+    return c.json({ success: true, status: "pending" });
   },
 );
 
@@ -680,6 +856,23 @@ organizationsRoutes.delete(
         { error: "Cannot delete while certificate operations are in progress" },
         400,
       );
+    }
+
+    if (tenant.status === "registered") {
+      await db
+        .deleteFrom("transactions")
+        .where("tenant_id", "=", tenantId)
+        .execute();
+      await db
+        .deleteFrom("endpoints")
+        .where("tenant_id", "=", tenantId)
+        .execute();
+      await db
+        .deleteFrom("tenant_nodes")
+        .where("tenant_id", "=", tenantId)
+        .execute();
+      await db.deleteFrom("tenants").where("id", "=", tenantId).execute();
+      return c.json({ success: true });
     }
 
     await db
@@ -879,18 +1072,28 @@ organizationsRoutes.post(
       );
     }
 
-    const wallet = await db
-      .selectFrom("wallets")
-      .selectAll()
-      .where("id", "=", body.wallet_id)
-      .where("organization_id", "=", orgId)
-      .executeTakeFirst();
+    const isRegisterOnly = body.register_only === true;
 
-    if (!wallet) {
-      return c.json(
-        { error: "Wallet not found or does not belong to this organization" },
-        400,
-      );
+    // Wallet is required unless register_only
+    if (!isRegisterOnly && !body.wallet_id) {
+      return c.json({ error: "Wallet is required" }, 400);
+    }
+
+    let wallet = null;
+    if (body.wallet_id) {
+      wallet = await db
+        .selectFrom("wallets")
+        .selectAll()
+        .where("id", "=", body.wallet_id)
+        .where("organization_id", "=", orgId)
+        .executeTakeFirst();
+
+      if (!wallet) {
+        return c.json(
+          { error: "Wallet not found or does not belong to this organization" },
+          400,
+        );
+      }
     }
 
     const nodesWithCounts = await db
@@ -919,12 +1122,14 @@ organizationsRoutes.post(
         name: sanitizedName,
         backend_url: body.backend_url,
         organization_id: orgId,
-        wallet_id: body.wallet_id,
+        wallet_id: body.wallet_id ?? null,
         default_price_usdc: body.default_price_usdc ?? 0,
         default_scheme: body.default_scheme ?? "exact",
         upstream_auth_header: body.upstream_auth_header ?? null,
         upstream_auth_value: body.upstream_auth_value ?? null,
         org_slug: org.slug,
+        is_active: !isRegisterOnly,
+        status: isRegisterOnly ? "registered" : "pending",
       })
       .returningAll()
       .executeTakeFirst();
@@ -947,69 +1152,81 @@ organizationsRoutes.post(
 
       if (!node) continue;
 
+      // Create tenant_nodes record (cert_status null for registered tenants)
       const result = await db
         .insertInto("tenant_nodes")
         .values({
           tenant_id: tenant.id,
           node_id: nodeId,
           is_primary: isPrimary,
+          cert_status: isRegisterOnly ? null : "pending",
         })
         .returningAll()
         .executeTakeFirstOrThrow();
 
-      if (node.public_ip) {
-        const healthCheckId = await createHealthCheck(
-          domainInfo,
-          node.public_ip,
-        );
-        if (healthCheckId) {
-          await db
-            .updateTable("tenant_nodes")
-            .set({ health_check_id: healthCheckId })
-            .where("id", "=", result.id)
-            .execute();
+      // Skip provisioning for registered tenants
+      if (!isRegisterOnly) {
+        if (node.public_ip) {
+          const healthCheckId = await createHealthCheck(
+            domainInfo,
+            node.public_ip,
+          );
+          if (healthCheckId) {
+            await db
+              .updateTable("tenant_nodes")
+              .set({ health_check_id: healthCheckId })
+              .where("id", "=", result.id)
+              .execute();
+          }
+
+          upsertNodeDnsRecord(
+            domainInfo,
+            nodeId,
+            node.public_ip,
+            healthCheckId,
+          ).catch((err) => logger.error(`Failed to create DNS record: ${err}`));
         }
 
-        upsertNodeDnsRecord(
-          domainInfo,
-          nodeId,
-          node.public_ip,
-          healthCheckId,
-        ).catch((err) => logger.error(`Failed to create DNS record: ${err}`));
-      }
+        if (node.status === "active") {
+          activeNodeIds.push(nodeId);
+        }
 
-      if (node.status === "active") {
-        activeNodeIds.push(nodeId);
+        syncToNode(nodeId).catch((err) => logger.error(String(err)));
       }
-
-      syncToNode(nodeId).catch((err) => logger.error(String(err)));
     }
 
-    if (activeNodeIds.length > 0) {
+    // Skip cert provisioning for registered tenants
+    if (!isRegisterOnly && activeNodeIds.length > 0) {
       enqueueCertProvisioning(activeNodeIds, tenant.name, org.slug).catch(
         (err) => logger.error(`Failed to enqueue cert provisioning: ${err}`),
       );
     }
 
-    const walletConfig = wallet.wallet_config as WalletConfig | null;
-    if (walletConfig) {
-      const accessToken = Math.random().toString(36).substring(2, 7);
-      const addresses = {
-        solana: walletConfig.solana?.["mainnet-beta"]?.address,
-        base: walletConfig.evm?.base?.address,
-        polygon: walletConfig.evm?.polygon?.address,
-        monad: walletConfig.evm?.monad?.address,
-      };
+    // Skip corbits dash setup for registered tenants
+    if (!isRegisterOnly && wallet) {
+      const walletConfig = wallet.wallet_config as WalletConfig | null;
+      if (walletConfig) {
+        const accessToken = Math.random().toString(36).substring(2, 7);
+        const addresses = {
+          solana: walletConfig.solana?.["mainnet-beta"]?.address,
+          base: walletConfig.evm?.base?.address,
+          polygon: walletConfig.evm?.polygon?.address,
+          monad: walletConfig.evm?.monad?.address,
+        };
 
-      setupAccountWithAddresses(tenant.name, accessToken, addresses).catch(
-        (err) =>
-          logger.error(
-            `Failed to setup corbits dash account for ${tenant.name}: ${err}`,
-          ),
-      );
+        setupAccountWithAddresses(tenant.name, accessToken, addresses).catch(
+          (err) =>
+            logger.error(
+              `Failed to setup corbits dash account for ${tenant.name}: ${err}`,
+            ),
+        );
+      }
     }
 
-    await checkAndUpdateTenantStatus(tenant.id);
+    // Skip status check for registered tenants
+    if (!isRegisterOnly) {
+      await checkAndUpdateTenantStatus(tenant.id);
+    }
 
     return c.json(tenant, 201);
   },

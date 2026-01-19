@@ -74,6 +74,8 @@ tenantsRoutes.post(
       orgSlug = org.slug;
     }
 
+    const isRegisterOnly = body.register_only === true;
+
     const result = await db
       .insertInto("tenants")
       .values({
@@ -85,8 +87,9 @@ tenantsRoutes.post(
         default_scheme: body.default_scheme ?? "exact",
         upstream_auth_header: body.upstream_auth_header ?? null,
         upstream_auth_value: body.upstream_auth_value ?? null,
-        is_active: body.is_active ?? true,
+        is_active: isRegisterOnly ? false : (body.is_active ?? true),
         org_slug: orgSlug,
+        status: isRegisterOnly ? "registered" : "active",
       })
       .returningAll()
       .executeTakeFirstOrThrow();
@@ -112,7 +115,7 @@ tenantsRoutes.put(
       return c.json({ error: "Tenant not found" }, 404);
     }
 
-    if (tenant.status !== "active") {
+    if (tenant.status !== "active" && tenant.status !== "registered") {
       return c.json(
         {
           error: "Cannot modify tenant while another operation is in progress",

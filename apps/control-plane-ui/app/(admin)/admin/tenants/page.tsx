@@ -332,6 +332,8 @@ export default function AdminTenantsPage() {
                         tenantName={tenant.name}
                         isActive={tenant.is_active}
                         onUpdate={() => mutate()}
+                        disabled={tenant.status === "registered"}
+                        disabledTooltip="Go live to enable this setting"
                       />
                     </td>
                     <td className="px-4 py-3">

@@ -224,6 +224,53 @@ await t.test("POST /api/tenants", async (t) => {
 
     t.equal(res.status, 400);
   });
+
+  await t.test("creates tenant with status active by default", async (t) => {
+    const token = await createAdminUser();
+
+    const res = await app.request("/api/tenants", {
+      method: "POST",
+      headers: {
+        Cookie: `auth_token=${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        name: "active-tenant",
+        backend_url: "http://backend.com",
+      }),
+    });
+
+    t.equal(res.status, 201);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const data = (await res.json()) as any;
+    t.equal(data.status, "active");
+  });
+
+  await t.test(
+    "creates tenant with status registered when register_only is true",
+    async (t) => {
+      const token = await createAdminUser();
+
+      const res = await app.request("/api/tenants", {
+        method: "POST",
+        headers: {
+          Cookie: `auth_token=${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          name: "registered-tenant",
+          backend_url: "http://backend.com",
+          register_only: true,
+        }),
+      });
+
+      t.equal(res.status, 201);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const data = (await res.json()) as any;
+      t.equal(data.status, "registered");
+      t.equal(data.is_active, false);
+    },
+  );
 });
 
 await t.test("PUT /api/tenants/:id", async (t) => {
@@ -306,6 +353,36 @@ await t.test("PUT /api/tenants/:id", async (t) => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const data = (await res.json()) as any;
     t.ok(data.error.includes("operation is in progress"));
+  });
+
+  await t.test("allows update when status is registered", async (t) => {
+    const token = await createAdminUser();
+
+    const tenant = await db
+      .insertInto("tenants")
+      .values({
+        name: "registered-tenant",
+        backend_url: "http://backend.com",
+        default_price_usdc: 0.01,
+        default_scheme: "exact",
+        status: "registered",
+      })
+      .returning("id")
+      .executeTakeFirstOrThrow();
+
+    const res = await app.request(`/api/tenants/${tenant.id}`, {
+      method: "PUT",
+      headers: {
+        Cookie: `auth_token=${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ backend_url: "http://new-backend.com" }),
+    });
+
+    t.equal(res.status, 200);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const data = (await res.json()) as any;
+    t.equal(data.backend_url, "http://new-backend.com");
   });
 });
 

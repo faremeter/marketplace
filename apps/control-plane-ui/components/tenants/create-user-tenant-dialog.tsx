@@ -4,6 +4,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import * as Dialog from "@radix-ui/react-dialog";
 import * as AlertDialog from "@radix-ui/react-alert-dialog";
 import * as Select from "@radix-ui/react-select";
+import * as Checkbox from "@radix-ui/react-checkbox";
 import {
   Cross2Icon,
   PlusIcon,
@@ -14,6 +15,7 @@ import {
   CheckIcon,
   EyeOpenIcon,
   EyeClosedIcon,
+  InfoCircledIcon,
 } from "@radix-ui/react-icons";
 import { api, ApiError } from "@/lib/api/client";
 import Link from "next/link";
@@ -97,6 +99,7 @@ export function CreateUserTenantDialog({
   const [authToken, setAuthToken] = useState("");
   const [defaultPrice, setDefaultPrice] = useState("0.01");
   const [defaultScheme, setDefaultScheme] = useState("exact");
+  const [registerOnly, setRegisterOnly] = useState(false);
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [nameAvailable, setNameAvailable] = useState<boolean | null>(null);
@@ -124,7 +127,8 @@ export function CreateUserTenantDialog({
       customHeader.trim() !== "" ||
       customPrefix.trim() !== "" ||
       defaultPrice !== "0.01" ||
-      defaultScheme !== "exact"
+      defaultScheme !== "exact" ||
+      registerOnly !== false
     );
   }, [
     name,
@@ -135,6 +139,7 @@ export function CreateUserTenantDialog({
     customPrefix,
     defaultPrice,
     defaultScheme,
+    registerOnly,
   ]);
 
   const attemptClose = useCallback(() => {
@@ -195,6 +200,7 @@ export function CreateUserTenantDialog({
     setAuthToken("");
     setDefaultPrice("0.01");
     setDefaultScheme("exact");
+    setRegisterOnly(false);
     setError("");
     setNameAvailable(null);
     setIsCheckingName(false);
@@ -274,7 +280,7 @@ export function CreateUserTenantDialog({
       setError("Auth value is too long (max 4096 characters)");
       return;
     }
-    if (!walletId) {
+    if (!walletId && !registerOnly) {
       setError("Wallet is required");
       return;
     }
@@ -321,6 +327,7 @@ export function CreateUserTenantDialog({
           (parseFloat(defaultPrice) || 0) * 1_000_000,
         ),
         default_scheme: defaultScheme,
+        register_only: registerOnly,
       });
       toast({
         title: "Proxy created",
@@ -505,7 +512,10 @@ export function CreateUserTenantDialog({
                     </div>
                     <div>
                       <label className="mb-1.5 block text-sm text-gray-11">
-                        PayTo Wallet <span className="text-red-400">*</span>
+                        PayTo Wallet{" "}
+                        {!registerOnly && (
+                          <span className="text-red-400">*</span>
+                        )}
                       </label>
                       <Select.Root
                         value={walletId?.toString()}
@@ -911,6 +921,51 @@ export function CreateUserTenantDialog({
                         </Select.Portal>
                       </Select.Root>
                     </div>
+                  </div>
+                </section>
+
+                {/* Register Only Option */}
+                <section>
+                  <div className="space-y-3">
+                    <label className="flex items-start gap-3 cursor-pointer">
+                      <Checkbox.Root
+                        checked={registerOnly}
+                        onCheckedChange={(checked) =>
+                          setRegisterOnly(checked === true)
+                        }
+                        className={`mt-0.5 flex h-5 w-5 items-center justify-center rounded border transition-colors ${
+                          registerOnly
+                            ? "border-blue-600 bg-blue-600"
+                            : "border-gray-6 bg-gray-3 hover:border-gray-8"
+                        }`}
+                      >
+                        <Checkbox.Indicator>
+                          <CheckIcon className="h-3.5 w-3.5 text-white" />
+                        </Checkbox.Indicator>
+                      </Checkbox.Root>
+                      <div className="flex-1">
+                        <span className="text-sm text-gray-12">
+                          Register only (don&apos;t go live yet)
+                        </span>
+                        <p className="mt-0.5 text-xs text-gray-11">
+                          Create the proxy for tracking purposes. You can
+                          activate it later from the proxy settings.
+                        </p>
+                      </div>
+                    </label>
+
+                    {registerOnly && (
+                      <div className="rounded-md border border-blue-800 bg-blue-900/20 px-3 py-2 text-sm text-blue-300">
+                        <p className="flex items-start gap-2">
+                          <InfoCircledIcon className="h-4 w-4 mt-0.5 flex-shrink-0" />
+                          <span>
+                            The proxy will be created in a{" "}
+                            <strong>registered</strong> state. It won&apos;t
+                            accept requests until you activate it.
+                          </span>
+                        </p>
+                      </div>
+                    )}
                   </div>
                 </section>
 

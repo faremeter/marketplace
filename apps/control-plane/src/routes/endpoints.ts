@@ -41,6 +41,16 @@ function processPathPattern(input: string): {
 }
 
 async function syncTenantNodes(tenantId: number) {
+  const tenant = await db
+    .selectFrom("tenants")
+    .select("status")
+    .where("id", "=", tenantId)
+    .executeTakeFirst();
+
+  if (!tenant || tenant.status === "registered") {
+    return;
+  }
+
   const tenantNodes = await db
     .selectFrom("tenant_nodes")
     .select("node_id")

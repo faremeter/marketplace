@@ -48,14 +48,19 @@ async function createOrg(name: string, slug: string) {
 async function createTenant(
   orgId: number | null,
   name: string,
-  opts: { wallet_id?: number; status?: string; org_slug?: string } = {},
+  opts: {
+    wallet_id?: number;
+    status?: string;
+    org_slug?: string;
+    backend_url?: string;
+  } = {},
 ) {
   return db
     .insertInto("tenants")
     .values({
       name,
       organization_id: orgId,
-      backend_url: "http://backend.example.com",
+      backend_url: opts.backend_url ?? "http://backend.example.com",
       default_price_usdc: 0.01,
       default_scheme: "exact",
       wallet_id: opts.wallet_id ?? null,
@@ -1337,6 +1342,187 @@ await t.test("POST /api/admin/tenants", async (t) => {
     const data = (await res.json()) as any;
     t.equal(data.wallet_id, masterWallet.id);
   });
+
+  await t.test(
+    "creates registered tenant when register_only is true",
+    async (t) => {
+      const admin = await createUser("admin@example.com", true);
+      const org = await createOrg("Team", "team");
+      const node = await createNode("node-1");
+
+      const res = await app.request("/api/admin/tenants", {
+        method: "POST",
+        headers: {
+          Cookie: `auth_token=${admin.token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          name: "registered-tenant",
+          backend_url: "http://backend.example.com",
+          organization_id: org.id,
+          node_ids: [node.id],
+          register_only: true,
+        }),
+      });
+
+      t.equal(res.status, 201);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const data = (await res.json()) as any;
+      t.equal(data.name, "registered-tenant");
+      t.equal(data.status, "registered");
+      t.equal(data.is_active, false);
+    },
+  );
+});
+
+await t.test("POST /api/admin/tenants/:id/activate", async (t) => {
+  await t.test("activates a registered tenant", async (t) => {
+    const admin = await createUser("admin@example.com", true);
+    const org = await createOrg("Team", "team");
+    const wallet = await createWallet(org.id, "Test Wallet");
+    const node = await createNode("node-1");
+
+    const tenant = await createTenant(org.id, "registered-tenant", {
+      status: "registered",
+      wallet_id: wallet.id,
+      org_slug: "team",
+    });
+
+    await db
+      .insertInto("tenant_nodes")
+      .values({
+        tenant_id: tenant.id,
+        node_id: node.id,
+        cert_status: null,
+        is_primary: true,
+      })
+      .execute();
+
+    const res = await app.request(`/api/admin/tenants/${tenant.id}/activate`, {
+      method: "POST",
+      headers: {
+        Cookie: `auth_token=${admin.token}`,
+      },
+    });
+
+    t.equal(res.status, 200);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const data = (await res.json()) as any;
+    t.equal(data.status, "pending");
+
+    const updatedTenant = await db
+      .selectFrom("tenants")
+      .select(["status", "is_active"])
+      .where("id", "=", tenant.id)
+      .executeTakeFirstOrThrow();
+    t.equal(updatedTenant.status, "pending");
+    t.equal(updatedTenant.is_active, true);
+  });
+
+  await t.test("returns 400 if tenant is not registered", async (t) => {
+    const admin = await createUser("admin@example.com", true);
+    const org = await createOrg("Team", "team");
+    const tenant = await createTenant(org.id, "active-tenant", {
+      status: "active",
+    });
+
+    const res = await app.request(`/api/admin/tenants/${tenant.id}/activate`, {
+      method: "POST",
+      headers: {
+        Cookie: `auth_token=${admin.token}`,
+      },
+    });
+
+    t.equal(res.status, 400);
+  });
+
+  await t.test("returns 400 if no wallet assigned", async (t) => {
+    const admin = await createUser("admin@example.com", true);
+    const org = await createOrg("Team", "team");
+    const tenant = await createTenant(org.id, "no-wallet-tenant", {
+      status: "registered",
+    });
+
+    const res = await app.request(`/api/admin/tenants/${tenant.id}/activate`, {
+      method: "POST",
+      headers: {
+        Cookie: `auth_token=${admin.token}`,
+      },
+    });
+
+    t.equal(res.status, 400);
+  });
+
+  await t.test("returns 400 if wallet not funded", async (t) => {
+    const admin = await createUser("admin@example.com", true);
+    const org = await createOrg("Team", "team");
+
+    const wallet = await db
+      .insertInto("wallets")
+      .values({
+        name: "Unfunded Wallet",
+        organization_id: org.id,
+        wallet_config: JSON.stringify({
+          solana: { "mainnet-beta": { address: "abc123" } },
+        }),
+        funding_status: "pending",
+      })
+      .returning("id")
+      .executeTakeFirstOrThrow();
+
+    const tenant = await createTenant(org.id, "unfunded-wallet-tenant", {
+      status: "registered",
+      wallet_id: wallet.id,
+    });
+
+    const res = await app.request(`/api/admin/tenants/${tenant.id}/activate`, {
+      method: "POST",
+      headers: {
+        Cookie: `auth_token=${admin.token}`,
+      },
+    });
+
+    t.equal(res.status, 400);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const data = (await res.json()) as any;
+    t.ok(data.error.toLowerCase().includes("funded"));
+  });
+
+  await t.test("returns 400 if backend_url is empty", async (t) => {
+    const admin = await createUser("admin@example.com", true);
+    const org = await createOrg("Team", "team");
+
+    const wallet = await db
+      .insertInto("wallets")
+      .values({
+        name: "Funded Wallet",
+        organization_id: org.id,
+        wallet_config: JSON.stringify({
+          solana: { "mainnet-beta": { address: "abc123" } },
+        }),
+        funding_status: "funded",
+      })
+      .returning("id")
+      .executeTakeFirstOrThrow();
+
+    const tenant = await createTenant(org.id, "no-backend-tenant", {
+      status: "registered",
+      wallet_id: wallet.id,
+      backend_url: "",
+    });
+
+    const res = await app.request(`/api/admin/tenants/${tenant.id}/activate`, {
+      method: "POST",
+      headers: {
+        Cookie: `auth_token=${admin.token}`,
+      },
+    });
+
+    t.equal(res.status, 400);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const data = (await res.json()) as any;
+    t.ok(data.error.toLowerCase().includes("backend"));
+  });
 });
 
 await t.test("PUT /api/admin/tenants/:id", async (t) => {
@@ -1541,6 +1727,33 @@ await t.test("PUT /api/admin/tenants/:id", async (t) => {
       t.ok(data.error.includes("Only wallet assignment"));
     },
   );
+
+  await t.test("allows full edits when status is registered", async (t) => {
+    const admin = await createUser("admin@example.com", true);
+    const org = await createOrg("Team", "team");
+    const wallet = await createWallet(org.id, "my-wallet");
+    const tenant = await createTenant(org.id, "my-tenant", {
+      status: "registered",
+    });
+
+    const res = await app.request(`/api/admin/tenants/${tenant.id}`, {
+      method: "PUT",
+      headers: {
+        Cookie: `auth_token=${admin.token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        backend_url: "http://new.example.com",
+        wallet_id: wallet.id,
+        default_price_usdc: 0.05,
+      }),
+    });
+    t.equal(res.status, 200);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const data = (await res.json()) as any;
+    t.equal(data.backend_url, "http://new.example.com");
+    t.equal(data.wallet_id, wallet.id);
+  });
 
   await t.test(
     "switches from org mode to legacy mode with org_slug=null",
@@ -2150,6 +2363,28 @@ await t.test("DELETE /api/admin/tenants/:id", async (t) => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const data = (await res.json()) as any;
     t.ok(data.error.includes("certificate operations"));
+  });
+
+  await t.test("deletes registered tenant immediately", async (t) => {
+    const admin = await createUser("admin@example.com", true);
+    const org = await createOrg("Team", "team");
+    const tenant = await createTenant(org.id, "registered-tenant", {
+      status: "registered",
+    });
+
+    const res = await app.request(`/api/admin/tenants/${tenant.id}`, {
+      method: "DELETE",
+      headers: { Cookie: `auth_token=${admin.token}` },
+    });
+
+    t.equal(res.status, 200);
+
+    const deletedTenant = await db
+      .selectFrom("tenants")
+      .select("id")
+      .where("id", "=", tenant.id)
+      .executeTakeFirst();
+    t.equal(deletedTenant, undefined);
   });
 });
 

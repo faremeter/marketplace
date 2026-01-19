@@ -11,6 +11,8 @@ interface InlineActiveToggleProps {
   isActive: boolean;
   onUpdate: () => void;
   apiEndpoint?: string;
+  disabled?: boolean;
+  disabledTooltip?: string;
 }
 
 export function InlineActiveToggle({
@@ -19,10 +21,14 @@ export function InlineActiveToggle({
   isActive,
   onUpdate,
   apiEndpoint,
+  disabled,
+  disabledTooltip,
 }: InlineActiveToggleProps) {
   const endpoint = apiEndpoint ?? `/api/admin/tenants/${tenantId}`;
   const { toast } = useToast();
   const [isSaving, setIsSaving] = useState(false);
+
+  const isDisabled = disabled || isSaving;
 
   const handleToggle = async () => {
     setIsSaving(true);
@@ -47,13 +53,13 @@ export function InlineActiveToggle({
     }
   };
 
-  return (
+  const toggle = (
     <Switch.Root
       checked={isActive}
       onCheckedChange={handleToggle}
-      disabled={isSaving}
+      disabled={isDisabled}
       className={`relative h-5 w-9 rounded-full transition-colors ${
-        isSaving
+        isDisabled
           ? "opacity-50 cursor-not-allowed bg-gray-6"
           : isActive
             ? "bg-green-600"
@@ -67,4 +73,14 @@ export function InlineActiveToggle({
       />
     </Switch.Root>
   );
+
+  if (disabled && disabledTooltip) {
+    return (
+      <span title={disabledTooltip} className="inline-block">
+        {toggle}
+      </span>
+    );
+  }
+
+  return toggle;
 }

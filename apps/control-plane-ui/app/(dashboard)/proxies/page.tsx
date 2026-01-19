@@ -260,6 +260,8 @@ export default function TenantsPage() {
                         isActive={tenant.is_active}
                         onUpdate={() => mutate()}
                         apiEndpoint={apiEndpoint}
+                        disabled={tenant.status === "registered"}
+                        disabledTooltip="Go live to enable this setting"
                       />
                     </td>
                     <td className="px-4 py-3">

@@ -15,6 +15,7 @@ import {
   CrossCircledIcon,
   EyeOpenIcon,
   EyeClosedIcon,
+  InfoCircledIcon,
 } from "@radix-ui/react-icons";
 import useSWR from "swr";
 import { api } from "@/lib/api/client";
@@ -89,6 +90,7 @@ export function CreateTenantDialog({
   const [walletId, setWalletId] = useState<number | null>(null);
   const [defaultPrice, setDefaultPrice] = useState("0.01");
   const [defaultScheme, setDefaultScheme] = useState("exact");
+  const [registerOnly, setRegisterOnly] = useState(false);
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [nameAvailable, setNameAvailable] = useState<boolean | null>(null);
@@ -125,7 +127,8 @@ export function CreateTenantDialog({
       organizationId !== null ||
       walletId !== null ||
       defaultPrice !== "0.01" ||
-      defaultScheme !== "exact"
+      defaultScheme !== "exact" ||
+      registerOnly !== false
     );
   }, [
     name,
@@ -138,6 +141,7 @@ export function CreateTenantDialog({
     walletId,
     defaultPrice,
     defaultScheme,
+    registerOnly,
   ]);
 
   const attemptClose = useCallback(() => {
@@ -235,6 +239,7 @@ export function CreateTenantDialog({
     setWalletId(null);
     setDefaultPrice("0.01");
     setDefaultScheme("exact");
+    setRegisterOnly(false);
     setError("");
     setNameAvailable(null);
     setIsCheckingName(false);
@@ -305,6 +310,7 @@ export function CreateTenantDialog({
           (parseFloat(defaultPrice) || 0) * 1_000_000,
         ),
         default_scheme: defaultScheme,
+        register_only: registerOnly,
       });
       resetForm();
       onOpenChange(false);
@@ -973,6 +979,51 @@ export function CreateTenantDialog({
                     ))}
                   </select>
                 </div>
+              </div>
+            </section>
+
+            {/* Register Only Option */}
+            <section>
+              <div className="space-y-3">
+                <label className="flex items-start gap-3 cursor-pointer">
+                  <Checkbox.Root
+                    checked={registerOnly}
+                    onCheckedChange={(checked) =>
+                      setRegisterOnly(checked === true)
+                    }
+                    className={`mt-0.5 flex h-5 w-5 items-center justify-center rounded border transition-colors ${
+                      registerOnly
+                        ? "border-blue-600 bg-blue-600"
+                        : "border-gray-6 bg-gray-3 hover:border-gray-8"
+                    }`}
+                  >
+                    <Checkbox.Indicator>
+                      <CheckIcon className="h-3.5 w-3.5 text-white" />
+                    </Checkbox.Indicator>
+                  </Checkbox.Root>
+                  <div className="flex-1">
+                    <span className="text-sm text-gray-12">
+                      Register only (don&apos;t go live yet)
+                    </span>
+                    <p className="mt-0.5 text-xs text-gray-11">
+                      Create the tenant for tracking purposes. It can be
+                      activated later.
+                    </p>
+                  </div>
+                </label>
+
+                {registerOnly && (
+                  <div className="rounded-md border border-blue-800 bg-blue-900/20 px-3 py-2 text-sm text-blue-300">
+                    <p className="flex items-start gap-2">
+                      <InfoCircledIcon className="h-4 w-4 mt-0.5 flex-shrink-0" />
+                      <span>
+                        The tenant will be created in a{" "}
+                        <strong>registered</strong> state. It won&apos;t accept
+                        requests until activated.
+                      </span>
+                    </p>
+                  </div>
+                )}
               </div>
             </section>
 
