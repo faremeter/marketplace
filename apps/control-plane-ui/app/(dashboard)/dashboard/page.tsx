@@ -32,6 +32,7 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from "recharts";
+import { GoLiveButton } from "@/components/shared/go-live-button";
 
 interface DailyCallData {
   period: string;
@@ -51,6 +52,9 @@ interface Tenant {
   id: number;
   name: string;
   status: string;
+  backend_url: string;
+  wallet_id: number | null;
+  wallet_funding_status: string | null;
 }
 
 interface Endpoint {
@@ -68,9 +72,19 @@ interface Wallet {
 export default function DashboardPage() {
   const { user, currentOrg } = useAuth();
 
-  const { data: tenants } = useSWR(
+  const { data: tenants, mutate: mutateTenants } = useSWR(
     currentOrg ? `/api/organizations/${currentOrg.id}/tenants` : null,
     api.get<Tenant[]>,
+  );
+
+  const publishedTenants = useMemo(
+    () => tenants?.filter((t) => t.status !== "registered") ?? [],
+    [tenants],
+  );
+
+  const registeredTenants = useMemo(
+    () => tenants?.filter((t) => t.status === "registered") ?? [],
+    [tenants],
   );
 
   const { data: wallets } = useSWR(
@@ -280,12 +294,37 @@ export default function DashboardPage() {
                 </Tabs.Content>
               </Tabs.Root>
 
-              <div className="rounded-lg border border-white/10 bg-gray-2 p-6">
-                <h2 className="mb-4 text-[15px] font-medium text-white">
-                  Earnings by Proxy
-                </h2>
-                <TenantEarningsTable tenants={tenants} orgId={currentOrg.id} />
-              </div>
+              {publishedTenants.length > 0 && (
+                <div className="rounded-lg border border-white/10 bg-gray-2 p-6">
+                  <h2 className="mb-4 text-[15px] font-medium text-white">
+                    Earnings by Proxy
+                  </h2>
+                  <TenantEarningsTable
+                    tenants={publishedTenants}
+                    orgId={currentOrg.id}
+                  />
+                </div>
+              )}
+
+              {registeredTenants.length > 0 && (
+                <div className="rounded-lg border border-white/10 bg-gray-2 p-6">
+                  <div className="mb-4">
+                    <h2 className="text-[15px] font-medium text-white">
+                      Registered Proxies
+                    </h2>
+                    <p className="mt-1 text-[13px] text-gray-11">
+                      Missing out on earnings and analytics from registered
+                      proxies? Go live with Corbits and we'll take care of every
+                      last detail.
+                    </p>
+                  </div>
+                  <RegisteredProxiesTable
+                    tenants={registeredTenants}
+                    orgId={currentOrg.id}
+                    onActivate={() => mutateTenants()}
+                  />
+                </div>
+              )}
             </>
           ) : (
             <div className="relative overflow-hidden rounded-xl border border-corbits-orange bg-gradient-to-br from-corbits-orange/10 via-gray-2 to-gray-2 p-8">
@@ -755,5 +794,49 @@ function CatchAllEarningsRow({
           : (analytics?.total_transactions ?? 0).toLocaleString()}
       </td>
     </tr>
+  );
+}
+
+function RegisteredProxiesTable({
+  tenants,
+  orgId,
+  onActivate,
+}: {
+  tenants: Tenant[];
+  orgId: number;
+  onActivate: () => void;
+}) {
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full">
+        <thead>
+          <tr className="border-b border-white/10 text-left text-[12px] text-gray-9">
+            <th className="pb-3 font-medium">Proxy</th>
+            <th className="pb-3 font-medium"></th>
+          </tr>
+        </thead>
+        <tbody>
+          {tenants.map((tenant) => (
+            <tr key={tenant.id} className="border-b border-white/5 text-[13px]">
+              <td className="py-3">
+                <Link
+                  href={`/proxies/${tenant.id}`}
+                  className="text-white hover:text-accent-11 hover:underline"
+                >
+                  {tenant.name}
+                </Link>
+              </td>
+              <td className="py-3 text-right">
+                <GoLiveButton
+                  tenant={tenant}
+                  orgId={orgId}
+                  onActivate={onActivate}
+                />
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
   );
 }
