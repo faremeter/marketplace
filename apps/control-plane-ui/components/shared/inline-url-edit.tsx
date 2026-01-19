@@ -7,6 +7,16 @@ import { Pencil1Icon, CheckIcon, Cross2Icon } from "@radix-ui/react-icons";
 import { api } from "@/lib/api/client";
 import { useToast } from "@/components/ui/toast";
 
+function isValidUrl(urlString: string): boolean {
+  if (!urlString.trim()) return false;
+  try {
+    const url = new URL(urlString);
+    return url.protocol === "http:" || url.protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
 interface InlineUrlEditProps {
   tenantId: number;
   tenantName: string;
@@ -27,6 +37,14 @@ export function InlineUrlEdit({
   const [isOpen, setIsOpen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [url, setUrl] = useState(backendUrl);
+
+  const urlIsValid = isValidUrl(url);
+  const urlError =
+    url.trim() === ""
+      ? "URL is required"
+      : !urlIsValid
+        ? "Enter a valid HTTP or HTTPS URL"
+        : null;
 
   const handleSave = async () => {
     setIsSaving(true);
@@ -103,8 +121,15 @@ export function InlineUrlEdit({
                 value={url}
                 onChange={(e) => setUrl(e.target.value)}
                 placeholder="https://api.example.com"
-                className="w-full rounded border border-gray-6 bg-gray-3 px-2 py-1.5 text-sm text-gray-12 placeholder:text-gray-8 focus:border-accent-8 focus:outline-none font-mono"
+                className={`w-full rounded border bg-gray-3 px-2 py-1.5 text-sm text-gray-12 placeholder:text-gray-8 focus:outline-none font-mono ${
+                  urlError
+                    ? "border-red-500 focus:border-red-500"
+                    : "border-gray-6 focus:border-accent-8"
+                }`}
               />
+              {urlError && (
+                <p className="mt-1 text-xs text-red-400">{urlError}</p>
+              )}
             </div>
             <div className="flex justify-end gap-2">
               <button
@@ -116,7 +141,7 @@ export function InlineUrlEdit({
               </button>
               <button
                 onClick={handleSave}
-                disabled={isSaving}
+                disabled={isSaving || !urlIsValid}
                 className="inline-flex items-center gap-1 rounded bg-accent-9 px-2 py-1 text-xs text-white hover:bg-accent-10 disabled:opacity-50"
               >
                 <CheckIcon className="h-3 w-3" />
