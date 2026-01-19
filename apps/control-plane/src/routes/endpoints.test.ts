@@ -544,6 +544,31 @@ await t.test("POST /api/tenants/:tenantId/endpoints", async (t) => {
     t.same(data.openapi_source_paths, sourcePaths);
   });
 
+  await t.test("accepts null for openapi_source_paths", async (t) => {
+    const user = await createUser("member@example.com");
+    const org = await createOrg("Team", "team");
+    await addMember(user.id, org.id);
+    const tenant = await createTenant(org.id, "my-tenant");
+
+    const res = await app.request(`/api/tenants/${tenant.id}/endpoints`, {
+      method: "POST",
+      headers: {
+        Cookie: `auth_token=${user.token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        path: "/null-openapi-test",
+        openapi_source_paths: null,
+      }),
+    });
+
+    t.equal(res.status, 201);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const data = (await res.json()) as any;
+    t.equal(data.path, "/null-openapi-test");
+    t.equal(data.openapi_source_paths, null);
+  });
+
   await t.test("triggers node sync after creation", async (t) => {
     const user = await createUser("member@example.com");
     const org = await createOrg("Team", "team");

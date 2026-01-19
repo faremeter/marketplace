@@ -139,7 +139,7 @@ endpointsRoutes.post(
         description: body.description ?? null,
         priority: body.priority ?? 100,
         is_active: true,
-        openapi_source_paths: body.openapi_source_paths,
+        openapi_source_paths: body.openapi_source_paths ?? undefined,
       })
       .returningAll()
       .executeTakeFirstOrThrow();

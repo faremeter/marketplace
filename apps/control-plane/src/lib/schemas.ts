@@ -20,7 +20,7 @@ export const CreateEndpointSchema = type({
   "scheme?": "'exact' | 'per_request' | 'per_byte' | null",
   "description?": `string <= ${MAX_DESCRIPTION_LENGTH} | null`,
   "priority?": `0 <= number <= ${MAX_PRIORITY}`,
-  "openapi_source_paths?": "string[]",
+  "openapi_source_paths?": "string[] | null",
 });
 
 export const UpdateEndpointSchema = type({
@@ -30,7 +30,7 @@ export const UpdateEndpointSchema = type({
   "description?": `string <= ${MAX_DESCRIPTION_LENGTH} | null`,
   "priority?": `0 <= number <= ${MAX_PRIORITY}`,
   "is_active?": "boolean",
-  "openapi_source_paths?": "string[]",
+  "openapi_source_paths?": "string[] | null",
 });
 
 export const CreateTenantSchema = type({
