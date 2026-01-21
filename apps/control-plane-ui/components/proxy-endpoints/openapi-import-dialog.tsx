@@ -1,21 +1,17 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef } from "react";
 import * as Dialog from "@radix-ui/react-dialog";
 import { Cross2Icon, UploadIcon, CheckIcon } from "@radix-ui/react-icons";
 import { api } from "@/lib/api/client";
 import { useToast } from "@/components/ui/toast";
+import { parseOpenApiSpec } from "@/lib/openapi/parser";
 
 interface OpenApiImportDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   tenantId: number;
   onSuccess: () => void;
-}
-
-interface ParsedPath {
-  path: string;
-  description: string | null;
 }
 
 interface ImportResult {
@@ -26,86 +22,6 @@ interface ImportResult {
     created: string[];
     linked: string[];
   };
-}
-
-function parseOpenApiSpec(spec: unknown): {
-  valid: boolean;
-  paths: ParsedPath[];
-  info: { title?: string; version?: string };
-  errors: string[];
-} {
-  const errors: string[] = [];
-  const paths: ParsedPath[] = [];
-  let info: { title?: string; version?: string } = {};
-
-  if (!spec || typeof spec !== "object") {
-    return {
-      valid: false,
-      paths,
-      info,
-      errors: ["Spec must be a JSON object"],
-    };
-  }
-
-  const s = spec as Record<string, unknown>;
-
-  if (!s.openapi) {
-    errors.push("Missing 'openapi' field");
-  } else if (typeof s.openapi !== "string" || !s.openapi.startsWith("3.")) {
-    errors.push("Only OpenAPI 3.x specs are supported");
-  }
-
-  if (s.info && typeof s.info === "object") {
-    const infoObj = s.info as Record<string, unknown>;
-    info = {
-      title: typeof infoObj.title === "string" ? infoObj.title : undefined,
-      version:
-        typeof infoObj.version === "string" ? infoObj.version : undefined,
-    };
-  }
-
-  if (!s.paths || typeof s.paths !== "object") {
-    errors.push("Missing or invalid 'paths' object");
-  } else {
-    const pathsObj = s.paths as Record<string, unknown>;
-    for (const [path, pathItem] of Object.entries(pathsObj)) {
-      if (!path.startsWith("/")) {
-        errors.push(`Path '${path}' must start with '/'`);
-        continue;
-      }
-
-      let description: string | null = null;
-      if (pathItem && typeof pathItem === "object") {
-        const item = pathItem as Record<string, unknown>;
-        if (typeof item.summary === "string") {
-          description = item.summary;
-        } else if (typeof item.description === "string") {
-          description = item.description;
-        } else {
-          const methods = ["get", "post", "put", "patch", "delete"];
-          for (const method of methods) {
-            const op = item[method];
-            if (op && typeof op === "object") {
-              const operation = op as Record<string, unknown>;
-              if (typeof operation.summary === "string") {
-                description = operation.summary;
-                break;
-              } else if (typeof operation.description === "string") {
-                description = operation.description;
-                break;
-              }
-            }
-          }
-        }
-      }
-
-      if (path !== "/" && path !== "/*") {
-        paths.push({ path, description });
-      }
-    }
-  }
-
-  return { valid: errors.length === 0, paths, info, errors };
 }
 
 export function OpenApiImportDialog({
@@ -119,38 +35,35 @@ export function OpenApiImportDialog({
   const [isDragging, setIsDragging] = useState(false);
   const [parsedSpec, setParsedSpec] = useState<{
     spec: unknown;
-    paths: ParsedPath[];
+    paths: string[];
     info: { title?: string; version?: string };
   } | null>(null);
   const [parseErrors, setParseErrors] = useState<string[]>([]);
   const [importing, setImporting] = useState(false);
   const [importResult, setImportResult] = useState<ImportResult | null>(null);
   const { toast } = useToast();
+  const parseIdRef = useRef(0);
 
-  const handleParse = useCallback((text: string) => {
+  const handleParse = useCallback(async (text: string) => {
     setParseErrors([]);
     setParsedSpec(null);
     setImportResult(null);
 
     if (!text.trim()) return;
 
-    try {
-      const spec = JSON.parse(text);
-      const result = parseOpenApiSpec(spec);
+    const currentParseId = ++parseIdRef.current;
+    const result = await parseOpenApiSpec(text);
 
-      if (result.valid) {
-        setParsedSpec({
-          spec,
-          paths: result.paths,
-          info: result.info,
-        });
-      } else {
-        setParseErrors(result.errors);
-      }
-    } catch (e) {
-      setParseErrors([
-        `Invalid JSON: ${e instanceof Error ? e.message : "Parse error"}`,
-      ]);
+    if (currentParseId !== parseIdRef.current) return;
+
+    if (result.valid && result.spec) {
+      setParsedSpec({
+        spec: result.spec,
+        paths: result.paths,
+        info: result.info,
+      });
+    } else {
+      setParseErrors(result.errors);
     }
   }, []);
 
@@ -186,7 +99,7 @@ export function OpenApiImportDialog({
   );
 
   const handleImport = async () => {
-    if (!parsedSpec) return;
+    if (!parsedSpec || importing) return;
 
     setImporting(true);
     try {
@@ -215,6 +128,7 @@ export function OpenApiImportDialog({
   };
 
   const handleClose = () => {
+    parseIdRef.current++;
     setJsonText("");
     setParsedSpec(null);
     setParseErrors([]);
@@ -369,14 +283,9 @@ export function OpenApiImportDialog({
                     {parsedSpec.paths.length !== 1 ? "s" : ""} found:
                   </p>
                   <div className="max-h-32 space-y-1 overflow-y-auto">
-                    {parsedSpec.paths.slice(0, 20).map((p) => (
-                      <div key={p.path} className="text-xs">
-                        <code className="text-gray-12">{p.path}</code>
-                        {p.description && (
-                          <span className="ml-2 text-gray-11">
-                            - {p.description}
-                          </span>
-                        )}
+                    {parsedSpec.paths.slice(0, 20).map((path) => (
+                      <div key={path} className="text-xs">
+                        <code className="text-gray-12">{path}</code>
                       </div>
                     ))}
                     {parsedSpec.paths.length > 20 && (
