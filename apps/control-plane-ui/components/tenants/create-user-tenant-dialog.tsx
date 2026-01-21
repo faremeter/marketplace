@@ -16,6 +16,7 @@ import {
   EyeOpenIcon,
   EyeClosedIcon,
   InfoCircledIcon,
+  UploadIcon,
 } from "@radix-ui/react-icons";
 import { api, ApiError } from "@/lib/api/client";
 import Link from "next/link";
@@ -34,12 +35,23 @@ import {
   maskToken,
 } from "@/lib/auth-header";
 import { type WalletConfig } from "@/lib/wallet";
+import { parseOpenApiSpec } from "@/lib/openapi/parser";
 
 interface Wallet {
   id: number;
   name: string;
   funding_status: string;
   wallet_config: WalletConfig;
+}
+
+interface ImportResult {
+  success: boolean;
+  created: number;
+  linked: number;
+  paths: {
+    created: string[];
+    linked: string[];
+  };
 }
 
 interface CreateUserTenantDialogProps {
@@ -62,6 +74,21 @@ export function CreateUserTenantDialog({
   const router = useRouter();
   const { toast } = useToast();
   const [isCelebrating, setIsCelebrating] = useState(false);
+  const [step, setStep] = useState<1 | 2>(1);
+  const [createdTenantId, setCreatedTenantId] = useState<number | null>(null);
+
+  const [importMode, setImportMode] = useState<"upload" | "paste">("upload");
+  const [jsonText, setJsonText] = useState("");
+  const [isDragging, setIsDragging] = useState(false);
+  const [parsedSpec, setParsedSpec] = useState<{
+    spec: unknown;
+    paths: string[];
+    info: { title?: string; version?: string };
+  } | null>(null);
+  const [parseErrors, setParseErrors] = useState<string[]>([]);
+  const [importing, setImporting] = useState(false);
+  const [importResult, setImportResult] = useState<ImportResult | null>(null);
+  const [isGoingBack, setIsGoingBack] = useState(false);
 
   useEffect(() => {
     if (isCelebrating) {
@@ -143,12 +170,180 @@ export function CreateUserTenantDialog({
   ]);
 
   const attemptClose = useCallback(() => {
+    if (step === 2) {
+      setShowDiscardConfirm(true);
+      return;
+    }
     if (isDirty()) {
       setShowDiscardConfirm(true);
     } else {
       onOpenChange(false);
     }
-  }, [isDirty, onOpenChange]);
+  }, [isDirty, onOpenChange, step]);
+
+  const handleParse = useCallback(async (text: string) => {
+    setParseErrors([]);
+    setParsedSpec(null);
+    setImportResult(null);
+
+    if (!text.trim()) return;
+
+    const result = await parseOpenApiSpec(text);
+
+    if (result.valid && result.spec) {
+      setParsedSpec({
+        spec: result.spec,
+        paths: result.paths,
+        info: result.info,
+      });
+    } else {
+      setParseErrors(result.errors);
+    }
+  }, []);
+
+  const handleFileSelect = useCallback(
+    (file: File) => {
+      if (file.type !== "application/json" && !file.name.endsWith(".json")) {
+        setParseErrors(["Please select a JSON file"]);
+        return;
+      }
+
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const text = e.target?.result as string;
+        setJsonText(text);
+        handleParse(text);
+      };
+      reader.readAsText(file);
+    },
+    [handleParse],
+  );
+
+  const handleDrop = useCallback(
+    (e: React.DragEvent) => {
+      e.preventDefault();
+      setIsDragging(false);
+
+      const file = e.dataTransfer.files[0];
+      if (file) {
+        handleFileSelect(file);
+      }
+    },
+    [handleFileSelect],
+  );
+
+  const handleImport = async () => {
+    if (!parsedSpec) return;
+
+    setImporting(true);
+    setError("");
+
+    const isRetry = createdTenantId !== null;
+    let tenantId = createdTenantId;
+
+    if (!tenantId) {
+      const sanitized = sanitizeProxyName(name);
+      const checkResult = await api
+        .get<{
+          available: boolean;
+        }>(
+          `/api/organizations/${organizationId}/tenants/check-name?name=${encodeURIComponent(sanitized)}`,
+        )
+        .catch(() => ({ available: true }));
+      if (!checkResult.available) {
+        setNameAvailable(false);
+        setError(
+          "This name was just taken. Please go back and choose another.",
+        );
+        setImporting(false);
+        return;
+      }
+
+      try {
+        const created = await api.post<{ id: number }>(
+          `/api/organizations/${organizationId}/tenants`,
+          {
+            name: name.trim(),
+            wallet_id: walletId,
+            backend_url: backendUrl.trim(),
+            upstream_auth_header: getFinalAuthHeader(),
+            upstream_auth_value: getFinalAuthValue(),
+            default_price_usdc: Math.round(
+              (parseFloat(defaultPrice) || 0) * 1_000_000,
+            ),
+            default_scheme: defaultScheme,
+            register_only: true,
+          },
+        );
+        tenantId = created.id;
+        setCreatedTenantId(created.id);
+      } catch (err) {
+        if (err instanceof ApiError && err.data) {
+          const data = err.data as { error?: string };
+          setError(data.error || "Failed to create proxy");
+        } else {
+          setError(
+            err instanceof Error ? err.message : "Failed to create proxy",
+          );
+        }
+        setImporting(false);
+        return;
+      }
+    }
+
+    try {
+      const result = await api.post<ImportResult>(
+        `/api/tenants/${tenantId}/openapi/import`,
+        { spec: parsedSpec.spec },
+      );
+
+      setImportResult(result);
+
+      toast({
+        title: isRetry ? "Endpoints imported" : "Proxy created",
+        description: `Imported ${result.created} endpoint${result.created !== 1 ? "s" : ""}`,
+        variant: "success",
+      });
+
+      refreshOnboardingStatus(organizationId);
+    } catch (err) {
+      if (err instanceof ApiError && err.data) {
+        const data = err.data as { error?: string };
+        setError(data.error || "Failed to import OpenAPI spec");
+      } else {
+        setError(
+          err instanceof Error ? err.message : "Failed to import OpenAPI spec",
+        );
+      }
+    } finally {
+      setImporting(false);
+    }
+  };
+
+  const handleFinishImport = () => {
+    resetForm();
+    onOpenChange(false);
+    onSuccess();
+  };
+
+  const handleGoBack = async () => {
+    if (createdTenantId) {
+      setIsGoingBack(true);
+      try {
+        await api.delete(`/api/tenants/${createdTenantId}`);
+      } catch {
+        toast({
+          title: "Failed to clean up proxy",
+          description: "You may need to delete it manually",
+          variant: "error",
+        });
+      }
+      setIsGoingBack(false);
+    }
+    setError("");
+    setCreatedTenantId(null);
+    setStep(1);
+  };
 
   useEffect(() => {
     if (!name.trim()) {
@@ -205,10 +400,19 @@ export function CreateUserTenantDialog({
     setNameAvailable(null);
     setIsCheckingName(false);
     setIsCelebrating(false);
+    setStep(1);
+    setCreatedTenantId(null);
+    setImportMode("upload");
+    setJsonText("");
+    setParsedSpec(null);
+    setParseErrors([]);
+    setImporting(false);
+    setImportResult(null);
+    setIsGoingBack(false);
   };
 
   const handleOpenChange = (newOpen: boolean) => {
-    if (isSubmitting || isCelebrating) return;
+    if (isSubmitting || isCelebrating || importing || isGoingBack) return;
     if (!newOpen) {
       attemptClose();
       return;
@@ -216,8 +420,19 @@ export function CreateUserTenantDialog({
     onOpenChange(newOpen);
   };
 
-  const confirmDiscard = () => {
+  const confirmDiscard = async () => {
     setShowDiscardConfirm(false);
+    if (createdTenantId) {
+      try {
+        await api.delete(`/api/tenants/${createdTenantId}`);
+      } catch {
+        toast({
+          title: "Failed to clean up proxy",
+          description: "You may need to delete it manually",
+          variant: "error",
+        });
+      }
+    }
     resetForm();
     onOpenChange(false);
   };
@@ -297,38 +512,61 @@ export function CreateUserTenantDialog({
       return;
     }
 
-    setIsSubmitting(true);
-    const submitStartTime = Date.now();
-
-    // Recheck name availability before submitting
-    try {
+    if (registerOnly) {
+      setIsSubmitting(true);
       const sanitized = sanitizeProxyName(name);
-      const result = await api.get<{ available: boolean }>(
-        `/api/organizations/${organizationId}/tenants/check-name?name=${encodeURIComponent(sanitized)}`,
-      );
-      if (!result.available) {
+      const checkResult = await api
+        .get<{
+          available: boolean;
+        }>(
+          `/api/organizations/${organizationId}/tenants/check-name?name=${encodeURIComponent(sanitized)}`,
+        )
+        .catch(() => ({ available: true }));
+      if (!checkResult.available) {
         setNameAvailable(false);
         setError("This name was just taken. Please choose another.");
         setIsSubmitting(false);
         return;
       }
-    } catch {
-      // Continue with submission if check fails
+      setIsSubmitting(false);
+      setStep(2);
+      return;
+    }
+
+    setIsSubmitting(true);
+    const submitStartTime = Date.now();
+
+    const sanitized = sanitizeProxyName(name);
+    const checkResult = await api
+      .get<{
+        available: boolean;
+      }>(
+        `/api/organizations/${organizationId}/tenants/check-name?name=${encodeURIComponent(sanitized)}`,
+      )
+      .catch(() => ({ available: true }));
+    if (!checkResult.available) {
+      setNameAvailable(false);
+      setError("This name was just taken. Please choose another.");
+      setIsSubmitting(false);
+      return;
     }
 
     try {
-      await api.post(`/api/organizations/${organizationId}/tenants`, {
-        name: name.trim(),
-        wallet_id: walletId,
-        backend_url: backendUrl.trim(),
-        upstream_auth_header: finalHeader,
-        upstream_auth_value: finalValue,
-        default_price_usdc: Math.round(
-          (parseFloat(defaultPrice) || 0) * 1_000_000,
-        ),
-        default_scheme: defaultScheme,
-        register_only: registerOnly,
-      });
+      await api.post<{ id: number }>(
+        `/api/organizations/${organizationId}/tenants`,
+        {
+          name: name.trim(),
+          wallet_id: walletId,
+          backend_url: backendUrl.trim(),
+          upstream_auth_header: finalHeader,
+          upstream_auth_value: finalValue,
+          default_price_usdc: Math.round(
+            (parseFloat(defaultPrice) || 0) * 1_000_000,
+          ),
+          default_scheme: defaultScheme,
+          register_only: registerOnly,
+        },
+      );
       toast({
         title: "Proxy created",
         description: `${name.trim()} has been created successfully.`,
@@ -367,17 +605,43 @@ export function CreateUserTenantDialog({
         <Dialog.Content
           className="fixed left-1/2 top-1/2 z-50 max-h-[85vh] w-full max-w-lg -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-lg border border-gray-6 bg-gray-1 p-6 shadow-xl"
           onInteractOutside={(e) => {
-            if (isSubmitting || isCelebrating || isDirty()) {
+            if (
+              isSubmitting ||
+              isCelebrating ||
+              importing ||
+              isGoingBack ||
+              step === 2 ||
+              isDirty()
+            ) {
               e.preventDefault();
-              if (!isSubmitting && !isCelebrating && isDirty()) {
+              if (
+                !isSubmitting &&
+                !isCelebrating &&
+                !importing &&
+                !isGoingBack &&
+                (step === 2 || isDirty())
+              ) {
                 setShowDiscardConfirm(true);
               }
             }
           }}
           onEscapeKeyDown={(e) => {
-            if (isSubmitting || isCelebrating || isDirty()) {
+            if (
+              isSubmitting ||
+              isCelebrating ||
+              importing ||
+              isGoingBack ||
+              step === 2 ||
+              isDirty()
+            ) {
               e.preventDefault();
-              if (!isSubmitting && !isCelebrating && isDirty()) {
+              if (
+                !isSubmitting &&
+                !isCelebrating &&
+                !importing &&
+                !isGoingBack &&
+                (step === 2 || isDirty())
+              ) {
                 setShowDiscardConfirm(true);
               }
             }
@@ -436,12 +700,255 @@ export function CreateUserTenantDialog({
                 </button>
               </div>
             </div>
+          ) : step === 2 ? (
+            <>
+              <div className="mb-6 flex items-center justify-between">
+                <div>
+                  <Dialog.Title className="text-lg font-semibold text-gray-12">
+                    New Proxy
+                  </Dialog.Title>
+                  <p className="text-xs text-gray-11 mt-0.5">Step 2 of 2</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={attemptClose}
+                  className="rounded p-1 text-gray-11 hover:bg-gray-4 hover:text-gray-12"
+                >
+                  <Cross2Icon className="h-4 w-4" />
+                </button>
+              </div>
+
+              {importResult ? (
+                <div className="space-y-4">
+                  <div className="flex items-center gap-2 text-green-400">
+                    <CheckIcon className="h-5 w-5" />
+                    <span className="font-medium">Import Complete</span>
+                  </div>
+                  <div className="rounded-md border border-gray-6 bg-gray-3 p-4 text-sm">
+                    <p className="text-gray-12">
+                      Created {importResult.created} endpoint
+                      {importResult.created !== 1 ? "s" : ""}
+                    </p>
+                    {importResult.linked > 0 && (
+                      <p className="text-gray-11">
+                        Linked {importResult.linked} existing endpoint
+                        {importResult.linked !== 1 ? "s" : ""}
+                      </p>
+                    )}
+                  </div>
+                  <div className="flex justify-end">
+                    <button
+                      onClick={handleFinishImport}
+                      className="inline-flex items-center justify-center gap-2 rounded-md bg-corbits-orange px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-corbits-orange/90"
+                    >
+                      Done
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  <div>
+                    <h3 className="text-sm font-medium text-gray-12 mb-2">
+                      Import OpenAPI Spec
+                    </h3>
+                    <p className="text-xs text-gray-11">
+                      Upload your OpenAPI specification to define endpoints for
+                      this proxy.
+                    </p>
+                  </div>
+
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setImportMode("upload")}
+                      className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
+                        importMode === "upload"
+                          ? "bg-gray-4 text-gray-12"
+                          : "text-gray-11 hover:bg-gray-3 hover:text-gray-12"
+                      }`}
+                    >
+                      Upload File
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setImportMode("paste")}
+                      className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
+                        importMode === "paste"
+                          ? "bg-gray-4 text-gray-12"
+                          : "text-gray-11 hover:bg-gray-3 hover:text-gray-12"
+                      }`}
+                    >
+                      Paste JSON
+                    </button>
+                  </div>
+
+                  {importMode === "upload" ? (
+                    <div
+                      onDrop={handleDrop}
+                      onDragOver={(e) => {
+                        e.preventDefault();
+                        setIsDragging(true);
+                      }}
+                      onDragLeave={() => setIsDragging(false)}
+                      className={`flex flex-col items-center justify-center rounded-lg border-2 border-dashed p-8 transition-colors ${
+                        isDragging
+                          ? "border-accent-9 bg-accent-9/10"
+                          : "border-gray-6 hover:border-gray-5"
+                      }`}
+                    >
+                      <UploadIcon className="mb-2 h-8 w-8 text-gray-11" />
+                      <p className="text-sm text-gray-11">
+                        Drag and drop your OpenAPI JSON file here
+                      </p>
+                      <p className="mt-1 text-xs text-gray-11">or</p>
+                      <label className="mt-2 cursor-pointer rounded-md bg-gray-4 px-3 py-1.5 text-sm font-medium text-gray-12 hover:bg-gray-5">
+                        Browse Files
+                        <input
+                          type="file"
+                          accept=".json,application/json"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (file) handleFileSelect(file);
+                          }}
+                          className="hidden"
+                        />
+                      </label>
+                    </div>
+                  ) : (
+                    <div>
+                      <textarea
+                        value={jsonText}
+                        onChange={(e) => {
+                          setJsonText(e.target.value);
+                          handleParse(e.target.value);
+                        }}
+                        placeholder='{"openapi": "3.0.3", "info": {...}, "paths": {...}}'
+                        className="h-48 w-full rounded-md border border-gray-6 bg-gray-3 px-3 py-2 font-mono text-sm text-gray-12 placeholder-gray-9 focus:border-accent-8 focus:outline-none focus:ring-1 focus:ring-accent-8"
+                      />
+                    </div>
+                  )}
+
+                  {parseErrors.length > 0 && (
+                    <div className="rounded-md border border-red-800 bg-red-900/20 p-3">
+                      <p className="mb-1 text-sm font-medium text-red-400">
+                        Validation Errors:
+                      </p>
+                      <ul className="list-inside list-disc space-y-0.5 text-xs text-red-300">
+                        {parseErrors.map((err, i) => (
+                          <li key={i}>{err}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+
+                  {error && (
+                    <div className="rounded-md border border-red-800 bg-red-900/20 px-3 py-2 text-sm text-red-400">
+                      {error}
+                    </div>
+                  )}
+
+                  {parsedSpec && (
+                    <div className="rounded-md border border-gray-6 bg-gray-3 p-4">
+                      <div className="mb-3 flex items-center justify-between">
+                        <div>
+                          <p className="text-sm font-medium text-gray-12">
+                            {parsedSpec.info.title || "Unnamed Spec"}
+                          </p>
+                          {parsedSpec.info.version && (
+                            <p className="text-xs text-gray-11">
+                              Version: {parsedSpec.info.version}
+                            </p>
+                          )}
+                        </div>
+                        <span className="rounded-full bg-green-900/50 px-2 py-0.5 text-xs text-green-400">
+                          Valid
+                        </span>
+                      </div>
+                      <p className="mb-2 text-xs font-medium text-gray-11">
+                        {parsedSpec.paths.length} path
+                        {parsedSpec.paths.length !== 1 ? "s" : ""} found:
+                      </p>
+                      <div className="max-h-32 space-y-1 overflow-y-auto">
+                        {parsedSpec.paths.slice(0, 20).map((path) => (
+                          <div key={path} className="text-xs">
+                            <code className="text-gray-12">{path}</code>
+                          </div>
+                        ))}
+                        {parsedSpec.paths.length > 20 && (
+                          <p className="text-xs text-gray-11">
+                            ... and {parsedSpec.paths.length - 20} more
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="flex justify-between pt-2">
+                    <button
+                      type="button"
+                      onClick={handleGoBack}
+                      disabled={importing || isGoingBack}
+                      className="inline-flex items-center gap-2 rounded-md border border-gray-6 px-4 py-2 text-sm text-gray-11 hover:bg-gray-3 disabled:opacity-50"
+                    >
+                      {isGoingBack ? (
+                        <div className="h-4 w-4 animate-spin rounded-full border-2 border-gray-6 border-t-gray-11" />
+                      ) : (
+                        <svg
+                          className="h-4 w-4"
+                          fill="none"
+                          viewBox="0 0 24 24"
+                          stroke="currentColor"
+                          strokeWidth={2}
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            d="M11 17l-5-5m0 0l5-5m-5 5h12"
+                          />
+                        </svg>
+                      )}
+                      Back
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleImport}
+                      disabled={!parsedSpec || importing || isGoingBack}
+                      className="inline-flex items-center justify-center gap-2 rounded-md bg-corbits-orange px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-corbits-orange/90 disabled:cursor-not-allowed disabled:opacity-70"
+                    >
+                      {importing ? "Importing..." : "Import & Finish"}
+                      {importing ? (
+                        <div className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />
+                      ) : (
+                        <svg
+                          className="h-4 w-4"
+                          fill="none"
+                          viewBox="0 0 24 24"
+                          stroke="currentColor"
+                          strokeWidth={2}
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            d="M13 7l5 5m0 0l-5 5m5-5H6"
+                          />
+                        </svg>
+                      )}
+                    </button>
+                  </div>
+                </div>
+              )}
+            </>
           ) : (
             <>
               <div className="mb-6 flex items-center justify-between">
-                <Dialog.Title className="text-lg font-semibold text-gray-12">
-                  New Proxy
-                </Dialog.Title>
+                <div>
+                  <Dialog.Title className="text-lg font-semibold text-gray-12">
+                    New Proxy
+                  </Dialog.Title>
+                  {registerOnly && (
+                    <p className="text-xs text-gray-11 mt-0.5">Step 1 of 2</p>
+                  )}
+                </div>
                 <button
                   type="button"
                   onClick={attemptClose}
@@ -988,7 +1495,13 @@ export function CreateUserTenantDialog({
                     disabled={isSubmitting}
                     className="inline-flex items-center justify-center gap-2 rounded-md bg-corbits-orange px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-corbits-orange/90 disabled:cursor-not-allowed disabled:opacity-70"
                   >
-                    {isSubmitting ? "Creating..." : "Create Proxy"}
+                    {isSubmitting
+                      ? registerOnly
+                        ? "Validating..."
+                        : "Creating..."
+                      : registerOnly
+                        ? "Continue"
+                        : "Create Proxy"}
                     {isSubmitting ? (
                       <div className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />
                     ) : (
