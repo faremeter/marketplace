@@ -74,14 +74,14 @@ export default function AdminOrganizationsPage() {
     );
   };
 
-  const filteredOrgs =
-    organizations?.filter(
-      (org) =>
-        org.name.toLowerCase().includes(search.toLowerCase()) ||
-        org.slug.toLowerCase().includes(search.toLowerCase()),
-    ) ?? [];
-
   const sortedOrgs = useMemo(() => {
+    const filteredOrgs =
+      organizations?.filter(
+        (org) =>
+          org.name.toLowerCase().includes(search.toLowerCase()) ||
+          org.slug.toLowerCase().includes(search.toLowerCase()),
+      ) ?? [];
+
     return [...filteredOrgs].sort((a, b) => {
       let comparison = 0;
 
@@ -113,7 +113,7 @@ export default function AdminOrganizationsPage() {
 
       return sortDirection === "asc" ? comparison : -comparison;
     });
-  }, [filteredOrgs, sortColumn, sortDirection]);
+  }, [organizations, search, sortColumn, sortDirection]);
 
   const totalCount = sortedOrgs.length;
   const totalPages = Math.ceil(totalCount / PAGE_SIZE);

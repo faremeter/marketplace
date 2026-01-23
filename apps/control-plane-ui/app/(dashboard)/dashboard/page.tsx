@@ -314,8 +314,8 @@ export default function DashboardPage() {
                     </h2>
                     <p className="mt-1 text-[13px] text-gray-11">
                       Missing out on earnings and analytics from registered
-                      proxies? Go live with Corbits and we'll take care of every
-                      last detail.
+                      proxies? Go live with Corbits and we&apos;ll take care of
+                      every last detail.
                     </p>
                   </div>
                   <RegisteredProxiesTable
