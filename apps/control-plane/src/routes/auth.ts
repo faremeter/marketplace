@@ -30,21 +30,6 @@ authRoutes.post(
     const body = c.req.valid("json");
     const email = normalizeEmail(body.email);
 
-    if (process.env.NODE_ENV === "production") {
-      const waitlistEntry = await db
-        .selectFrom("waitlist")
-        .select(["id", "whitelisted"])
-        .where("email", "=", email)
-        .executeTakeFirst();
-
-      if (!waitlistEntry || !waitlistEntry.whitelisted) {
-        return c.json(
-          { error: "Please join the waitlist first to get access" },
-          403,
-        );
-      }
-    }
-
     const existing = await db
       .selectFrom("users")
       .select("id")

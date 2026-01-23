@@ -67,18 +67,6 @@ function SignupForm() {
         Get started with Corbits API
       </p>
 
-      <div className="mb-4 rounded-md border border-corbits-orange bg-white/5 px-4 py-3 text-[13px] text-gray-11">
-        <strong>Beta Access:</strong> Signups are currently limited to users on
-        our waitlist.{" "}
-        <Link
-          href="/"
-          className="text-corbits-orange underline hover:no-underline"
-        >
-          Join the waitlist
-        </Link>{" "}
-        if you haven&apos;t already.
-      </div>
-
       {error && (
         <div className="mb-4 rounded-md border border-red-500/20 bg-red-500/10 px-4 py-3 text-[13px] text-red-400">
           {error}
