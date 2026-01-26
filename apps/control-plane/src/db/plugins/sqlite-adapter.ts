@@ -20,7 +20,7 @@ const BOOLEAN_COLUMNS = new Set([
 
 const ARRAY_COLUMNS = new Set(["openapi_source_paths"]);
 
-const JSON_COLUMNS = new Set(["openapi_spec", "wallet_config"]);
+const JSON_COLUMNS = new Set(["openapi_spec", "wallet_config", "email_config"]);
 
 function transformPrimitive(value: unknown): unknown {
   if (typeof value === "boolean") {

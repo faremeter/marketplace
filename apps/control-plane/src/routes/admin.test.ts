@@ -3517,3 +3517,193 @@ await t.test("GET /api/admin/analytics/earnings", async (t) => {
     t.equal(res.status, 200);
   });
 });
+
+await t.test("GET /api/admin/settings/email", async (t) => {
+  await t.test("returns 404 if no settings row exists", async (t) => {
+    const admin = await createUser("admin@example.com", true);
+
+    const res = await app.request("/api/admin/settings/email", {
+      headers: { Cookie: `auth_token=${admin.token}` },
+    });
+    t.equal(res.status, 404);
+  });
+
+  await t.test("returns unconfigured state when no email_config", async (t) => {
+    const admin = await createUser("admin@example.com", true);
+    await createAdminSettings();
+
+    const res = await app.request("/api/admin/settings/email", {
+      headers: { Cookie: `auth_token=${admin.token}` },
+    });
+    t.equal(res.status, 200);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const data = (await res.json()) as any;
+    t.equal(data.configured, false);
+    t.equal(data.from_email, null);
+    t.equal(data.site_url, null);
+    t.equal(data.template_ids, null);
+  });
+
+  await t.test(
+    "returns configured state when email_config exists",
+    async (t) => {
+      const admin = await createUser("admin@example.com", true);
+      await createAdminSettings();
+      await db
+        .updateTable("admin_settings")
+        .set({
+          email_config: JSON.stringify({
+            from_email: "noreply@test.com",
+            site_url: "https://test.com",
+            template_ids: {
+              verification: 123,
+              welcome: 456,
+              invitation: 789,
+              password_reset: 101,
+            },
+          }),
+        })
+        .where("id", "=", 1)
+        .execute();
+
+      const res = await app.request("/api/admin/settings/email", {
+        headers: { Cookie: `auth_token=${admin.token}` },
+      });
+      t.equal(res.status, 200);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const data = (await res.json()) as any;
+      t.equal(data.from_email, "noreply@test.com");
+      t.equal(data.site_url, "https://test.com");
+      t.ok(data.template_ids);
+      t.equal(data.template_ids.verification, 123);
+      t.equal(data.template_ids.welcome, 456);
+      t.equal(data.template_ids.invitation, 789);
+      t.equal(data.template_ids.password_reset, 101);
+    },
+  );
+
+  await t.test("requires admin", async (t) => {
+    const user = await createUser("user@example.com", false);
+
+    const res = await app.request("/api/admin/settings/email", {
+      headers: { Cookie: `auth_token=${user.token}` },
+    });
+    t.equal(res.status, 403);
+  });
+});
+
+await t.test("PUT /api/admin/settings/email", async (t) => {
+  await t.test("creates email config", async (t) => {
+    const admin = await createUser("admin@example.com", true);
+    await createAdminSettings();
+
+    const res = await app.request("/api/admin/settings/email", {
+      method: "PUT",
+      headers: {
+        Cookie: `auth_token=${admin.token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        from_email: "noreply@example.com",
+        site_url: "https://example.com",
+        template_ids: {
+          verification: 100,
+          welcome: 200,
+        },
+      }),
+    });
+    t.equal(res.status, 200);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const data = (await res.json()) as any;
+    t.equal(data.from_email, "noreply@example.com");
+    t.equal(data.site_url, "https://example.com");
+    t.equal(data.template_ids.verification, 100);
+    t.equal(data.template_ids.welcome, 200);
+    t.equal(data.template_ids.invitation, 0);
+    t.equal(data.template_ids.password_reset, 0);
+  });
+
+  await t.test("merges partial updates", async (t) => {
+    const admin = await createUser("admin@example.com", true);
+    await createAdminSettings();
+    await db
+      .updateTable("admin_settings")
+      .set({
+        email_config: JSON.stringify({
+          from_email: "old@test.com",
+          site_url: "https://old.com",
+          template_ids: {
+            verification: 1,
+            welcome: 2,
+            invitation: 3,
+            password_reset: 4,
+          },
+        }),
+      })
+      .where("id", "=", 1)
+      .execute();
+
+    const res = await app.request("/api/admin/settings/email", {
+      method: "PUT",
+      headers: {
+        Cookie: `auth_token=${admin.token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        from_email: "new@test.com",
+        template_ids: { verification: 999 },
+      }),
+    });
+    t.equal(res.status, 200);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const data = (await res.json()) as any;
+    t.equal(data.from_email, "new@test.com");
+    t.ok(data.site_url); // Preserved from previous config
+    t.ok(data.template_ids);
+    t.equal(data.template_ids.verification, 999);
+  });
+
+  await t.test("validates email format", async (t) => {
+    const admin = await createUser("admin@example.com", true);
+    await createAdminSettings();
+
+    const res = await app.request("/api/admin/settings/email", {
+      method: "PUT",
+      headers: {
+        Cookie: `auth_token=${admin.token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ from_email: "not-an-email" }),
+    });
+    t.equal(res.status, 400);
+  });
+
+  await t.test("validates URL format", async (t) => {
+    const admin = await createUser("admin@example.com", true);
+    await createAdminSettings();
+
+    const res = await app.request("/api/admin/settings/email", {
+      method: "PUT",
+      headers: {
+        Cookie: `auth_token=${admin.token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ site_url: "not-a-url" }),
+    });
+    t.equal(res.status, 400);
+  });
+
+  await t.test("requires admin", async (t) => {
+    const user = await createUser("user@example.com", false);
+
+    const res = await app.request("/api/admin/settings/email", {
+      method: "PUT",
+      headers: {
+        Cookie: `auth_token=${user.token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ from_email: "test@test.com" }),
+    });
+    t.equal(res.status, 403);
+  });
+});

@@ -38,6 +38,19 @@ interface AdminSettings {
   updatedAt: string;
 }
 
+interface EmailSettings {
+  configured: boolean;
+  from_email: string | null;
+  site_url: string | null;
+  has_api_key: boolean;
+  template_ids: {
+    verification: number;
+    welcome: number;
+    invitation: number;
+    password_reset: number;
+  } | null;
+}
+
 interface ChainBalances {
   native: string;
   usdc: string;
@@ -653,6 +666,311 @@ function MasterWalletDisplay({
   );
 }
 
+function EmailSettingsSection({
+  emailSettings,
+  isLoading,
+  onSave,
+  isSaving,
+}: {
+  emailSettings: EmailSettings | undefined;
+  isLoading: boolean;
+  onSave: (data: {
+    from_email?: string;
+    site_url?: string;
+    template_ids?: {
+      verification?: number;
+      welcome?: number;
+      invitation?: number;
+      password_reset?: number;
+    };
+  }) => Promise<void>;
+  isSaving: boolean;
+}) {
+  const [isEditing, setIsEditing] = useState(false);
+  const [fromEmail, setFromEmail] = useState("");
+  const [siteUrl, setSiteUrl] = useState("");
+  const [verificationId, setVerificationId] = useState("");
+  const [welcomeId, setWelcomeId] = useState("");
+  const [invitationId, setInvitationId] = useState("");
+  const [passwordResetId, setPasswordResetId] = useState("");
+
+  const handleEdit = () => {
+    setFromEmail(emailSettings?.from_email || "");
+    setSiteUrl(emailSettings?.site_url || "");
+    setVerificationId(
+      emailSettings?.template_ids?.verification?.toString() || "",
+    );
+    setWelcomeId(emailSettings?.template_ids?.welcome?.toString() || "");
+    setInvitationId(emailSettings?.template_ids?.invitation?.toString() || "");
+    setPasswordResetId(
+      emailSettings?.template_ids?.password_reset?.toString() || "",
+    );
+    setIsEditing(true);
+  };
+
+  const handleCancel = () => {
+    setIsEditing(false);
+  };
+
+  const handleSave = async () => {
+    await onSave({
+      from_email: fromEmail || undefined,
+      site_url: siteUrl || undefined,
+      template_ids: {
+        verification: verificationId ? parseInt(verificationId) : undefined,
+        welcome: welcomeId ? parseInt(welcomeId) : undefined,
+        invitation: invitationId ? parseInt(invitationId) : undefined,
+        password_reset: passwordResetId ? parseInt(passwordResetId) : undefined,
+      },
+    });
+    setIsEditing(false);
+  };
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-8">
+        <div className="h-6 w-6 animate-spin rounded-full border-2 border-gray-6 border-t-accent-9" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <div>
+          <h3 className="text-sm font-medium text-gray-12">Email Settings</h3>
+          <p className="text-xs text-gray-11 mt-1">
+            Configure Postmark email delivery for verification, invitations, and
+            password resets.
+          </p>
+        </div>
+        {!isEditing && (
+          <button
+            onClick={handleEdit}
+            className="flex items-center gap-2 rounded-md border border-gray-6 px-3 py-1.5 text-sm text-gray-11 hover:bg-gray-3"
+          >
+            <Pencil1Icon className="h-3.5 w-3.5" />
+            {emailSettings?.configured ? "Edit" : "Configure"}
+          </button>
+        )}
+      </div>
+
+      {!emailSettings?.has_api_key && (
+        <div className="rounded-lg border border-amber-800 bg-amber-900/20 p-4">
+          <p className="text-sm text-amber-400">
+            POSTMARK_API_KEY environment variable is not set. Emails will not be
+            sent until this is configured on the server.
+          </p>
+        </div>
+      )}
+
+      {isEditing ? (
+        <div className="space-y-4">
+          <div className="rounded-lg border border-gray-6 bg-gray-2 p-4">
+            <label className="block text-xs text-gray-11 mb-2">
+              From Email Address
+            </label>
+            <input
+              type="email"
+              value={fromEmail}
+              onChange={(e) => setFromEmail(e.target.value)}
+              placeholder="noreply@example.com"
+              className="w-full rounded-md border border-gray-6 bg-gray-3 px-3 py-2 text-sm text-gray-12 placeholder:text-gray-8 focus:outline-none focus:border-accent-8"
+            />
+          </div>
+
+          <div className="rounded-lg border border-gray-6 bg-gray-2 p-4">
+            <label className="block text-xs text-gray-11 mb-2">Site URL</label>
+            <input
+              type="url"
+              value={siteUrl}
+              onChange={(e) => setSiteUrl(e.target.value)}
+              placeholder="https://example.com"
+              className="w-full rounded-md border border-gray-6 bg-gray-3 px-3 py-2 text-sm text-gray-12 placeholder:text-gray-8 focus:outline-none focus:border-accent-8"
+            />
+            <p className="mt-1 text-xs text-gray-11">
+              Base URL for links in emails (verification, password reset, etc.)
+            </p>
+          </div>
+
+          <div className="rounded-lg border border-gray-6 bg-gray-2 p-4">
+            <label className="block text-xs text-gray-11 mb-3">
+              Postmark Template IDs
+            </label>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-xs text-gray-11 mb-1">
+                  Email Verification
+                </label>
+                <input
+                  type="number"
+                  value={verificationId}
+                  onChange={(e) => setVerificationId(e.target.value)}
+                  placeholder="Template ID"
+                  className="w-full rounded-md border border-gray-6 bg-gray-3 px-3 py-2 text-sm text-gray-12 placeholder:text-gray-8 focus:outline-none focus:border-accent-8"
+                />
+                <p className="mt-1 text-xs text-gray-8">
+                  Variables:{" "}
+                  <code className="text-gray-11">verification_url</code>,{" "}
+                  <code className="text-gray-11">user_email</code>
+                </p>
+              </div>
+              <div>
+                <label className="block text-xs text-gray-11 mb-1">
+                  Welcome
+                </label>
+                <input
+                  type="number"
+                  value={welcomeId}
+                  onChange={(e) => setWelcomeId(e.target.value)}
+                  placeholder="Template ID"
+                  className="w-full rounded-md border border-gray-6 bg-gray-3 px-3 py-2 text-sm text-gray-12 placeholder:text-gray-8 focus:outline-none focus:border-accent-8"
+                />
+                <p className="mt-1 text-xs text-gray-8">
+                  Variables: <code className="text-gray-11">user_email</code>,{" "}
+                  <code className="text-gray-11">login_url</code>
+                </p>
+              </div>
+              <div>
+                <label className="block text-xs text-gray-11 mb-1">
+                  Organization Invitation
+                </label>
+                <input
+                  type="number"
+                  value={invitationId}
+                  onChange={(e) => setInvitationId(e.target.value)}
+                  placeholder="Template ID"
+                  className="w-full rounded-md border border-gray-6 bg-gray-3 px-3 py-2 text-sm text-gray-12 placeholder:text-gray-8 focus:outline-none focus:border-accent-8"
+                />
+                <p className="mt-1 text-xs text-gray-8">
+                  Variables:{" "}
+                  <code className="text-gray-11">invitation_url</code>,{" "}
+                  <code className="text-gray-11">organization_name</code>,{" "}
+                  <code className="text-gray-11">inviter_email</code>,{" "}
+                  <code className="text-gray-11">role</code>
+                </p>
+              </div>
+              <div>
+                <label className="block text-xs text-gray-11 mb-1">
+                  Password Reset
+                </label>
+                <input
+                  type="number"
+                  value={passwordResetId}
+                  onChange={(e) => setPasswordResetId(e.target.value)}
+                  placeholder="Template ID"
+                  className="w-full rounded-md border border-gray-6 bg-gray-3 px-3 py-2 text-sm text-gray-12 placeholder:text-gray-8 focus:outline-none focus:border-accent-8"
+                />
+                <p className="mt-1 text-xs text-gray-8">
+                  Variables: <code className="text-gray-11">reset_url</code>,{" "}
+                  <code className="text-gray-11">user_email</code>,{" "}
+                  <code className="text-gray-11">expires_in_hours</code>
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex justify-end gap-3">
+            <button
+              onClick={handleCancel}
+              className="rounded-md border border-gray-6 px-4 py-2 text-sm text-gray-11 hover:bg-gray-3"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleSave}
+              disabled={isSaving}
+              className="rounded-md bg-white px-4 py-2 text-sm font-medium text-black shadow-button transition-colors hover:bg-white/90 disabled:opacity-50"
+            >
+              {isSaving ? "Saving..." : "Save"}
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          <div className="rounded-lg border border-gray-6 bg-gray-2 p-4">
+            <label className="block text-xs text-gray-11 mb-1">
+              From Email
+            </label>
+            <p className="text-sm text-gray-12">
+              {emailSettings?.from_email || (
+                <span className="text-gray-8">Not configured</span>
+              )}
+            </p>
+          </div>
+
+          <div className="rounded-lg border border-gray-6 bg-gray-2 p-4">
+            <label className="block text-xs text-gray-11 mb-1">Site URL</label>
+            <p className="text-sm text-gray-12">
+              {emailSettings?.site_url || (
+                <span className="text-gray-8">Not configured</span>
+              )}
+            </p>
+          </div>
+
+          <div className="rounded-lg border border-gray-6 bg-gray-2 p-4">
+            <label className="block text-xs text-gray-11 mb-2">
+              Template IDs
+            </label>
+            <div className="grid gap-2 sm:grid-cols-4">
+              <div>
+                <span className="text-xs text-gray-11">Verification</span>
+                <p className="text-sm font-mono text-gray-12">
+                  {emailSettings?.template_ids?.verification || (
+                    <span className="text-gray-8">-</span>
+                  )}
+                </p>
+              </div>
+              <div>
+                <span className="text-xs text-gray-11">Welcome</span>
+                <p className="text-sm font-mono text-gray-12">
+                  {emailSettings?.template_ids?.welcome || (
+                    <span className="text-gray-8">-</span>
+                  )}
+                </p>
+              </div>
+              <div>
+                <span className="text-xs text-gray-11">Invitation</span>
+                <p className="text-sm font-mono text-gray-12">
+                  {emailSettings?.template_ids?.invitation || (
+                    <span className="text-gray-8">-</span>
+                  )}
+                </p>
+              </div>
+              <div>
+                <span className="text-xs text-gray-11">Password Reset</span>
+                <p className="text-sm font-mono text-gray-12">
+                  {emailSettings?.template_ids?.password_reset || (
+                    <span className="text-gray-8">-</span>
+                  )}
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 text-sm">
+            {emailSettings?.configured ? (
+              <>
+                <CheckCircledIcon className="h-4 w-4 text-green-400" />
+                <span className="text-green-400">
+                  Email delivery configured
+                </span>
+              </>
+            ) : (
+              <>
+                <CrossCircledIcon className="h-4 w-4 text-gray-8" />
+                <span className="text-gray-11">
+                  Email delivery not configured
+                </span>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function AdminSettingsPage() {
   const { user } = useAuth();
   const { toast } = useToast();
@@ -674,6 +992,12 @@ export default function AdminSettingsPage() {
     api.get,
     { refreshInterval: 60000 },
   );
+
+  const {
+    data: emailSettings,
+    isLoading: emailLoading,
+    mutate: mutateEmail,
+  } = useSWR<EmailSettings>("/api/admin/settings/email", api.get);
 
   const handleSaveWallet = async (config: EcosystemConfig) => {
     setIsSaving(true);
@@ -743,6 +1067,39 @@ export default function AdminSettingsPage() {
           error instanceof Error
             ? error.message
             : "Failed to update minimum USDC",
+        variant: "error",
+      });
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleSaveEmailSettings = async (data: {
+    from_email?: string;
+    site_url?: string;
+    template_ids?: {
+      verification?: number;
+      welcome?: number;
+      invitation?: number;
+      password_reset?: number;
+    };
+  }) => {
+    setIsSaving(true);
+    try {
+      await api.put("/api/admin/settings/email", data);
+      await mutateEmail();
+      toast({
+        title: "Email settings updated",
+        description: "Email configuration has been saved.",
+        variant: "success",
+      });
+    } catch (error) {
+      toast({
+        title: "Error",
+        description:
+          error instanceof Error
+            ? error.message
+            : "Failed to update email settings",
         variant: "error",
       });
     } finally {
@@ -822,6 +1179,16 @@ export default function AdminSettingsPage() {
               balancesLoading={balancesLoading}
               mutateBalances={mutateBalances}
               onConfigureWallet={() => setShowWalletModal(true)}
+            />
+          </section>
+
+          {/* Email Settings */}
+          <section className="rounded-lg border border-gray-6 bg-gray-3 p-6">
+            <EmailSettingsSection
+              emailSettings={emailSettings}
+              isLoading={emailLoading}
+              onSave={handleSaveEmailSettings}
+              isSaving={isSaving}
             />
           </section>
         </div>

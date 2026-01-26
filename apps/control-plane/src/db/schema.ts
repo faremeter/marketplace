@@ -26,6 +26,7 @@ export interface Database {
   admin_settings: AdminSettingsTable;
   wallets: WalletsTable;
   waitlist: WaitlistTable;
+  password_reset_tokens: PasswordResetTokensTable;
 }
 
 export interface OrganizationsTable {
@@ -147,6 +148,7 @@ export interface AdminSettingsTable {
   wallet_config: ColumnType<unknown, string | undefined, string> | null;
   minimum_balance_sol: ColumnType<number, number | undefined, number>;
   minimum_balance_usdc: ColumnType<number, number | undefined, number>;
+  email_config: ColumnType<unknown, string | undefined, string> | null;
   created_at: AutoDateColumn;
   updated_at: OptionalDateColumn;
 }
@@ -167,5 +169,14 @@ export interface WaitlistTable {
   email: string;
   whitelisted: ColumnType<boolean, boolean | undefined, boolean>;
   signed_up: ColumnType<boolean, boolean | undefined, boolean>;
+  created_at: AutoDateColumn;
+}
+
+export interface PasswordResetTokensTable {
+  id: ColumnType<number, never, never>;
+  user_id: number;
+  token: string;
+  expires_at: DateColumn;
+  used_at: NullableDateColumn;
   created_at: AutoDateColumn;
 }

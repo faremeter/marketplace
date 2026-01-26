@@ -17,6 +17,7 @@ import { cleanupAccount, renameAccount } from "./corbits-dash.js";
 import { logger } from "../logger.js";
 import { db } from "../db/instance.js";
 import { toDomainInfo, buildTenantDomain } from "./domain.js";
+import { sendEmail, type EmailType, type EmailTemplateVars } from "./email.js";
 
 let boss: PgBoss | null = null;
 
@@ -26,6 +27,7 @@ const TENANT_RENAME_QUEUE = "tenant-rename";
 const BALANCE_CHECK_QUEUE = "balance-check";
 const BALANCE_AUDIT_QUEUE = "balance-audit";
 const TRANSACTION_RECORDING_QUEUE = "transaction-recording";
+const EMAIL_QUEUE = "email-send";
 
 interface CertProvisioningJob {
   nodeIds: number[];
@@ -64,6 +66,12 @@ export interface TransactionRecordingJob {
   client_ip: string | null;
   request_method: string | null;
   metadata: Record<string, unknown> | null;
+}
+
+interface EmailJob {
+  to: string;
+  type: EmailType;
+  variables: EmailTemplateVars[EmailType];
 }
 
 export async function checkAndUpdateTenantStatus(
@@ -191,6 +199,9 @@ export async function startQueue(config: {
 
   await boss.createQueue(TRANSACTION_RECORDING_QUEUE);
   logger.info(`Created queue: ${TRANSACTION_RECORDING_QUEUE}`);
+
+  await boss.createQueue(EMAIL_QUEUE);
+  logger.info(`Created queue: ${EMAIL_QUEUE}`);
 
   await boss.createQueue(BALANCE_AUDIT_QUEUE);
   logger.info(`Created queue: ${BALANCE_AUDIT_QUEUE}`);
@@ -718,6 +729,22 @@ export async function startQueue(config: {
   );
 
   logger.info("Transaction recording worker started");
+
+  await boss.work<EmailJob>(EMAIL_QUEUE, { batchSize: 5 }, async (jobs) => {
+    for (const job of jobs) {
+      const { to, type, variables } = job.data;
+      logger.info(`Processing email job ${job.id}: ${type} to ${to}`);
+      try {
+        await sendEmail(to, type, variables as EmailTemplateVars[typeof type]);
+        logger.info(`Email sent: ${type} to ${to}`);
+      } catch (error) {
+        logger.error(`Failed to send ${type} email to ${to}: ${error}`);
+        throw error;
+      }
+    }
+  });
+
+  logger.info("Email worker started");
 }
 
 export async function stopQueue(): Promise<void> {
@@ -950,4 +977,35 @@ export async function enqueueTransactionRecording(
   logger.info(
     `Enqueued transaction recording job ${jobId} for ${data.tx_hash}`,
   );
+}
+
+export async function enqueueEmail<T extends EmailType>(
+  to: string,
+  type: T,
+  variables: EmailTemplateVars[T],
+): Promise<void> {
+  if (process.env.NODE_ENV === "test") {
+    return;
+  }
+
+  if (!boss) {
+    throw new Error("Queue not initialized");
+  }
+
+  const jobId = await boss.send(
+    EMAIL_QUEUE,
+    { to, type, variables },
+    {
+      retryLimit: 3,
+      retryDelay: 60,
+      retryBackoff: true,
+      expireInSeconds: 300,
+    },
+  );
+
+  if (!jobId) {
+    throw new Error(`Failed to enqueue ${type} email to ${to}`);
+  }
+
+  logger.info(`Enqueued email job ${jobId}: ${type} to ${to}`);
 }

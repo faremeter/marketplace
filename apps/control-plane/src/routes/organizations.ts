@@ -21,7 +21,9 @@ import {
   enqueueCertProvisioning,
   enqueueTenantDeletion,
   checkAndUpdateTenantStatus,
+  enqueueEmail,
 } from "../lib/queue.js";
+import { getSiteUrl } from "../lib/email.js";
 import {
   setupAccountWithAddresses,
   updateAccountAddresses,
@@ -1350,6 +1352,29 @@ organizationsRoutes.post(
       })
       .returningAll()
       .executeTakeFirstOrThrow();
+
+    const org = await db
+      .selectFrom("organizations")
+      .select(["name"])
+      .where("id", "=", orgId)
+      .executeTakeFirstOrThrow();
+
+    const inviterUser = await db
+      .selectFrom("users")
+      .select(["email"])
+      .where("id", "=", user.id)
+      .executeTakeFirstOrThrow();
+
+    const siteUrl = await getSiteUrl();
+    if (siteUrl) {
+      const invitationUrl = `${siteUrl}/invite/${token}`;
+      enqueueEmail(email, "invitation", {
+        invitation_url: invitationUrl,
+        organization_name: org.name,
+        inviter_email: inviterUser.email,
+        role,
+      }).catch(() => undefined);
+    }
 
     return c.json(invitation, 201);
   },

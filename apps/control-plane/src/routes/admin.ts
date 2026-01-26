@@ -39,6 +39,7 @@ import {
   AdminUpdateSettingsSchema,
   AdminAssignNodeSchema,
   AdminImportOrgsSchema,
+  AdminUpdateEmailConfigSchema,
 } from "../lib/schemas.js";
 import { slugify, generateSlugSuffix } from "../lib/slug.js";
 import {
@@ -1903,6 +1904,108 @@ adminRoutes.get("/settings/balances", async (c) => {
     return c.json({ error: "Failed to fetch balances" }, 500);
   }
 });
+
+interface EmailConfig {
+  from_email: string;
+  site_url: string;
+  template_ids: {
+    verification: number;
+    welcome: number;
+    invitation: number;
+    password_reset: number;
+  };
+}
+
+adminRoutes.get("/settings/email", async (c) => {
+  const settings = await db
+    .selectFrom("admin_settings")
+    .select("email_config")
+    .where("id", "=", 1)
+    .executeTakeFirst();
+
+  if (!settings) {
+    return c.json({ error: "Settings not found" }, 404);
+  }
+
+  const config = settings.email_config as EmailConfig | null;
+  const hasApiKey = !!process.env.POSTMARK_API_KEY;
+
+  return c.json({
+    configured:
+      hasApiKey && config !== null && !!config.from_email && !!config.site_url,
+    from_email: config?.from_email || null,
+    site_url: config?.site_url || null,
+    has_api_key: hasApiKey,
+    template_ids: config?.template_ids || null,
+  });
+});
+
+adminRoutes.put(
+  "/settings/email",
+  arktypeValidator("json", AdminUpdateEmailConfigSchema),
+  async (c) => {
+    const body = c.req.valid("json");
+
+    const existing = await db
+      .selectFrom("admin_settings")
+      .select("email_config")
+      .where("id", "=", 1)
+      .executeTakeFirst();
+
+    const currentConfig = (existing?.email_config as EmailConfig) || {
+      from_email: "",
+      site_url: "",
+      template_ids: {
+        verification: 0,
+        welcome: 0,
+        invitation: 0,
+        password_reset: 0,
+      },
+    };
+
+    const newConfig: EmailConfig = {
+      from_email: body.from_email ?? currentConfig.from_email ?? "",
+      site_url: body.site_url ?? currentConfig.site_url ?? "",
+      template_ids: {
+        verification:
+          body.template_ids?.verification ??
+          currentConfig.template_ids?.verification ??
+          0,
+        welcome:
+          body.template_ids?.welcome ??
+          currentConfig.template_ids?.welcome ??
+          0,
+        invitation:
+          body.template_ids?.invitation ??
+          currentConfig.template_ids?.invitation ??
+          0,
+        password_reset:
+          body.template_ids?.password_reset ??
+          currentConfig.template_ids?.password_reset ??
+          0,
+      },
+    };
+
+    await db
+      .updateTable("admin_settings")
+      .set({
+        email_config: JSON.stringify(newConfig),
+        updated_at: new Date(),
+      })
+      .where("id", "=", 1)
+      .execute();
+
+    const hasApiKey = !!process.env.POSTMARK_API_KEY;
+
+    return c.json({
+      configured: hasApiKey && !!newConfig.from_email && !!newConfig.site_url,
+      from_email: newConfig.from_email,
+      site_url: newConfig.site_url,
+      has_api_key: hasApiKey,
+      template_ids: newConfig.template_ids,
+    });
+  },
+);
 
 adminRoutes.get("/organizations/:id/analytics", async (c) => {
   const id = parseInt(c.req.param("id"));

@@ -16,7 +16,11 @@ import {
   LoginSchema,
   VerifyEmailSchema,
   UpdatePasswordSchema,
+  ForgotPasswordSchema,
+  ResetPasswordSchema,
 } from "../lib/schemas.js";
+import { enqueueEmail } from "../lib/queue.js";
+import { getSiteUrl } from "../lib/email.js";
 
 export const authRoutes = new Hono();
 
@@ -92,6 +96,15 @@ authRoutes.post(
       .set({ signed_up: true })
       .where("email", "=", email)
       .execute();
+
+    const siteUrl = await getSiteUrl();
+    if (siteUrl) {
+      const verificationUrl = `${siteUrl}/verify-email?token=${verificationToken}`;
+      enqueueEmail(email, "verification", {
+        verification_url: verificationUrl,
+        user_email: email,
+      }).catch(() => undefined);
+    }
 
     const token = signToken({
       userId: user.id,
@@ -236,7 +249,7 @@ authRoutes.post(
 
     const user = await db
       .selectFrom("users")
-      .select(["id", "verification_expires"])
+      .select(["id", "email", "verification_expires"])
       .where("verification_token", "=", body.token)
       .executeTakeFirst();
 
@@ -257,6 +270,14 @@ authRoutes.post(
       })
       .where("id", "=", user.id)
       .execute();
+
+    const siteUrl = await getSiteUrl();
+    if (siteUrl) {
+      enqueueEmail(user.email, "welcome", {
+        user_email: user.email,
+        login_url: `${siteUrl}/login`,
+      }).catch(() => undefined);
+    }
 
     return c.json({ success: true });
   },
@@ -299,3 +320,114 @@ authRoutes.post(
     return c.json({ success: true });
   },
 );
+
+authRoutes.post(
+  "/forgot-password",
+  verifyLimiter,
+  arktypeValidator("json", ForgotPasswordSchema),
+  async (c) => {
+    const body = c.req.valid("json");
+    const email = normalizeEmail(body.email);
+
+    const user = await db
+      .selectFrom("users")
+      .select(["id", "email"])
+      .where("email", "=", email)
+      .executeTakeFirst();
+
+    if (!user) {
+      return c.json({ success: true });
+    }
+
+    await db
+      .deleteFrom("password_reset_tokens")
+      .where("user_id", "=", user.id)
+      .execute();
+
+    const token = crypto.randomBytes(32).toString("hex");
+    const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
+
+    await db
+      .insertInto("password_reset_tokens")
+      .values({
+        user_id: user.id,
+        token,
+        expires_at: expiresAt,
+      })
+      .execute();
+
+    const siteUrl = await getSiteUrl();
+    if (siteUrl) {
+      const resetUrl = `${siteUrl}/reset-password?token=${token}`;
+      enqueueEmail(email, "password_reset", {
+        reset_url: resetUrl,
+        user_email: email,
+        expires_in_hours: 1,
+      }).catch(() => undefined);
+    }
+
+    return c.json({ success: true });
+  },
+);
+
+authRoutes.post(
+  "/reset-password",
+  verifyLimiter,
+  arktypeValidator("json", ResetPasswordSchema),
+  async (c) => {
+    const body = c.req.valid("json");
+
+    const resetToken = await db
+      .selectFrom("password_reset_tokens")
+      .select(["id", "user_id", "expires_at", "used_at"])
+      .where("token", "=", body.token)
+      .executeTakeFirst();
+
+    if (!resetToken) {
+      return c.json({ error: "Invalid or expired reset token" }, 400);
+    }
+
+    if (resetToken.used_at) {
+      return c.json({ error: "Reset link already used" }, 400);
+    }
+
+    if (isExpired(resetToken.expires_at)) {
+      return c.json({ error: "Reset token expired" }, 400);
+    }
+
+    const passwordHash = await bcrypt.hash(body.password, SALT_ROUNDS);
+
+    await db
+      .updateTable("users")
+      .set({ password_hash: passwordHash })
+      .where("id", "=", resetToken.user_id)
+      .execute();
+
+    await db
+      .updateTable("password_reset_tokens")
+      .set({ used_at: new Date() })
+      .where("id", "=", resetToken.id)
+      .execute();
+
+    return c.json({ success: true });
+  },
+);
+
+authRoutes.get("/validate-reset-token", async (c) => {
+  const token = c.req.query("token");
+
+  if (!token) {
+    return c.json({ valid: false });
+  }
+
+  const resetToken = await db
+    .selectFrom("password_reset_tokens")
+    .select(["expires_at", "used_at"])
+    .where("token", "=", token)
+    .executeTakeFirst();
+
+  const valid =
+    resetToken && !resetToken.used_at && !isExpired(resetToken.expires_at);
+
+  return c.json({ valid: !!valid });
+});

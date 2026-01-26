@@ -277,3 +277,23 @@ export const OpenApiImportSchema = type({
 export const ValidatePatternSchema = type({
   pattern: "string > 0",
 });
+
+export const ForgotPasswordSchema = type({
+  email: "string.email",
+});
+
+export const ResetPasswordSchema = type({
+  token: "string > 0",
+  password: `string >= ${MIN_PASSWORD_LENGTH} & string <= ${MAX_PASSWORD_LENGTH}`,
+});
+
+export const AdminUpdateEmailConfigSchema = type({
+  "from_email?": "string.email",
+  "site_url?": "string.url",
+  "template_ids?": {
+    "verification?": "number > 0",
+    "welcome?": "number > 0",
+    "invitation?": "number > 0",
+    "password_reset?": "number > 0",
+  },
+});

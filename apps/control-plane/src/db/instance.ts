@@ -250,6 +250,7 @@ export async function setupTestSchema(): Promise<void> {
     .addColumn("wallet_config", "text")
     .addColumn("minimum_balance_sol", "real", (col) => col.defaultTo(0.001))
     .addColumn("minimum_balance_usdc", "real", (col) => col.defaultTo(0.01))
+    .addColumn("email_config", "text")
     .addColumn("created_at", "text", (col) =>
       col.defaultTo(sql`CURRENT_TIMESTAMP`).notNull(),
     )
@@ -269,6 +270,19 @@ export async function setupTestSchema(): Promise<void> {
       col.defaultTo(sql`CURRENT_TIMESTAMP`).notNull(),
     )
     .execute();
+
+  await db.schema
+    .createTable("password_reset_tokens")
+    .ifNotExists()
+    .addColumn("id", "integer", (col) => col.primaryKey().autoIncrement())
+    .addColumn("user_id", "integer", (col) => col.notNull())
+    .addColumn("token", "text", (col) => col.notNull().unique())
+    .addColumn("expires_at", "text", (col) => col.notNull())
+    .addColumn("used_at", "text")
+    .addColumn("created_at", "text", (col) =>
+      col.defaultTo(sql`CURRENT_TIMESTAMP`).notNull(),
+    )
+    .execute();
 }
 
 export async function clearTestData(): Promise<void> {
@@ -281,6 +295,7 @@ export async function clearTestData(): Promise<void> {
   await db.deleteFrom("wallets").execute();
   await db.deleteFrom("nodes").execute();
   await db.deleteFrom("organization_invitations").execute();
+  await db.deleteFrom("password_reset_tokens").execute();
   await db.deleteFrom("user_organizations").execute();
   await db.deleteFrom("users").execute();
   await db.deleteFrom("organizations").execute();
