@@ -25,7 +25,7 @@ function ForgotPasswordForm() {
     setIsLoading(true);
 
     try {
-      await api.post("/auth/forgot-password", { email });
+      await api.post("/api/auth/forgot-password", { email });
       setIsSubmitted(true);
     } catch {
       setError("An error occurred. Please try again.");

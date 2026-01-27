@@ -47,7 +47,7 @@ function ResetPasswordForm() {
 
       try {
         const response = await api.get<{ valid: boolean }>(
-          `/auth/validate-reset-token?token=${token}`,
+          `/api/auth/validate-reset-token?token=${token}`,
         );
         setIsValidToken(response.valid);
       } catch {
@@ -77,7 +77,7 @@ function ResetPasswordForm() {
     setIsLoading(true);
 
     try {
-      await api.post("/auth/reset-password", { token, password });
+      await api.post("/api/auth/reset-password", { token, password });
       setIsSuccess(true);
     } catch (err) {
       if (err instanceof ApiError) {
