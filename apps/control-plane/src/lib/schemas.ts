@@ -296,4 +296,5 @@ export const AdminUpdateEmailConfigSchema = type({
     "invitation?": "number >= 0",
     "password_reset?": "number >= 0",
   },
+  "custom_variables?": "Record<string, string>",
 });

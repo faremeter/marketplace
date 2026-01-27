@@ -49,6 +49,7 @@ interface EmailSettings {
     invitation: number;
     password_reset: number;
   } | null;
+  custom_variables: Record<string, string> | null;
 }
 
 interface ChainBalances {
@@ -683,6 +684,7 @@ function EmailSettingsSection({
       invitation?: number;
       password_reset?: number;
     };
+    custom_variables?: Record<string, string>;
   }) => Promise<void>;
   isSaving: boolean;
 }) {
@@ -693,6 +695,9 @@ function EmailSettingsSection({
   const [welcomeId, setWelcomeId] = useState("");
   const [invitationId, setInvitationId] = useState("");
   const [passwordResetId, setPasswordResetId] = useState("");
+  const [customVars, setCustomVars] = useState<
+    { key: string; value: string }[]
+  >([]);
   const [validationError, setValidationError] = useState("");
 
   const handleEdit = () => {
@@ -705,6 +710,16 @@ function EmailSettingsSection({
     setInvitationId(emailSettings?.template_ids?.invitation?.toString() || "");
     setPasswordResetId(
       emailSettings?.template_ids?.password_reset?.toString() || "",
+    );
+    setCustomVars(
+      emailSettings?.custom_variables
+        ? Object.entries(emailSettings.custom_variables).map(
+            ([key, value]) => ({
+              key,
+              value,
+            }),
+          )
+        : [],
     );
     setValidationError("");
     setIsEditing(true);
@@ -743,6 +758,12 @@ function EmailSettingsSection({
     }
 
     setValidationError("");
+    const customVariables: Record<string, string> = {};
+    for (const { key, value } of customVars) {
+      if (key.trim()) {
+        customVariables[key.trim()] = value;
+      }
+    }
     await onSave({
       from_email: fromEmail || undefined,
       site_url: siteUrl || undefined,
@@ -752,6 +773,7 @@ function EmailSettingsSection({
         invitation: parseTemplateId(invitationId),
         password_reset: parseTemplateId(passwordResetId),
       },
+      custom_variables: customVariables,
     });
     setIsEditing(false);
   };
@@ -900,6 +922,68 @@ function EmailSettingsSection({
             </div>
           </div>
 
+          <div className="rounded-lg border border-gray-6 bg-gray-2 p-4">
+            <div className="flex items-center justify-between mb-3">
+              <span className="text-sm font-medium text-gray-12">
+                Custom Variables
+              </span>
+              <button
+                type="button"
+                onClick={() =>
+                  setCustomVars([...customVars, { key: "", value: "" }])
+                }
+                className="text-xs text-accent-9 hover:text-accent-10"
+              >
+                + Add Variable
+              </button>
+            </div>
+            <p className="text-xs text-gray-8 mb-3">
+              These variables are passed to all email templates.
+            </p>
+            <div className="space-y-2">
+              {customVars.map((cv, index) => (
+                <div key={index} className="flex gap-2 items-center">
+                  <input
+                    type="text"
+                    value={cv.key}
+                    onChange={(e) => {
+                      const updated = [...customVars];
+                      updated[index] = { ...cv, key: e.target.value };
+                      setCustomVars(updated);
+                    }}
+                    placeholder="Variable name"
+                    className="flex-1 rounded-md border border-gray-6 bg-gray-3 px-3 py-2 text-sm text-gray-12 placeholder:text-gray-8 focus:outline-none focus:border-accent-8"
+                  />
+                  <input
+                    type="text"
+                    value={cv.value}
+                    onChange={(e) => {
+                      const updated = [...customVars];
+                      updated[index] = { ...cv, value: e.target.value };
+                      setCustomVars(updated);
+                    }}
+                    placeholder="Value"
+                    className="flex-1 rounded-md border border-gray-6 bg-gray-3 px-3 py-2 text-sm text-gray-12 placeholder:text-gray-8 focus:outline-none focus:border-accent-8"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCustomVars(customVars.filter((_, i) => i !== index));
+                    }}
+                    className="p-2 text-gray-8 hover:text-red-500"
+                  >
+                    <Cross2Icon className="h-4 w-4" />
+                  </button>
+                </div>
+              ))}
+              {customVars.length === 0 && (
+                <p className="text-xs text-gray-8 italic">
+                  No custom variables configured
+                </p>
+              )}
+            </div>
+          </div>
+
           {validationError && (
             <p className="text-sm text-red-500">{validationError}</p>
           )}
@@ -980,6 +1064,27 @@ function EmailSettingsSection({
                 </p>
               </div>
             </div>
+          </div>
+
+          <div className="rounded-lg border border-gray-6 bg-gray-2 p-4">
+            <label className="block text-xs text-gray-11 mb-2">
+              Custom Variables
+            </label>
+            {emailSettings?.custom_variables &&
+            Object.keys(emailSettings.custom_variables).length > 0 ? (
+              <div className="space-y-1">
+                {Object.entries(emailSettings.custom_variables).map(
+                  ([key, value]) => (
+                    <div key={key} className="flex gap-2 text-sm">
+                      <span className="font-mono text-gray-11">{key}:</span>
+                      <span className="text-gray-12">{value}</span>
+                    </div>
+                  ),
+                )}
+              </div>
+            ) : (
+              <p className="text-sm text-gray-8">No custom variables</p>
+            )}
           </div>
 
           <div className="flex items-center gap-2 text-sm">

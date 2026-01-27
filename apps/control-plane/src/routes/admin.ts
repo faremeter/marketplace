@@ -1914,6 +1914,7 @@ interface EmailConfig {
     invitation: number;
     password_reset: number;
   };
+  custom_variables?: Record<string, string>;
 }
 
 adminRoutes.get("/settings/email", async (c) => {
@@ -1937,6 +1938,7 @@ adminRoutes.get("/settings/email", async (c) => {
     site_url: config?.site_url || null,
     has_api_key: hasApiKey,
     template_ids: config?.template_ids || null,
+    custom_variables: config?.custom_variables || null,
   });
 });
 
@@ -1961,6 +1963,7 @@ adminRoutes.put(
         invitation: 0,
         password_reset: 0,
       },
+      custom_variables: {},
     };
 
     const newConfig: EmailConfig = {
@@ -1984,6 +1987,8 @@ adminRoutes.put(
           currentConfig.template_ids?.password_reset ??
           0,
       },
+      custom_variables:
+        body.custom_variables ?? currentConfig.custom_variables ?? {},
     };
 
     await db
@@ -2003,6 +2008,7 @@ adminRoutes.put(
       site_url: newConfig.site_url,
       has_api_key: hasApiKey,
       template_ids: newConfig.template_ids,
+      custom_variables: newConfig.custom_variables,
     });
   },
 );

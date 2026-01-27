@@ -29,6 +29,7 @@ interface EmailConfig {
     invitation: number;
     password_reset: number;
   };
+  custom_variables?: Record<string, string>;
 }
 
 async function getEmailConfig(): Promise<{
@@ -36,6 +37,7 @@ async function getEmailConfig(): Promise<{
   fromEmail: string;
   siteUrl: string;
   templateIds: Record<EmailType, number>;
+  customVariables: Record<string, string>;
 } | null> {
   const apiKey = process.env.POSTMARK_API_KEY;
   if (!apiKey) {
@@ -67,6 +69,7 @@ async function getEmailConfig(): Promise<{
       invitation: config.template_ids?.invitation || 0,
       password_reset: config.template_ids?.password_reset || 0,
     },
+    customVariables: config.custom_variables || {},
   };
 }
 
@@ -94,7 +97,7 @@ export async function sendEmail<T extends EmailType>(
     From: config.fromEmail,
     To: to,
     TemplateId: templateId,
-    TemplateModel: variables,
+    TemplateModel: { ...config.customVariables, ...variables },
   });
 
   logger.info(`Sent ${type} email to ${to}`);
