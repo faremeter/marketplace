@@ -291,9 +291,9 @@ export const AdminUpdateEmailConfigSchema = type({
   "from_email?": "string.email",
   "site_url?": "string.url",
   "template_ids?": {
-    "verification?": "number > 0",
-    "welcome?": "number > 0",
-    "invitation?": "number > 0",
-    "password_reset?": "number > 0",
+    "verification?": "number >= 0",
+    "welcome?": "number >= 0",
+    "invitation?": "number >= 0",
+    "password_reset?": "number >= 0",
   },
 });

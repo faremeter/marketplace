@@ -693,6 +693,7 @@ function EmailSettingsSection({
   const [welcomeId, setWelcomeId] = useState("");
   const [invitationId, setInvitationId] = useState("");
   const [passwordResetId, setPasswordResetId] = useState("");
+  const [validationError, setValidationError] = useState("");
 
   const handleEdit = () => {
     setFromEmail(emailSettings?.from_email || "");
@@ -705,22 +706,51 @@ function EmailSettingsSection({
     setPasswordResetId(
       emailSettings?.template_ids?.password_reset?.toString() || "",
     );
+    setValidationError("");
     setIsEditing(true);
   };
 
   const handleCancel = () => {
     setIsEditing(false);
+    setValidationError("");
+  };
+
+  const isValidTemplateId = (value: string): boolean => {
+    if (!value) return true;
+    const parsed = parseInt(value, 10);
+    return !isNaN(parsed) && parsed >= 0 && String(parsed) === value.trim();
+  };
+
+  const parseTemplateId = (value: string): number | undefined => {
+    if (!value) return undefined;
+    const parsed = parseInt(value, 10);
+    return parsed;
   };
 
   const handleSave = async () => {
+    const invalidFields: string[] = [];
+    if (!isValidTemplateId(verificationId)) invalidFields.push("Verification");
+    if (!isValidTemplateId(welcomeId)) invalidFields.push("Welcome");
+    if (!isValidTemplateId(invitationId)) invalidFields.push("Invitation");
+    if (!isValidTemplateId(passwordResetId))
+      invalidFields.push("Password Reset");
+
+    if (invalidFields.length > 0) {
+      setValidationError(
+        `Invalid template ID for: ${invalidFields.join(", ")}`,
+      );
+      return;
+    }
+
+    setValidationError("");
     await onSave({
       from_email: fromEmail || undefined,
       site_url: siteUrl || undefined,
       template_ids: {
-        verification: verificationId ? parseInt(verificationId) : undefined,
-        welcome: welcomeId ? parseInt(welcomeId) : undefined,
-        invitation: invitationId ? parseInt(invitationId) : undefined,
-        password_reset: passwordResetId ? parseInt(passwordResetId) : undefined,
+        verification: parseTemplateId(verificationId),
+        welcome: parseTemplateId(welcomeId),
+        invitation: parseTemplateId(invitationId),
+        password_reset: parseTemplateId(passwordResetId),
       },
     });
     setIsEditing(false);
@@ -803,7 +833,7 @@ function EmailSettingsSection({
                   Email Verification
                 </label>
                 <input
-                  type="number"
+                  type="text"
                   value={verificationId}
                   onChange={(e) => setVerificationId(e.target.value)}
                   placeholder="Template ID"
@@ -820,7 +850,7 @@ function EmailSettingsSection({
                   Welcome
                 </label>
                 <input
-                  type="number"
+                  type="text"
                   value={welcomeId}
                   onChange={(e) => setWelcomeId(e.target.value)}
                   placeholder="Template ID"
@@ -836,7 +866,7 @@ function EmailSettingsSection({
                   Organization Invitation
                 </label>
                 <input
-                  type="number"
+                  type="text"
                   value={invitationId}
                   onChange={(e) => setInvitationId(e.target.value)}
                   placeholder="Template ID"
@@ -855,7 +885,7 @@ function EmailSettingsSection({
                   Password Reset
                 </label>
                 <input
-                  type="number"
+                  type="text"
                   value={passwordResetId}
                   onChange={(e) => setPasswordResetId(e.target.value)}
                   placeholder="Template ID"
@@ -869,6 +899,10 @@ function EmailSettingsSection({
               </div>
             </div>
           </div>
+
+          {validationError && (
+            <p className="text-sm text-red-500">{validationError}</p>
+          )}
 
           <div className="flex justify-end gap-3">
             <button
