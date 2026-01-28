@@ -20,6 +20,7 @@
     ]
   },
   "dependencies": {
+    "@1click/db-schema": "workspace:*",
     "@aws-sdk/client-route-53": "^3.948.0",
     "@faremeter/info": "^0.15.0",
     "@hono/arktype-validator": "^2.0.1",
@@ -42,6 +43,7 @@
     "viem": "^2.41.2"
   },
   "devDependencies": {
+    "@1click/test-db": "workspace:*",
     "@eslint/js": "^9.39.1",
     "@tapjs/asserts": "^4.0.1",
     "@tapjs/tsx": "^3.0.1",

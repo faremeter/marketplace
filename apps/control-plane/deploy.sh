@@ -123,6 +123,14 @@ step::20::typecheck() {
     cd "$STACK_DIR" || log::fatal "failed to cd to $STACK_DIR"
 }
 
+step::25::copy-shared-packages() {
+    log::info "copying shared packages..."
+    rm -rf "$SCRIPT_DIR/node_modules/@1click"
+    mkdir -p "$SCRIPT_DIR/node_modules/@1click"
+    cp -r "$SCRIPT_DIR/../../packages/db-schema" "$SCRIPT_DIR/node_modules/@1click/db-schema"
+    cp -r "$SCRIPT_DIR/../../packages/test-db" "$SCRIPT_DIR/node_modules/@1click/test-db"
+}
+
 step::30::sync() {
     for_each_stack "syncing files..." 'remote::sync'
 }

@@ -1,0 +1,11 @@
+{
+  "name": "@1click/db-schema",
+  "version": "0.0.0",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "peerDependencies": {
+    "kysely": "^0.27.0"
+  }
+}
