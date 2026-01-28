@@ -1,0 +1,25 @@
+{
+  "name": "discovery",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "start": "tsx src/server.ts"
+  },
+  "dependencies": {
+    "@1click/db-schema": "workspace:*",
+    "@hono/node-server": "^1.19.5",
+    "@logtape/logtape": "^1.2.2",
+    "dotenv": "^17.2.1",
+    "hono": "^4.9.10",
+    "kysely": "^0.27.4",
+    "pg": "^8.13.1"
+  },
+  "devDependencies": {
+    "@types/node": "^20.19.11",
+    "@types/pg": "^8.11.10",
+    "tsx": "^4.20.5",
+    "typescript": "^5.9.2"
+  }
+}
