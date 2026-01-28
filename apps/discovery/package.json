@@ -5,7 +5,15 @@
   "type": "module",
   "scripts": {
     "dev": "tsx watch src/server.ts",
-    "start": "tsx src/server.ts"
+    "start": "tsx src/server.ts",
+    "test": "tap 'src/**/*.test.ts'",
+    "test:watch": "tap 'src/**/*.test.ts' --watch"
+  },
+  "tap": {
+    "plugin": [
+      "!@tapjs/typescript",
+      "@tapjs/tsx"
+    ]
   },
   "dependencies": {
     "@1click/db-schema": "workspace:*",
@@ -17,8 +25,14 @@
     "pg": "^8.13.1"
   },
   "devDependencies": {
+    "@1click/test-db": "workspace:*",
+    "@tapjs/asserts": "^4.0.1",
+    "@tapjs/tsx": "^3.0.1",
+    "@types/better-sqlite3": "^7.6.11",
     "@types/node": "^20.19.11",
     "@types/pg": "^8.11.10",
+    "better-sqlite3": "^11.7.0",
+    "tap": "^21.1.0",
     "tsx": "^4.20.5",
     "typescript": "^5.9.2"
   }
