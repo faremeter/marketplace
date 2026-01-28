@@ -68,6 +68,22 @@ EOF
     chmod 600 /home/admin/control-plane/.env
 }
 
+step::22b::setup-discovery-env() {
+    mkdir -p /home/admin/discovery
+    chown admin:admin /home/admin/discovery
+    cat <<EOF >/home/admin/discovery/.env
+DATABASE_HOST=${DATABASE_HOST}
+DATABASE_PORT=${DATABASE_PORT}
+DATABASE_NAME=${DATABASE_NAME}
+DATABASE_USER=${DATABASE_USER}
+DATABASE_PASSWORD=${DATABASE_PASSWORD}
+DATABASE_SSL=true
+HTTP_PORT=1339
+EOF
+    chown admin:admin /home/admin/discovery/.env
+    chmod 600 /home/admin/discovery/.env
+}
+
 step::23::setup-control-plane-ui-env() {
     mkdir -p /home/admin/control-plane-ui
     chown admin:admin /home/admin/control-plane-ui
@@ -177,9 +193,11 @@ step::40::setup-nginx() {
     rm -f /etc/nginx/sites-available/control-plane.d/*
     mkdir -p /var/www/html/.well-known/acme-challenge
 
+    cp ./40_discovery.conf /etc/nginx/sites-available/control-plane.d/.
     cp ./50_control_plane.conf /etc/nginx/sites-available/control-plane.d/.
 
     cp ./control_plane.service /etc/systemd/system/control-plane.service
+    cp ./discovery.service /etc/systemd/system/discovery.service
     systemctl daemon-reload
 
     cat <<'EOF' >/etc/nginx/sites-available/control-plane

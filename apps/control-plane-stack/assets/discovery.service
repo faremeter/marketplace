@@ -1,0 +1,19 @@
+[Unit]
+Description=Discovery Service API
+After=network.target postgresql.service
+
+[Service]
+Type=simple
+User=admin
+WorkingDirectory=/home/admin/discovery
+Environment=NODE_ENV=production
+EnvironmentFile=/home/admin/discovery/.env
+ExecStart=/usr/bin/npm start
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=discovery
+
+[Install]
+WantedBy=multi-user.target
