@@ -14,6 +14,7 @@ export const MAX_PRICE_USDC = 100000000; // $100 in micro-USDC
 export const MAX_PRIORITY = 10000;
 export const MAX_TAGS = 5;
 export const MAX_TAG_LENGTH = 50;
+export const MAX_BACKEND_URL_LENGTH = 2048;
 
 const tagType = type(`string > 0 & string <= ${MAX_TAG_LENGTH}`).narrow(
   (s, ctx) => {
@@ -32,6 +33,24 @@ const tagsArrayType = tagType.array().narrow((arr, ctx) => {
   }
   if (new Set(arr).size !== arr.length) {
     return ctx.mustBe("unique (no duplicates)");
+  }
+  return true;
+});
+
+const backendUrlType = type(
+  `string > 0 & string <= ${MAX_BACKEND_URL_LENGTH}`,
+).narrow((s, ctx) => {
+  const trimmed = s.trim();
+  if (trimmed !== s) {
+    return ctx.mustBe("a URL without leading or trailing whitespace");
+  }
+  try {
+    const url = new URL(trimmed);
+    if (url.protocol !== "http:" && url.protocol !== "https:") {
+      return ctx.mustBe("an http:// or https:// URL");
+    }
+  } catch {
+    return ctx.mustBe("a valid URL");
   }
   return true;
 });
@@ -60,7 +79,7 @@ export const UpdateEndpointSchema = type({
 
 export const CreateTenantSchema = type({
   name: "string > 0",
-  backend_url: "string",
+  backend_url: backendUrlType,
   "wallet_id?": "number | null",
   "default_price_usdc?": `0 <= number <= ${MAX_PRICE_USDC}`,
   "default_scheme?": "'exact' | 'per_request' | 'per_byte' | null",
@@ -74,7 +93,7 @@ export const CreateTenantSchema = type({
 
 export const UpdateTenantSchema = type({
   "name?": "string > 0",
-  "backend_url?": "string | null",
+  "backend_url?": backendUrlType.or(type("null")),
   "organization_id?": "number | null",
   "wallet_id?": "number | null",
   "default_price_usdc?": `0 <= number <= ${MAX_PRICE_USDC}`,
@@ -115,7 +134,7 @@ export const UpdateWalletSchema = type({
 
 export const OrgCreateTenantSchema = type({
   name: "string > 0",
-  backend_url: "string",
+  backend_url: backendUrlType,
   "wallet_id?": "number | null",
   "default_price_usdc?": `0 <= number <= ${MAX_PRICE_USDC}`,
   "default_scheme?": "'exact' | 'per_request' | 'per_byte' | null",
@@ -126,7 +145,7 @@ export const OrgCreateTenantSchema = type({
 
 export const OrgUpdateTenantSchema = type({
   "name?": "string > 0",
-  "backend_url?": "string | null",
+  "backend_url?": backendUrlType.or(type("null")),
   "wallet_id?": "number | null",
   "default_price_usdc?": `0 <= number <= ${MAX_PRICE_USDC}`,
   "default_scheme?": "'exact' | 'per_request' | 'per_byte' | null",
@@ -146,7 +165,7 @@ export const UpdateMemberSchema = type({
 
 export const AdminCreateTenantSchema = type({
   name: "string > 0",
-  backend_url: "string",
+  backend_url: backendUrlType,
   "wallet_id?": "number | null",
   "organization_id?": "number | null",
   "node_id?": "number | null",
@@ -174,7 +193,7 @@ const adminOrgSlug = orgSlug.or(type("null | ''"));
 
 export const AdminUpdateTenantSchema = type({
   "name?": "string > 0",
-  "backend_url?": "string | null",
+  "backend_url?": backendUrlType.or(type("null")),
   "organization_id?": "number | null",
   "wallet_id?": "number | null",
   "is_active?": "boolean",

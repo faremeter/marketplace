@@ -225,6 +225,99 @@ await t.test("POST /api/tenants", async (t) => {
     t.equal(res.status, 400);
   });
 
+  await t.test("rejects backend_url with leading whitespace", async (t) => {
+    const token = await createAdminUser();
+
+    const res = await app.request("/api/tenants", {
+      method: "POST",
+      headers: {
+        Cookie: `auth_token=${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        name: "ws-tenant",
+        backend_url: " https://api.example.com",
+      }),
+    });
+
+    t.equal(res.status, 400);
+  });
+
+  await t.test("rejects backend_url with trailing whitespace", async (t) => {
+    const token = await createAdminUser();
+
+    const res = await app.request("/api/tenants", {
+      method: "POST",
+      headers: {
+        Cookie: `auth_token=${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        name: "ws-tenant",
+        backend_url: "https://api.example.com ",
+      }),
+    });
+
+    t.equal(res.status, 400);
+  });
+
+  await t.test("rejects invalid backend_url", async (t) => {
+    const token = await createAdminUser();
+
+    const res = await app.request("/api/tenants", {
+      method: "POST",
+      headers: {
+        Cookie: `auth_token=${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        name: "bad-url-tenant",
+        backend_url: "not-a-url",
+      }),
+    });
+
+    t.equal(res.status, 400);
+  });
+
+  await t.test("rejects non-http backend_url", async (t) => {
+    const token = await createAdminUser();
+
+    const res = await app.request("/api/tenants", {
+      method: "POST",
+      headers: {
+        Cookie: `auth_token=${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        name: "ftp-tenant",
+        backend_url: "ftp://files.example.com",
+      }),
+    });
+
+    t.equal(res.status, 400);
+  });
+
+  await t.test("accepts valid https backend_url with path", async (t) => {
+    const token = await createAdminUser();
+
+    const res = await app.request("/api/tenants", {
+      method: "POST",
+      headers: {
+        Cookie: `auth_token=${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        name: "path-tenant",
+        backend_url: "https://api.openai.com/v1/responses",
+      }),
+    });
+
+    t.equal(res.status, 201);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const data = (await res.json()) as any;
+    t.equal(data.backend_url, "https://api.openai.com/v1/responses");
+  });
+
   await t.test("creates tenant with status active by default", async (t) => {
     const token = await createAdminUser();
 

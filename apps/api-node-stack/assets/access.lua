@@ -131,7 +131,7 @@ local proxy_name = tenant_config.proxy_name or tenant_config.name or tenant_doma
 local tenant_org_slug = tenant_config.org_slug
 if tenant_org_slug == cjson.null then tenant_org_slug = nil end
 
-local backend_url = tenant_config.backend_url:gsub("/$", "")
+local backend_url = tenant_config.backend_url:match("^%s*(.-)%s*$"):gsub("/$", "")
 local base_url, backend_query = string.match(backend_url, "^([^?]+)%??(.*)")
 ngx.var.backend_url = base_url or backend_url
 if backend_query and backend_query ~= "" then
