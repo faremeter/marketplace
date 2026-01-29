@@ -213,7 +213,9 @@ await t.test("GET /api/v1/proxies", async (t) => {
       data: { name: string; tags: string[] }[];
     };
     t.equal(data.data.length, 1);
-    t.same(data.data[0].tags, ["production", "finance"]);
+    const [first] = data.data;
+    if (!first) return t.fail("expected at least one proxy");
+    t.same(first.tags, ["production", "finance"]);
   });
 
   await t.test("handles negative cursor gracefully", async (t) => {
