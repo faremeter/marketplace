@@ -377,6 +377,7 @@ adminRoutes.get("/tenants", async (c) => {
       "tenants.upstream_auth_value",
       "tenants.created_at",
       "tenants.org_slug",
+      "tenants.tags",
       "organizations.name as organization_name",
       "wallets.name as wallet_name",
       "wallets.funding_status as wallet_funding_status",
@@ -552,6 +553,7 @@ adminRoutes.post(
         org_slug: orgSlug,
         is_active: !isRegisterOnly,
         status: isRegisterOnly ? "registered" : "pending",
+        tags: body.tags ?? [],
       })
       .returningAll()
       .executeTakeFirstOrThrow();
@@ -854,6 +856,7 @@ adminRoutes.put(
       updateData.upstream_auth_header = body.upstream_auth_header;
     if (body.upstream_auth_value !== undefined)
       updateData.upstream_auth_value = body.upstream_auth_value;
+    if (body.tags !== undefined) updateData.tags = body.tags;
 
     let newWalletConfig: WalletConfig | null = null;
     if (body.wallet_id !== undefined) {

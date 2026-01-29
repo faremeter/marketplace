@@ -12,6 +12,29 @@ export const MAX_PUBKEY_LENGTH = 256;
 export const MIN_PRICE_USDC = 1; // $0.000001 in micro-USDC (minimum non-free price)
 export const MAX_PRICE_USDC = 100000000; // $100 in micro-USDC
 export const MAX_PRIORITY = 10000;
+export const MAX_TAGS = 5;
+export const MAX_TAG_LENGTH = 50;
+
+const tagType = type(`string > 0 & string <= ${MAX_TAG_LENGTH}`).narrow(
+  (s, ctx) => {
+    if (!/^[a-z0-9][a-z0-9_-]*$/.test(s)) {
+      return ctx.mustBe(
+        "lowercase alphanumeric, starting with letter or number, containing only letters, numbers, hyphens, and underscores",
+      );
+    }
+    return true;
+  },
+);
+
+const tagsArrayType = tagType.array().narrow((arr, ctx) => {
+  if (arr.length > MAX_TAGS) {
+    return ctx.mustBe(`at most ${MAX_TAGS} tags`);
+  }
+  if (new Set(arr).size !== arr.length) {
+    return ctx.mustBe("unique (no duplicates)");
+  }
+  return true;
+});
 
 export const CreateEndpointSchema = type({
   path: "string > 0",
@@ -44,6 +67,7 @@ export const CreateTenantSchema = type({
   "is_active?": "boolean",
   "organization_id?": "number | null",
   "register_only?": "boolean",
+  "tags?": tagsArrayType,
 });
 
 export const UpdateTenantSchema = type({
@@ -56,6 +80,7 @@ export const UpdateTenantSchema = type({
   "upstream_auth_header?": `string <= ${MAX_AUTH_HEADER_LENGTH} | null`,
   "upstream_auth_value?": `string <= ${MAX_AUTH_VALUE_LENGTH} | null`,
   "is_active?": "boolean",
+  "tags?": tagsArrayType,
 });
 
 export const CreateNodeSchema = type({
@@ -129,6 +154,7 @@ export const AdminCreateTenantSchema = type({
   "upstream_auth_header?": `string <= ${MAX_AUTH_HEADER_LENGTH} | null`,
   "upstream_auth_value?": `string <= ${MAX_AUTH_VALUE_LENGTH} | null`,
   "register_only?": "boolean",
+  "tags?": tagsArrayType,
 });
 
 const orgSlug = type(
@@ -153,6 +179,7 @@ export const AdminUpdateTenantSchema = type({
   "upstream_auth_header?": `string <= ${MAX_AUTH_HEADER_LENGTH} | null`,
   "upstream_auth_value?": `string <= ${MAX_AUTH_VALUE_LENGTH} | null`,
   "org_slug?": adminOrgSlug,
+  "tags?": tagsArrayType,
 });
 
 export const AdminUpdateEndpointSchema = type({

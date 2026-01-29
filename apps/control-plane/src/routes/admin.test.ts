@@ -1004,6 +1004,52 @@ await t.test("GET /api/admin/tenants", async (t) => {
     t.equal(data[0].name, "my-tenant");
     t.equal(data[0].nodes.length, 1);
   });
+
+  await t.test("returns tenants with tags", async (t) => {
+    const admin = await createUser("admin@example.com", true);
+    const org = await createOrg("Team", "team");
+
+    await db
+      .insertInto("tenants")
+      .values({
+        name: "tagged-tenant",
+        organization_id: org.id,
+        backend_url: "http://backend.example.com",
+        default_price_usdc: 0.01,
+        default_scheme: "exact",
+        status: "active",
+        tags: ["production", "api"],
+      })
+      .execute();
+
+    const res = await app.request("/api/admin/tenants", {
+      headers: { Cookie: `auth_token=${admin.token}` },
+    });
+    t.equal(res.status, 200);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const data = (await res.json()) as any[];
+    t.equal(data.length, 1);
+    t.equal(data[0].name, "tagged-tenant");
+    t.same(data[0].tags, ["production", "api"]);
+  });
+
+  await t.test(
+    "returns empty tags array for tenants without tags",
+    async (t) => {
+      const admin = await createUser("admin@example.com", true);
+      const org = await createOrg("Team", "team");
+      await createTenant(org.id, "no-tags-tenant");
+
+      const res = await app.request("/api/admin/tenants", {
+        headers: { Cookie: `auth_token=${admin.token}` },
+      });
+      t.equal(res.status, 200);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const data = (await res.json()) as any[];
+      t.equal(data.length, 1);
+      t.same(data[0].tags, []);
+    },
+  );
 });
 
 await t.test("GET /api/admin/tenants/check-name", async (t) => {
@@ -1373,6 +1419,138 @@ await t.test("POST /api/admin/tenants", async (t) => {
       t.equal(data.is_active, false);
     },
   );
+
+  await t.test("creates tenant with tags", async (t) => {
+    const admin = await createUser("admin@example.com", true);
+    const org = await createOrg("Team", "team");
+
+    const res = await app.request("/api/admin/tenants", {
+      method: "POST",
+      headers: {
+        Cookie: `auth_token=${admin.token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        name: "tagged-tenant",
+        backend_url: "http://backend.example.com",
+        organization_id: org.id,
+        tags: ["production", "api", "v2"],
+      }),
+    });
+    t.equal(res.status, 201);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const data = (await res.json()) as any;
+    t.equal(data.name, "tagged-tenant");
+    t.same(data.tags, ["production", "api", "v2"]);
+  });
+
+  await t.test("creates tenant with empty tags array", async (t) => {
+    const admin = await createUser("admin@example.com", true);
+    const org = await createOrg("Team", "team");
+
+    const res = await app.request("/api/admin/tenants", {
+      method: "POST",
+      headers: {
+        Cookie: `auth_token=${admin.token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        name: "no-tags-tenant",
+        backend_url: "http://backend.example.com",
+        organization_id: org.id,
+        tags: [],
+      }),
+    });
+    t.equal(res.status, 201);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const data = (await res.json()) as any;
+    t.same(data.tags, []);
+  });
+
+  await t.test(
+    "creates tenant without tags field (defaults to empty)",
+    async (t) => {
+      const admin = await createUser("admin@example.com", true);
+      const org = await createOrg("Team", "team");
+
+      const res = await app.request("/api/admin/tenants", {
+        method: "POST",
+        headers: {
+          Cookie: `auth_token=${admin.token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          name: "default-tags-tenant",
+          backend_url: "http://backend.example.com",
+          organization_id: org.id,
+        }),
+      });
+      t.equal(res.status, 201);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const data = (await res.json()) as any;
+      t.same(data.tags, []);
+    },
+  );
+
+  await t.test("rejects invalid tags (uppercase)", async (t) => {
+    const admin = await createUser("admin@example.com", true);
+    const org = await createOrg("Team", "team");
+
+    const res = await app.request("/api/admin/tenants", {
+      method: "POST",
+      headers: {
+        Cookie: `auth_token=${admin.token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        name: "bad-tags-tenant",
+        backend_url: "http://backend.example.com",
+        organization_id: org.id,
+        tags: ["Production"],
+      }),
+    });
+    t.equal(res.status, 400);
+  });
+
+  await t.test("rejects too many tags", async (t) => {
+    const admin = await createUser("admin@example.com", true);
+    const org = await createOrg("Team", "team");
+
+    const res = await app.request("/api/admin/tenants", {
+      method: "POST",
+      headers: {
+        Cookie: `auth_token=${admin.token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        name: "many-tags-tenant",
+        backend_url: "http://backend.example.com",
+        organization_id: org.id,
+        tags: ["tag1", "tag2", "tag3", "tag4", "tag5", "tag6"],
+      }),
+    });
+    t.equal(res.status, 400);
+  });
+
+  await t.test("rejects duplicate tags", async (t) => {
+    const admin = await createUser("admin@example.com", true);
+    const org = await createOrg("Team", "team");
+
+    const res = await app.request("/api/admin/tenants", {
+      method: "POST",
+      headers: {
+        Cookie: `auth_token=${admin.token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        name: "dupe-tags-tenant",
+        backend_url: "http://backend.example.com",
+        organization_id: org.id,
+        tags: ["api", "production", "api"],
+      }),
+    });
+    t.equal(res.status, 400);
+  });
 });
 
 await t.test("POST /api/admin/tenants/:id/activate", async (t) => {
@@ -2310,6 +2488,125 @@ await t.test("PUT /api/admin/tenants/:id", async (t) => {
       t.equal(data.name, "my-tenant");
     },
   );
+
+  await t.test("updates tenant tags", async (t) => {
+    const admin = await createUser("admin@example.com", true);
+    const org = await createOrg("Team", "team");
+
+    const tenant = await db
+      .insertInto("tenants")
+      .values({
+        name: "tags-tenant",
+        organization_id: org.id,
+        backend_url: "http://backend.example.com",
+        default_price_usdc: 0.01,
+        default_scheme: "exact",
+        status: "active",
+        tags: ["old-tag"],
+      })
+      .returning(["id"])
+      .executeTakeFirstOrThrow();
+
+    const res = await app.request(`/api/admin/tenants/${tenant.id}`, {
+      method: "PUT",
+      headers: {
+        Cookie: `auth_token=${admin.token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ tags: ["new-tag", "another-tag"] }),
+    });
+    t.equal(res.status, 200);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const data = (await res.json()) as any;
+    t.same(data.tags, ["new-tag", "another-tag"]);
+  });
+
+  await t.test("clears tags with empty array", async (t) => {
+    const admin = await createUser("admin@example.com", true);
+    const org = await createOrg("Team", "team");
+
+    const tenant = await db
+      .insertInto("tenants")
+      .values({
+        name: "clear-tags-tenant",
+        organization_id: org.id,
+        backend_url: "http://backend.example.com",
+        default_price_usdc: 0.01,
+        default_scheme: "exact",
+        status: "active",
+        tags: ["tag1", "tag2"],
+      })
+      .returning(["id"])
+      .executeTakeFirstOrThrow();
+
+    const res = await app.request(`/api/admin/tenants/${tenant.id}`, {
+      method: "PUT",
+      headers: {
+        Cookie: `auth_token=${admin.token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ tags: [] }),
+    });
+    t.equal(res.status, 200);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const data = (await res.json()) as any;
+    t.same(data.tags, []);
+  });
+
+  await t.test("rejects invalid tags on update", async (t) => {
+    const admin = await createUser("admin@example.com", true);
+    const org = await createOrg("Team", "team");
+    const tenant = await createTenant(org.id, "my-tenant");
+
+    const res = await app.request(`/api/admin/tenants/${tenant.id}`, {
+      method: "PUT",
+      headers: {
+        Cookie: `auth_token=${admin.token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ tags: ["INVALID"] }),
+    });
+    t.equal(res.status, 400);
+  });
+
+  await t.test("rejects too many tags on update", async (t) => {
+    const admin = await createUser("admin@example.com", true);
+    const org = await createOrg("Team", "team");
+    const tenant = await createTenant(org.id, "my-tenant");
+
+    const res = await app.request(`/api/admin/tenants/${tenant.id}`, {
+      method: "PUT",
+      headers: {
+        Cookie: `auth_token=${admin.token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ tags: ["t1", "t2", "t3", "t4", "t5", "t6"] }),
+    });
+    t.equal(res.status, 400);
+  });
+
+  await t.test("can update tags along with other fields", async (t) => {
+    const admin = await createUser("admin@example.com", true);
+    const org = await createOrg("Team", "team");
+    const tenant = await createTenant(org.id, "combined-update");
+
+    const res = await app.request(`/api/admin/tenants/${tenant.id}`, {
+      method: "PUT",
+      headers: {
+        Cookie: `auth_token=${admin.token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        backend_url: "http://new-backend.example.com",
+        tags: ["production", "updated"],
+      }),
+    });
+    t.equal(res.status, 200);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const data = (await res.json()) as any;
+    t.equal(data.backend_url, "http://new-backend.example.com");
+    t.same(data.tags, ["production", "updated"]);
+  });
 });
 
 await t.test("DELETE /api/admin/tenants/:id", async (t) => {

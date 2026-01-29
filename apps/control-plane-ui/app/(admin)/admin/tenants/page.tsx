@@ -25,6 +25,7 @@ import { InlineAuthEdit } from "@/components/shared/inline-auth-edit";
 import { InlineNameEdit } from "@/components/shared/inline-name-edit";
 import { InlineUrlEdit } from "@/components/shared/inline-url-edit";
 import { InlineNodeSelect } from "@/components/admin/inline-node-select";
+import { InlineTagsEdit } from "@/components/admin/inline-tags-edit";
 import { useToast } from "@/components/ui/toast";
 import {
   type TenantNode as BaseTenantNode,
@@ -56,6 +57,7 @@ interface Tenant {
   upstream_auth_header: string | null;
   upstream_auth_value: string | null;
   nodes: TenantNode[];
+  tags: string[];
   created_at: string;
 }
 
@@ -81,7 +83,8 @@ export default function AdminTenantsPage() {
       (t) =>
         t.name.toLowerCase().includes(search.toLowerCase()) ||
         t.organization_name?.toLowerCase().includes(search.toLowerCase()) ||
-        t.backend_url.toLowerCase().includes(search.toLowerCase()),
+        t.backend_url.toLowerCase().includes(search.toLowerCase()) ||
+        t.tags?.some((tag) => tag.toLowerCase().includes(search.toLowerCase())),
     ) ?? [];
   const totalCount = filteredTenants.length;
   const totalPages = Math.ceil(totalCount / PAGE_SIZE);
@@ -183,6 +186,9 @@ export default function AdminTenantsPage() {
                     Org Slug
                   </th>
                   <th className="px-4 py-3 text-left text-sm font-medium text-gray-11">
+                    Tags
+                  </th>
+                  <th className="px-4 py-3 text-left text-sm font-medium text-gray-11">
                     URL
                   </th>
                   <th className="px-4 py-3 text-left text-sm font-medium text-gray-11">
@@ -241,6 +247,14 @@ export default function AdminTenantsPage() {
                         onUpdate={() => mutate()}
                         disabled={isEditDisabled(tenant)}
                         disabledReason={getEditDisabledReason(tenant)}
+                      />
+                    </td>
+                    <td className="px-4 py-3">
+                      <InlineTagsEdit
+                        apiEndpoint={`/api/admin/tenants/${tenant.id}`}
+                        label={tenant.name}
+                        tags={tenant.tags ?? []}
+                        onUpdate={() => mutate()}
                       />
                     </td>
                     <td className="px-4 py-3">

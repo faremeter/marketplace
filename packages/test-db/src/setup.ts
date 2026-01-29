@@ -123,6 +123,7 @@ export async function setupTestSchema(
     .addColumn("openapi_spec", "text")
     .addColumn("is_active", "integer", (col) => col.defaultTo(1))
     .addColumn("org_slug", "text")
+    .addColumn("tags", "text", (col) => col.defaultTo("[]"))
     .addColumn("created_at", "text", (col) =>
       col.defaultTo(sql`CURRENT_TIMESTAMP`).notNull(),
     )

@@ -5,6 +5,9 @@ export const MAX_PRICE_USDC = 100_000_000; // $100 in micro-USDC
 export const MIN_PRICE_USD = MIN_PRICE_USDC / 1_000_000; // $0.000001
 export const MAX_PRICE_USD = MAX_PRICE_USDC / 1_000_000; // $100
 
+export const MAX_TAGS = 5;
+export const MAX_TAG_LENGTH = 50;
+
 // Add new schemes here - this is the single source of truth
 export const SCHEMES = ["exact"] as const;
 
@@ -28,6 +31,7 @@ export const TenantSchema = type({
   "upstream_auth_value?": "string | null",
   is_active: "boolean",
   created_at: "string",
+  "tags?": "string[]",
 });
 
 export type Tenant = typeof TenantSchema.infer;

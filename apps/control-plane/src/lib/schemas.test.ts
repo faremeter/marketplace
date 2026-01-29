@@ -6,14 +6,19 @@ import {
   CreateEndpointSchema,
   UpdateEndpointSchema,
   CreateTenantSchema,
+  UpdateTenantSchema,
   CreateOrganizationSchema,
   CreateWalletSchema,
   CreateNodeSchema,
   AddMemberSchema,
   WaitlistSchema,
+  AdminCreateTenantSchema,
+  AdminUpdateTenantSchema,
   MAX_NAME_LENGTH,
   MAX_PRICE_USDC,
   MIN_PASSWORD_LENGTH,
+  MAX_TAGS,
+  MAX_TAG_LENGTH,
 } from "./schemas.js";
 
 // Helper to check if result is an error
@@ -412,6 +417,191 @@ await t.test("WaitlistSchema", async (t) => {
 
   await t.test("rejects invalid email", async (t) => {
     const result = WaitlistSchema({ email: "invalid" });
+    t.equal(isError(result), true);
+  });
+});
+
+await t.test("Tags validation", async (t) => {
+  await t.test("CreateTenantSchema accepts valid tags", async (t) => {
+    const result = CreateTenantSchema({
+      name: "my-tenant",
+      backend_url: "https://api.example.com",
+      tags: ["production", "api", "v2"],
+    });
+    t.equal(isError(result), false);
+  });
+
+  await t.test("CreateTenantSchema accepts empty tags array", async (t) => {
+    const result = CreateTenantSchema({
+      name: "my-tenant",
+      backend_url: "https://api.example.com",
+      tags: [],
+    });
+    t.equal(isError(result), false);
+  });
+
+  await t.test("CreateTenantSchema accepts tenant without tags", async (t) => {
+    const result = CreateTenantSchema({
+      name: "my-tenant",
+      backend_url: "https://api.example.com",
+    });
+    t.equal(isError(result), false);
+  });
+
+  await t.test("accepts tags with hyphens and underscores", async (t) => {
+    const result = CreateTenantSchema({
+      name: "my-tenant",
+      backend_url: "https://api.example.com",
+      tags: ["my-tag", "another_tag", "tag-with_both"],
+    });
+    t.equal(isError(result), false);
+  });
+
+  await t.test("accepts tags with numbers", async (t) => {
+    const result = CreateTenantSchema({
+      name: "my-tenant",
+      backend_url: "https://api.example.com",
+      tags: ["v1", "api2", "3rd-version"],
+    });
+    t.equal(isError(result), false);
+  });
+
+  await t.test(`rejects more than ${MAX_TAGS} tags`, async (t) => {
+    const result = CreateTenantSchema({
+      name: "my-tenant",
+      backend_url: "https://api.example.com",
+      tags: ["tag1", "tag2", "tag3", "tag4", "tag5", "tag6"],
+    });
+    t.equal(isError(result), true);
+  });
+
+  await t.test(`accepts exactly ${MAX_TAGS} tags`, async (t) => {
+    const result = CreateTenantSchema({
+      name: "my-tenant",
+      backend_url: "https://api.example.com",
+      tags: ["tag1", "tag2", "tag3", "tag4", "tag5"],
+    });
+    t.equal(isError(result), false);
+  });
+
+  await t.test("rejects duplicate tags", async (t) => {
+    const result = CreateTenantSchema({
+      name: "my-tenant",
+      backend_url: "https://api.example.com",
+      tags: ["production", "api", "production"],
+    });
+    t.equal(isError(result), true);
+  });
+
+  await t.test("rejects empty tag string", async (t) => {
+    const result = CreateTenantSchema({
+      name: "my-tenant",
+      backend_url: "https://api.example.com",
+      tags: ["valid", ""],
+    });
+    t.equal(isError(result), true);
+  });
+
+  await t.test(`rejects tag longer than ${MAX_TAG_LENGTH} chars`, async (t) => {
+    const result = CreateTenantSchema({
+      name: "my-tenant",
+      backend_url: "https://api.example.com",
+      tags: ["a".repeat(MAX_TAG_LENGTH + 1)],
+    });
+    t.equal(isError(result), true);
+  });
+
+  await t.test(
+    `accepts tag with exactly ${MAX_TAG_LENGTH} chars`,
+    async (t) => {
+      const result = CreateTenantSchema({
+        name: "my-tenant",
+        backend_url: "https://api.example.com",
+        tags: ["a".repeat(MAX_TAG_LENGTH)],
+      });
+      t.equal(isError(result), false);
+    },
+  );
+
+  await t.test("rejects uppercase tags", async (t) => {
+    const result = CreateTenantSchema({
+      name: "my-tenant",
+      backend_url: "https://api.example.com",
+      tags: ["Production"],
+    });
+    t.equal(isError(result), true);
+  });
+
+  await t.test("rejects tags with spaces", async (t) => {
+    const result = CreateTenantSchema({
+      name: "my-tenant",
+      backend_url: "https://api.example.com",
+      tags: ["my tag"],
+    });
+    t.equal(isError(result), true);
+  });
+
+  await t.test("rejects tags with special characters", async (t) => {
+    const result = CreateTenantSchema({
+      name: "my-tenant",
+      backend_url: "https://api.example.com",
+      tags: ["tag!"],
+    });
+    t.equal(isError(result), true);
+  });
+
+  await t.test("rejects tags starting with hyphen", async (t) => {
+    const result = CreateTenantSchema({
+      name: "my-tenant",
+      backend_url: "https://api.example.com",
+      tags: ["-invalid"],
+    });
+    t.equal(isError(result), true);
+  });
+
+  await t.test("rejects tags starting with underscore", async (t) => {
+    const result = CreateTenantSchema({
+      name: "my-tenant",
+      backend_url: "https://api.example.com",
+      tags: ["_invalid"],
+    });
+    t.equal(isError(result), true);
+  });
+
+  await t.test("UpdateTenantSchema accepts tags update", async (t) => {
+    const result = UpdateTenantSchema({
+      tags: ["updated", "tags"],
+    });
+    t.equal(isError(result), false);
+  });
+
+  await t.test("UpdateTenantSchema accepts empty tags to clear", async (t) => {
+    const result = UpdateTenantSchema({
+      tags: [],
+    });
+    t.equal(isError(result), false);
+  });
+
+  await t.test("AdminCreateTenantSchema accepts tags", async (t) => {
+    const result = AdminCreateTenantSchema({
+      name: "my-tenant",
+      backend_url: "https://api.example.com",
+      tags: ["admin", "managed"],
+    });
+    t.equal(isError(result), false);
+  });
+
+  await t.test("AdminUpdateTenantSchema accepts tags update", async (t) => {
+    const result = AdminUpdateTenantSchema({
+      tags: ["production", "critical"],
+    });
+    t.equal(isError(result), false);
+  });
+
+  await t.test("AdminUpdateTenantSchema rejects invalid tags", async (t) => {
+    const result = AdminUpdateTenantSchema({
+      tags: ["UPPERCASE"],
+    });
     t.equal(isError(result), true);
   });
 });

@@ -21,6 +21,7 @@ import useSWR from "swr";
 import { api } from "@/lib/api/client";
 import { SCHEME_OPTIONS, MIN_PRICE_USD, MAX_PRICE_USD } from "@/lib/types/api";
 import { useToast } from "@/components/ui/toast";
+import { TagsInput } from "@/components/shared/tags-input";
 import { sanitizeProxyName } from "@/lib/proxy-name";
 import { getProxyUrlPattern } from "@/lib/format";
 import {
@@ -91,6 +92,7 @@ export function CreateTenantDialog({
   const [defaultPrice, setDefaultPrice] = useState("0.01");
   const [defaultScheme, setDefaultScheme] = useState("exact");
   const [registerOnly, setRegisterOnly] = useState(false);
+  const [tags, setTags] = useState<string[]>([]);
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [nameAvailable, setNameAvailable] = useState<boolean | null>(null);
@@ -128,7 +130,8 @@ export function CreateTenantDialog({
       walletId !== null ||
       defaultPrice !== "0.01" ||
       defaultScheme !== "exact" ||
-      registerOnly !== false
+      registerOnly !== false ||
+      tags.length > 0
     );
   }, [
     name,
@@ -142,6 +145,7 @@ export function CreateTenantDialog({
     defaultPrice,
     defaultScheme,
     registerOnly,
+    tags,
   ]);
 
   const attemptClose = useCallback(() => {
@@ -240,6 +244,7 @@ export function CreateTenantDialog({
     setDefaultPrice("0.01");
     setDefaultScheme("exact");
     setRegisterOnly(false);
+    setTags([]);
     setError("");
     setNameAvailable(null);
     setIsCheckingName(false);
@@ -311,6 +316,7 @@ export function CreateTenantDialog({
         ),
         default_scheme: defaultScheme,
         register_only: registerOnly,
+        tags: tags.length > 0 ? tags : undefined,
       });
       resetForm();
       onOpenChange(false);
@@ -525,6 +531,18 @@ export function CreateTenantDialog({
                   }`}
                 />
               </div>
+            </section>
+
+            {/* Tags */}
+            <section>
+              <h3 className="mb-3 text-xs font-medium uppercase tracking-wider text-gray-11">
+                Tags
+              </h3>
+              <TagsInput
+                tags={tags}
+                onChange={setTags}
+                placeholder="Add tags to categorize this tenant..."
+              />
             </section>
 
             {/* Infrastructure */}

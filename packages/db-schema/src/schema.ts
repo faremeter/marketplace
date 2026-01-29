@@ -84,6 +84,7 @@ export interface TenantsTable {
   openapi_spec: ColumnType<unknown, string | undefined, string> | null;
   is_active: ColumnType<boolean, boolean | undefined, boolean>;
   org_slug: string | null;
+  tags: ColumnType<string[], string[] | undefined, string[] | undefined>;
   created_at: AutoDateColumn;
 }
 
