@@ -4,6 +4,7 @@ dist
 **/.next
 git-*
 node_modules
+.local-packages
 tsconfig.tsbuildinfo
 .tap
 keypairs

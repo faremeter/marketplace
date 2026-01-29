@@ -34,6 +34,7 @@ step::20::install-packages() {
 step::21::install-nodejs() {
     curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
     apt-get install -y nodejs
+    npm install -g pnpm
 }
 
 step::21a::setup-certbot-permissions() {

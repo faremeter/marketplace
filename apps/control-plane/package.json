@@ -42,6 +42,16 @@
     "safe-regex2": "^5.0.0",
     "viem": "^2.41.2"
   },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "bcrypt",
+      "better-sqlite3",
+      "esbuild",
+      "bigint-buffer",
+      "bufferutil",
+      "utf-8-validate"
+    ]
+  },
   "devDependencies": {
     "@1click/test-db": "workspace:*",
     "@eslint/js": "^9.39.1",

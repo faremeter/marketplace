@@ -125,14 +125,20 @@ step::20::typecheck() {
 
 step::25::copy-shared-packages() {
     log::info "copying shared packages..."
-    rm -rf "$SCRIPT_DIR/node_modules/@1click"
-    mkdir -p "$SCRIPT_DIR/node_modules/@1click"
-    cp -r "$SCRIPT_DIR/../../packages/db-schema" "$SCRIPT_DIR/node_modules/@1click/db-schema"
-    cp -r "$SCRIPT_DIR/../../packages/test-db" "$SCRIPT_DIR/node_modules/@1click/test-db"
+    rm -rf "$SCRIPT_DIR/.local-packages"
+    mkdir -p "$SCRIPT_DIR/.local-packages/@1click"
+    cp -r "$SCRIPT_DIR/../../packages/db-schema" "$SCRIPT_DIR/.local-packages/@1click/db-schema"
+    cp -r "$SCRIPT_DIR/../../packages/test-db" "$SCRIPT_DIR/.local-packages/@1click/test-db"
+    cat <<'EOF' >"$SCRIPT_DIR/pnpm-workspace.yaml"
+packages:
+  - ".local-packages/@1click/*"
+EOF
 }
 
 step::30::sync() {
     for_each_stack "syncing files..." 'remote::sync'
+    rm -rf "$SCRIPT_DIR/.local-packages"
+    rm -f "$SCRIPT_DIR/pnpm-workspace.yaml"
 }
 
 step::40::install() {
@@ -141,7 +147,7 @@ step::40::install() {
         target_dir=$(get_inactive_release)
         log::info "  -> installing in $target_dir"
         remote::exec "cp $SYMLINK_DIR/.env $target_dir/.env 2>/dev/null || true"
-        remote::exec "cd $target_dir && npm install"
+        remote::exec "cd $target_dir && pnpm install"
     '
 }
 
