@@ -12,6 +12,7 @@ interface TenantResult {
   backend_url: string;
   default_price_usdc: number;
   default_scheme: string;
+  tags: string[];
 }
 
 interface EndpointResult {
@@ -23,6 +24,7 @@ interface EndpointResult {
   description: string | null;
   price_usdc: number | null;
   scheme: string | null;
+  tags: string[];
 }
 
 searchRoutes.get("/", async (c) => {
@@ -50,6 +52,7 @@ searchRoutes.get("/", async (c) => {
           "backend_url",
           "default_price_usdc",
           "default_scheme",
+          "tags",
         ])
         .where("is_active", "=", true)
         .where("status", "=", "active")
@@ -58,6 +61,7 @@ searchRoutes.get("/", async (c) => {
             eb("name", "ilike", likePattern),
             eb("org_slug", "ilike", likePattern),
             eb(sql`openapi_spec::text`, "ilike", likePattern),
+            eb(sql`tenants.tags::text`, "ilike", likePattern),
           ]),
         )
         .orderBy("name")
@@ -76,6 +80,7 @@ searchRoutes.get("/", async (c) => {
           "e.description",
           "e.price_usdc",
           "e.scheme",
+          "e.tags",
         ])
         .where("e.is_active", "=", true)
         .where("e.deleted_at", "is", null)
@@ -85,6 +90,7 @@ searchRoutes.get("/", async (c) => {
           eb.or([
             eb("e.path_pattern", "ilike", likePattern),
             eb("e.description", "ilike", likePattern),
+            eb(sql`e.tags::text`, "ilike", likePattern),
           ]),
         )
         .orderBy("t.name")

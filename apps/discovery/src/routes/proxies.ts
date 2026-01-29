@@ -15,6 +15,7 @@ interface ProxyListItem {
   backend_url: string;
   default_price_usdc: number;
   default_scheme: string;
+  tags: string[];
 }
 
 interface ProxyDetail extends ProxyListItem {
@@ -37,6 +38,7 @@ proxiesRoutes.get("/", async (c) => {
         "backend_url",
         "default_price_usdc",
         "default_scheme",
+        "tags",
       ])
       .where("is_active", "=", true)
       .where("status", "=", "active")
@@ -73,6 +75,7 @@ proxiesRoutes.get("/:id", async (c) => {
         "backend_url",
         "default_price_usdc",
         "default_scheme",
+        "tags",
       ])
       .where("id", "=", id)
       .where("is_active", "=", true)

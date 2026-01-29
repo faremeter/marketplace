@@ -22,6 +22,7 @@ async function createTenant(overrides: {
   backend_url?: string;
   default_price_usdc?: number;
   default_scheme?: string;
+  tags?: string[];
 }) {
   const tenant = await db
     .insertInto("tenants")
@@ -34,6 +35,7 @@ async function createTenant(overrides: {
       status: overrides.status ?? "active",
       org_slug: overrides.org_slug ?? null,
       openapi_spec: overrides.openapi_spec ?? null,
+      tags: overrides.tags ?? [],
     })
     .returning("id")
     .executeTakeFirstOrThrow();
@@ -199,6 +201,21 @@ await t.test("GET /api/v1/proxies", async (t) => {
     t.equal(proxy.default_scheme, "per_byte");
   });
 
+  await t.test("returns tags in proxy list", async (t) => {
+    await createTenant({
+      name: "Tagged API",
+      tags: ["production", "finance"],
+    });
+
+    const res = await app.request("/api/v1/proxies");
+    t.equal(res.status, 200);
+    const data = (await res.json()) as {
+      data: { name: string; tags: string[] }[];
+    };
+    t.equal(data.data.length, 1);
+    t.same(data.data[0].tags, ["production", "finance"]);
+  });
+
   await t.test("handles negative cursor gracefully", async (t) => {
     await createTenant({ name: "API 1" });
     await createTenant({ name: "API 2" });
@@ -260,6 +277,21 @@ await t.test("GET /api/v1/proxies/:id", async (t) => {
     };
     t.equal(data.data.name, "Detailed API");
     t.equal(data.data.endpoint_count, 2);
+  });
+
+  await t.test("returns tags in proxy detail", async (t) => {
+    const tenant = await createTenant({
+      name: "Tagged Detail API",
+      tags: ["staging", "ml"],
+    });
+
+    const res = await app.request(`/api/v1/proxies/${tenant.id}`);
+    t.equal(res.status, 200);
+    const data = (await res.json()) as {
+      data: { name: string; tags: string[] };
+    };
+    t.equal(data.data.name, "Tagged Detail API");
+    t.same(data.data.tags, ["staging", "ml"]);
   });
 
   await t.test("returns 404 for non-existent proxy", async (t) => {

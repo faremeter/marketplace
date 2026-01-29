@@ -19,6 +19,7 @@ async function createTenant(overrides: {
   is_active?: boolean;
   status?: string;
   openapi_spec?: string;
+  tags?: string[];
 }) {
   const tenant = await db
     .insertInto("tenants")
@@ -31,6 +32,7 @@ async function createTenant(overrides: {
       status: overrides.status ?? "active",
       org_slug: overrides.org_slug ?? null,
       openapi_spec: overrides.openapi_spec ?? null,
+      tags: overrides.tags ?? [],
     })
     .returning("id")
     .executeTakeFirstOrThrow();
@@ -44,6 +46,7 @@ async function createEndpoint(
     description?: string;
     is_active?: boolean;
     deleted_at?: string | null;
+    tags?: string[];
   },
 ) {
   const endpoint = await db
@@ -54,6 +57,7 @@ async function createEndpoint(
       description: overrides.description ?? null,
       is_active: overrides.is_active ?? true,
       deleted_at: overrides.deleted_at ?? null,
+      tags: overrides.tags ?? [],
     })
     .returning("id")
     .executeTakeFirstOrThrow();
@@ -344,6 +348,81 @@ await t.test("GET /api/v1/search", async (t) => {
       t.equal(data.endpoints[0].tenant_id, activeTenant.id);
     },
   );
+
+  await t.test("searches tenants by tag", async (t) => {
+    await createTenant({ name: "Tagged API", tags: ["production", "finance"] });
+    await createTenant({ name: "Other API", tags: ["staging"] });
+
+    const res = await app.request("/api/v1/search?q=finance");
+    t.equal(res.status, 200);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const data = (await res.json()) as any;
+    t.equal(data.tenants.length, 1);
+    t.equal(data.tenants[0].name, "Tagged API");
+  });
+
+  await t.test("searches endpoints by tag", async (t) => {
+    const tenant = await createTenant({ name: "Test API" });
+    await createEndpoint(tenant.id, {
+      path_pattern: "/api/v1",
+      tags: ["deprecated", "legacy"],
+    });
+    await createEndpoint(tenant.id, {
+      path_pattern: "/api/v2",
+      tags: ["stable"],
+    });
+
+    const res = await app.request("/api/v1/search?q=legacy");
+    t.equal(res.status, 200);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const data = (await res.json()) as any;
+    t.equal(data.endpoints.length, 1);
+    t.equal(data.endpoints[0].path_pattern, "/api/v1");
+  });
+
+  await t.test("returns tags in search results", async (t) => {
+    await createTenant({
+      name: "Unrelated Name",
+      tags: ["xyzzy-unique-tag", "ml"],
+    });
+    const tenant = await createTenant({ name: "Other Tenant" });
+    await createEndpoint(tenant.id, {
+      path_pattern: "/some/path",
+      tags: ["xyzzy-unique-tag", "experimental"],
+    });
+
+    const res = await app.request("/api/v1/search?q=xyzzy-unique-tag");
+    t.equal(res.status, 200);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const data = (await res.json()) as any;
+    t.equal(data.tenants.length, 1);
+    t.same(data.tenants[0].tags, ["xyzzy-unique-tag", "ml"]);
+    t.equal(data.endpoints.length, 1);
+    t.same(data.endpoints[0].tags, ["xyzzy-unique-tag", "experimental"]);
+  });
+
+  await t.test("tag search is case-insensitive", async (t) => {
+    await createTenant({ name: "Case API", tags: ["Production"] });
+    const tenant = await createTenant({ name: "Other" });
+    await createEndpoint(tenant.id, {
+      path_pattern: "/case/path",
+      tags: ["Staging"],
+    });
+
+    const res = await app.request("/api/v1/search?q=PRODUCTION");
+    t.equal(res.status, 200);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const data = (await res.json()) as any;
+    t.equal(data.tenants.length, 1);
+    t.equal(data.tenants[0].name, "Case API");
+
+    const res2 = await app.request("/api/v1/search?q=staging");
+    t.equal(res2.status, 200);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const data2 = (await res2.json()) as any;
+    t.equal(data2.endpoints.length, 1);
+    t.equal(data2.endpoints[0].path_pattern, "/case/path");
+  });
 
   await t.test("escapes backslash character in search query", async (t) => {
     await createTenant({ name: "Tenant with \\ backslash" });
