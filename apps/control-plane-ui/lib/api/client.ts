@@ -33,11 +33,20 @@ export async function apiFetch<T>(
     } catch {
       errorData = undefined;
     }
-    throw new ApiError(
-      `API request failed: ${response.statusText}`,
-      response.status,
-      errorData,
-    );
+    let message = response.statusText;
+    if (errorData && typeof errorData === "object") {
+      const data = errorData as Record<string, unknown>;
+      if (typeof data.error === "string") {
+        message = data.error;
+      } else if (
+        Array.isArray(data.errors) &&
+        data.errors.length > 0 &&
+        typeof data.errors[0].message === "string"
+      ) {
+        message = data.errors[0].message;
+      }
+    }
+    throw new ApiError(message, response.status, errorData);
   }
 
   return response.json() as Promise<T>;
