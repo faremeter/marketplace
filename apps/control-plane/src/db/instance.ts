@@ -221,6 +221,7 @@ export async function setupTestSchema(): Promise<void> {
     .addColumn("priority", "integer", (col) => col.defaultTo(0))
     .addColumn("openapi_source_paths", "text")
     .addColumn("is_active", "integer", (col) => col.defaultTo(1))
+    .addColumn("tags", "text", (col) => col.defaultTo("[]"))
     .addColumn("created_at", "text", (col) =>
       col.defaultTo(sql`CURRENT_TIMESTAMP`).notNull(),
     )

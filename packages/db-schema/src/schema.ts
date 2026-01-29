@@ -124,6 +124,7 @@ export interface EndpointsTable {
     string[] | undefined
   >;
   is_active: ColumnType<boolean, boolean | undefined, boolean>;
+  tags: ColumnType<string[], string[] | undefined, string[] | undefined>;
   created_at: AutoDateColumn;
   deleted_at: NullableDateColumn;
 }

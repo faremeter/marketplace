@@ -140,6 +140,7 @@ endpointsRoutes.post(
         priority: body.priority ?? 100,
         is_active: true,
         openapi_source_paths: body.openapi_source_paths ?? undefined,
+        tags: body.tags ?? [],
       })
       .returningAll()
       .executeTakeFirstOrThrow();
@@ -176,6 +177,7 @@ endpointsRoutes.put(
       updateData.description = body.description;
     if (body.priority !== undefined) updateData.priority = body.priority;
     if (body.is_active !== undefined) updateData.is_active = body.is_active;
+    if (body.tags !== undefined) updateData.tags = body.tags;
 
     const result = await db
       .updateTable("endpoints")

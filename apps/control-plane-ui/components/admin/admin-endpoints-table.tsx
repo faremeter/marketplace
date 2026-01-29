@@ -14,6 +14,7 @@ import * as Tooltip from "@radix-ui/react-tooltip";
 import * as AlertDialog from "@radix-ui/react-alert-dialog";
 import { InlinePriceEdit } from "@/components/shared/inline-price-edit";
 import { InlineSchemeEdit } from "@/components/shared/inline-scheme-edit";
+import { InlineTagsEdit } from "@/components/admin/inline-tags-edit";
 import { useToast } from "@/components/ui/toast";
 import {
   type EarningsAnalytics,
@@ -34,6 +35,7 @@ interface Endpoint {
   priority: number;
   openapi_source_paths: string[] | null;
   is_active: boolean;
+  tags: string[];
   created_at: string;
 }
 
@@ -125,6 +127,9 @@ export function AdminEndpointsTable({
             <tr>
               <th className="px-4 py-3 text-left text-sm font-medium text-gray-11">
                 Path
+              </th>
+              <th className="whitespace-nowrap px-4 py-3 text-left text-sm font-medium text-gray-11">
+                Tags
               </th>
               <th className="whitespace-nowrap px-4 py-3 text-left text-sm font-medium text-gray-11">
                 Price
@@ -274,6 +279,14 @@ function EndpointRow({
             <span className="text-xs text-gray-11">{endpoint.description}</span>
           )}
         </div>
+      </td>
+      <td className="px-4 py-3">
+        <InlineTagsEdit
+          tags={endpoint.tags ?? []}
+          onUpdate={onUpdate}
+          apiEndpoint={`/api/admin/tenants/${tenantId}/endpoints/${endpoint.id}`}
+          label={endpoint.path ?? endpoint.path_pattern}
+        />
       </td>
       <td className="whitespace-nowrap px-4 py-3">
         <div className="flex items-center gap-2">
@@ -428,6 +441,9 @@ function DefaultRow({
           /
         </code>
         <span className="ml-2 text-xs text-gray-11">(default)</span>
+      </td>
+      <td className="whitespace-nowrap px-4 py-3">
+        <span className="text-xs text-gray-11">-</span>
       </td>
       <td className="whitespace-nowrap px-4 py-3">
         <div className="flex items-center gap-2">

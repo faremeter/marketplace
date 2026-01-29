@@ -32,6 +32,7 @@ interface Endpoint {
   priority: number;
   openapi_source_paths: string[] | null;
   is_active: boolean;
+  tags: string[];
   created_at: string;
 }
 
@@ -148,6 +149,9 @@ export function EndpointsTab({
                   Path
                 </th>
                 <th className="whitespace-nowrap px-4 py-3 text-left text-sm font-medium text-gray-11">
+                  Tags
+                </th>
+                <th className="whitespace-nowrap px-4 py-3 text-left text-sm font-medium text-gray-11">
                   Price
                 </th>
                 <th className="whitespace-nowrap px-4 py-3 text-left text-sm font-medium text-gray-11">
@@ -177,6 +181,22 @@ export function EndpointsTab({
                           <span className="text-xs text-gray-11">
                             {endpoint.description}
                           </span>
+                        )}
+                      </div>
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="flex flex-wrap gap-1">
+                        {endpoint.tags?.length > 0 ? (
+                          endpoint.tags.map((tag) => (
+                            <span
+                              key={tag}
+                              className="rounded bg-gray-4 px-1.5 py-0.5 text-[10px] font-medium text-gray-11"
+                            >
+                              {tag}
+                            </span>
+                          ))
+                        ) : (
+                          <span className="text-xs text-gray-9">-</span>
                         )}
                       </div>
                     </td>
@@ -298,6 +318,9 @@ export function EndpointsTab({
                     <code className="text-sm text-accent-11">/</code>
                     <span className="text-xs text-gray-11">(catch-all)</span>
                   </div>
+                </td>
+                <td className="whitespace-nowrap px-4 py-3">
+                  <span className="text-xs text-gray-11">-</span>
                 </td>
                 <td className="whitespace-nowrap px-4 py-3">
                   <div className="flex items-center gap-2">

@@ -46,6 +46,7 @@ interface Endpoint {
   price_usdc: number | null;
   scheme: string | null;
   description: string | null;
+  tags: string[];
   created_at: string;
 }
 

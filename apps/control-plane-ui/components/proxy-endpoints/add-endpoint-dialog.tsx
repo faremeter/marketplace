@@ -6,6 +6,7 @@ import { Cross2Icon, PlusIcon, MinusIcon } from "@radix-ui/react-icons";
 import { api } from "@/lib/api/client";
 import { useToast } from "@/components/ui/toast";
 import { SCHEME_OPTIONS } from "@/lib/types/api";
+import { TagsInput } from "@/components/shared/tags-input";
 import { useAuth } from "@/lib/auth/context";
 import { refreshOnboardingStatus } from "@/lib/hooks/use-onboarding";
 
@@ -45,6 +46,7 @@ export function AddEndpointDialog({
   const [validation, setValidation] = useState<ValidatePatternResponse | null>(
     null,
   );
+  const [tags, setTags] = useState<string[]>([]);
   const [selectedPaths, setSelectedPaths] = useState<string[]>([]);
   const { toast } = useToast();
   const { currentOrg } = useAuth();
@@ -137,6 +139,7 @@ export function AddEndpointDialog({
         scheme: scheme || null,
         description: description.trim() || null,
         openapi_source_paths: selectedPaths.length > 0 ? selectedPaths : null,
+        tags: tags.length > 0 ? tags : [],
       });
 
       toast({
@@ -152,6 +155,7 @@ export function AddEndpointDialog({
       setPriceUsdc("");
       setScheme("");
       setDescription("");
+      setTags([]);
       setValidation(null);
       setSelectedPaths([]);
       onSuccess();
@@ -314,6 +318,15 @@ export function AddEndpointDialog({
                 placeholder="Optional description"
                 className="mt-1 w-full rounded-md border border-gray-6 bg-gray-3 px-3 py-2 text-sm text-gray-12 placeholder-gray-9 focus:border-accent-8 focus:outline-none focus:ring-1 focus:ring-accent-8"
               />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-11">
+                Tags
+              </label>
+              <div className="mt-1">
+                <TagsInput tags={tags} onChange={setTags} />
+              </div>
             </div>
 
             <div className="flex justify-end gap-3 pt-2">

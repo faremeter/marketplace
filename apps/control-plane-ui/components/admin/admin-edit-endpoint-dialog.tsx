@@ -6,6 +6,7 @@ import { Cross2Icon, PlusIcon, MinusIcon } from "@radix-ui/react-icons";
 import { api } from "@/lib/api/client";
 import { useToast } from "@/components/ui/toast";
 import { SCHEME_OPTIONS } from "@/lib/types/api";
+import { TagsInput } from "@/components/shared/tags-input";
 
 interface Endpoint {
   id: number;
@@ -18,6 +19,7 @@ interface Endpoint {
   priority: number;
   openapi_source_paths: string[] | null;
   is_active: boolean;
+  tags: string[];
   created_at: string;
 }
 
@@ -47,6 +49,7 @@ export function AdminEditEndpointDialog({
   const [scheme, setScheme] = useState(endpoint.scheme ?? defaultScheme);
   const [description, setDescription] = useState(endpoint.description ?? "");
   const [priority, setPriority] = useState(endpoint.priority.toString());
+  const [tags, setTags] = useState<string[]>(endpoint.tags ?? []);
   const [saving, setSaving] = useState(false);
   const { toast } = useToast();
 
@@ -63,6 +66,7 @@ export function AdminEditEndpointDialog({
         scheme: scheme || null,
         description: description.trim() || null,
         priority: parseInt(priority) || 100,
+        tags,
       });
 
       toast({
@@ -206,6 +210,15 @@ export function AdminEditEndpointDialog({
                 placeholder="Optional description"
                 className="mt-1 w-full rounded-md border border-gray-6 bg-gray-3 px-3 py-2 text-sm text-gray-12 placeholder-gray-9 focus:border-accent-8 focus:outline-none focus:ring-1 focus:ring-accent-8"
               />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-11">
+                Tags
+              </label>
+              <div className="mt-1">
+                <TagsInput tags={tags} onChange={setTags} />
+              </div>
             </div>
 
             {endpoint.openapi_source_paths &&

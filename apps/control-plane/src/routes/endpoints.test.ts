@@ -544,6 +544,98 @@ await t.test("POST /api/tenants/:tenantId/endpoints", async (t) => {
     t.same(data.openapi_source_paths, sourcePaths);
   });
 
+  await t.test("creates endpoint with tags", async (t) => {
+    const user = await createUser("member@example.com");
+    const org = await createOrg("Team", "team");
+    await addMember(user.id, org.id);
+    const tenant = await createTenant(org.id, "my-tenant");
+
+    const res = await app.request(`/api/tenants/${tenant.id}/endpoints`, {
+      method: "POST",
+      headers: {
+        Cookie: `auth_token=${user.token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        path: "/tagged-endpoint",
+        tags: ["production", "api"],
+      }),
+    });
+
+    t.equal(res.status, 201);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const data = (await res.json()) as any;
+    t.same(data.tags, ["production", "api"]);
+  });
+
+  await t.test(
+    "creates endpoint with empty tags defaults to empty array",
+    async (t) => {
+      const user = await createUser("member@example.com");
+      const org = await createOrg("Team", "team");
+      await addMember(user.id, org.id);
+      const tenant = await createTenant(org.id, "my-tenant");
+
+      const res = await app.request(`/api/tenants/${tenant.id}/endpoints`, {
+        method: "POST",
+        headers: {
+          Cookie: `auth_token=${user.token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          path: "/no-tags",
+        }),
+      });
+
+      t.equal(res.status, 201);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const data = (await res.json()) as any;
+      t.same(data.tags, []);
+    },
+  );
+
+  await t.test("rejects invalid tags on create", async (t) => {
+    const user = await createUser("member@example.com");
+    const org = await createOrg("Team", "team");
+    await addMember(user.id, org.id);
+    const tenant = await createTenant(org.id, "my-tenant");
+
+    const res = await app.request(`/api/tenants/${tenant.id}/endpoints`, {
+      method: "POST",
+      headers: {
+        Cookie: `auth_token=${user.token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        path: "/bad-tags",
+        tags: ["UPPERCASE", "invalid tag!"],
+      }),
+    });
+
+    t.equal(res.status, 400);
+  });
+
+  await t.test("rejects too many tags on create", async (t) => {
+    const user = await createUser("member@example.com");
+    const org = await createOrg("Team", "team");
+    await addMember(user.id, org.id);
+    const tenant = await createTenant(org.id, "my-tenant");
+
+    const res = await app.request(`/api/tenants/${tenant.id}/endpoints`, {
+      method: "POST",
+      headers: {
+        Cookie: `auth_token=${user.token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        path: "/too-many-tags",
+        tags: ["t1", "t2", "t3", "t4", "t5", "t6"],
+      }),
+    });
+
+    t.equal(res.status, 400);
+  });
+
   await t.test("accepts null for openapi_source_paths", async (t) => {
     const user = await createUser("member@example.com");
     const org = await createOrg("Team", "team");
@@ -750,6 +842,92 @@ await t.test("PUT /api/tenants/:tenantId/endpoints/:id", async (t) => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const data = (await res.json()) as any;
     t.equal(data.scheme, "per_request");
+  });
+
+  await t.test("updates tags", async (t) => {
+    const user = await createUser("member@example.com");
+    const org = await createOrg("Team", "team");
+    await addMember(user.id, org.id);
+    const tenant = await createTenant(org.id, "my-tenant");
+
+    const endpoint = await createEndpoint(tenant.id, "/tag-update");
+
+    const res = await app.request(
+      `/api/tenants/${tenant.id}/endpoints/${endpoint.id}`,
+      {
+        method: "PUT",
+        headers: {
+          Cookie: `auth_token=${user.token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ tags: ["production", "v2"] }),
+      },
+    );
+
+    t.equal(res.status, 200);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const data = (await res.json()) as any;
+    t.same(data.tags, ["production", "v2"]);
+  });
+
+  await t.test("clears tags with empty array", async (t) => {
+    const user = await createUser("member@example.com");
+    const org = await createOrg("Team", "team");
+    await addMember(user.id, org.id);
+    const tenant = await createTenant(org.id, "my-tenant");
+
+    const endpoint = await createEndpoint(tenant.id, "/tag-clear");
+
+    // First set tags
+    await app.request(`/api/tenants/${tenant.id}/endpoints/${endpoint.id}`, {
+      method: "PUT",
+      headers: {
+        Cookie: `auth_token=${user.token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ tags: ["production"] }),
+    });
+
+    // Then clear them
+    const res = await app.request(
+      `/api/tenants/${tenant.id}/endpoints/${endpoint.id}`,
+      {
+        method: "PUT",
+        headers: {
+          Cookie: `auth_token=${user.token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ tags: [] }),
+      },
+    );
+
+    t.equal(res.status, 200);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const data = (await res.json()) as any;
+    t.same(data.tags, []);
+  });
+
+  await t.test("rejects invalid tags on update", async (t) => {
+    const user = await createUser("member@example.com");
+    const org = await createOrg("Team", "team");
+    await addMember(user.id, org.id);
+    const tenant = await createTenant(org.id, "my-tenant");
+
+    const endpoint = await createEndpoint(tenant.id, "/bad-tag-update");
+
+    const res = await app.request(
+      `/api/tenants/${tenant.id}/endpoints/${endpoint.id}`,
+      {
+        method: "PUT",
+        headers: {
+          Cookie: `auth_token=${user.token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ tags: ["INVALID"] }),
+      },
+    );
+
+    t.equal(res.status, 400);
   });
 
   await t.test("updates openapi_source_paths field", async (t) => {

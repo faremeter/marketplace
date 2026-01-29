@@ -14,6 +14,7 @@ import {
   WaitlistSchema,
   AdminCreateTenantSchema,
   AdminUpdateTenantSchema,
+  AdminUpdateEndpointSchema,
   MAX_NAME_LENGTH,
   MAX_PRICE_USDC,
   MIN_PASSWORD_LENGTH,
@@ -601,6 +602,89 @@ await t.test("Tags validation", async (t) => {
   await t.test("AdminUpdateTenantSchema rejects invalid tags", async (t) => {
     const result = AdminUpdateTenantSchema({
       tags: ["UPPERCASE"],
+    });
+    t.equal(isError(result), true);
+  });
+});
+
+await t.test("Endpoint Tags validation", async (t) => {
+  await t.test("CreateEndpointSchema accepts tags", async (t) => {
+    const result = CreateEndpointSchema({
+      path: "/api/users",
+      tags: ["production", "api"],
+    });
+    t.equal(isError(result), false);
+  });
+
+  await t.test("CreateEndpointSchema accepts empty tags", async (t) => {
+    const result = CreateEndpointSchema({
+      path: "/api/users",
+      tags: [],
+    });
+    t.equal(isError(result), false);
+  });
+
+  await t.test("CreateEndpointSchema accepts without tags", async (t) => {
+    const result = CreateEndpointSchema({
+      path: "/api/users",
+    });
+    t.equal(isError(result), false);
+  });
+
+  await t.test(
+    `CreateEndpointSchema rejects more than ${MAX_TAGS} tags`,
+    async (t) => {
+      const result = CreateEndpointSchema({
+        path: "/api/users",
+        tags: ["t1", "t2", "t3", "t4", "t5", "t6"],
+      });
+      t.equal(isError(result), true);
+    },
+  );
+
+  await t.test("CreateEndpointSchema rejects duplicate tags", async (t) => {
+    const result = CreateEndpointSchema({
+      path: "/api/users",
+      tags: ["api", "api"],
+    });
+    t.equal(isError(result), true);
+  });
+
+  await t.test("CreateEndpointSchema rejects invalid tag format", async (t) => {
+    const result = CreateEndpointSchema({
+      path: "/api/users",
+      tags: ["UPPERCASE"],
+    });
+    t.equal(isError(result), true);
+  });
+
+  await t.test("UpdateEndpointSchema accepts tags", async (t) => {
+    const result = UpdateEndpointSchema({
+      tags: ["updated", "tags"],
+    });
+    t.equal(isError(result), false);
+  });
+
+  await t.test(
+    "UpdateEndpointSchema accepts empty tags to clear",
+    async (t) => {
+      const result = UpdateEndpointSchema({
+        tags: [],
+      });
+      t.equal(isError(result), false);
+    },
+  );
+
+  await t.test("AdminUpdateEndpointSchema accepts tags", async (t) => {
+    const result = AdminUpdateEndpointSchema({
+      tags: ["admin", "managed"],
+    });
+    t.equal(isError(result), false);
+  });
+
+  await t.test("AdminUpdateEndpointSchema rejects invalid tags", async (t) => {
+    const result = AdminUpdateEndpointSchema({
+      tags: ["Invalid Tag!"],
     });
     t.equal(isError(result), true);
   });

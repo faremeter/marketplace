@@ -60,6 +60,7 @@ export const EndpointSchema = type({
   is_active: "boolean",
   created_at: "string",
   "deleted_at?": "string | null",
+  "tags?": "string[]",
 });
 
 export type Endpoint = typeof EndpointSchema.infer;

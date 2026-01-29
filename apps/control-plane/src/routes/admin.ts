@@ -1366,6 +1366,7 @@ adminRoutes.put(
     if (body.description !== undefined)
       updateData.description = body.description;
     if (body.priority !== undefined) updateData.priority = body.priority;
+    if (body.tags !== undefined) updateData.tags = body.tags;
 
     const result = await db
       .updateTable("endpoints")
