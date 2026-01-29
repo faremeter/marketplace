@@ -133,13 +133,22 @@ if tenant_org_slug == cjson.null then tenant_org_slug = nil end
 
 local backend_url = tenant_config.backend_url:match("^%s*(.-)%s*$"):gsub("/$", "")
 local base_url, backend_query = string.match(backend_url, "^([^?]+)%??(.*)")
-ngx.var.backend_url = base_url or backend_url
 if backend_query and backend_query ~= "" then
     local args = ngx.var.args
     ngx.var.args = args and (backend_query .. "&" .. args) or backend_query
 end
 
-local backend_host = string.match(base_url or backend_url, "https?://([^/]+)")
+local effective_url = base_url or backend_url
+local origin = string.match(effective_url, "(https?://[^/]+)")
+local backend_path = string.match(effective_url, "https?://[^/]+(/.+)") or ""
+local client_uri = ngx.var.uri
+if client_uri == "/" and backend_path ~= "" then
+    ngx.var.backend_url = origin .. backend_path
+else
+    ngx.var.backend_url = origin .. backend_path .. client_uri
+end
+
+local backend_host = origin and string.match(origin, "https?://(.+)")
 if backend_host then
     ngx.var.backend_host = backend_host
 end
