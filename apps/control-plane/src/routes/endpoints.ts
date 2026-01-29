@@ -6,6 +6,7 @@ import { arktypeValidator } from "@hono/arktype-validator";
 import { parsePagination } from "../lib/validation.js";
 import { CreateEndpointSchema, UpdateEndpointSchema } from "../lib/schemas.js";
 import { syncToNode } from "../lib/sync.js";
+import { syncOpenApiSpec } from "../lib/openapi-sync.js";
 import { logger } from "../logger.js";
 import { requireTenantAccess } from "../middleware/auth.js";
 import {
@@ -146,6 +147,11 @@ endpointsRoutes.post(
       .executeTakeFirstOrThrow();
 
     syncTenantNodes(tenantId);
+    syncOpenApiSpec(tenantId).catch((err) =>
+      logger.error(
+        `Failed to sync OpenAPI spec for tenant ${tenantId}: ${err}`,
+      ),
+    );
 
     return c.json(result, 201);
   },
@@ -192,6 +198,11 @@ endpointsRoutes.put(
     }
 
     syncTenantNodes(tenantId);
+    syncOpenApiSpec(tenantId).catch((err) =>
+      logger.error(
+        `Failed to sync OpenAPI spec for tenant ${tenantId}: ${err}`,
+      ),
+    );
 
     return c.json(result);
   },
@@ -218,6 +229,9 @@ endpointsRoutes.delete("/:id", modifyResourceLimiter, async (c) => {
   }
 
   syncTenantNodes(tenantId);
+  syncOpenApiSpec(tenantId).catch((err) =>
+    logger.error(`Failed to sync OpenAPI spec for tenant ${tenantId}: ${err}`),
+  );
 
   return c.json({ deleted: true, endpoint: result });
 });

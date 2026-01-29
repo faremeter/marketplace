@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import { db } from "../db/instance.js";
 import { requireAdmin } from "../middleware/auth.js";
 import { syncToNode } from "../lib/sync.js";
+import { syncOpenApiSpec } from "../lib/openapi-sync.js";
 import { logger } from "../logger.js";
 import {
   encryptWalletKeys,
@@ -1389,6 +1390,11 @@ adminRoutes.put(
     for (const tn of tenantNodes) {
       syncToNode(tn.node_id).catch((err) => logger.error(String(err)));
     }
+    syncOpenApiSpec(tenantId).catch((err) =>
+      logger.error(
+        `Failed to sync OpenAPI spec for tenant ${tenantId}: ${err}`,
+      ),
+    );
 
     return c.json(result);
   },

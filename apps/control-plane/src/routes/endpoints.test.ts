@@ -1557,3 +1557,167 @@ await t.test(
     });
   },
 );
+
+await t.test(
+  "OpenAPI spec auto-generation on endpoint mutations",
+  async (t) => {
+    await t.test(
+      "POST creates endpoint and generates OpenAPI spec",
+      async (t) => {
+        const user = await createUser("member@example.com");
+        const org = await createOrg("Team", "team");
+        await addMember(user.id, org.id);
+        const tenant = await createTenant(org.id, "my-tenant");
+
+        const res = await app.request(`/api/tenants/${tenant.id}/endpoints`, {
+          method: "POST",
+          headers: {
+            Cookie: `auth_token=${user.token}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            path: "/users/{id}",
+            price_usdc: 100,
+            scheme: "exact",
+            description: "Get user by ID",
+          }),
+        });
+        t.equal(res.status, 201);
+
+        // Wait for fire-and-forget sync to complete
+        await new Promise((r) => setTimeout(r, 100));
+
+        const tenantRow = await db
+          .selectFrom("tenants")
+          .select(["openapi_spec"])
+          .where("id", "=", tenant.id)
+          .executeTakeFirst();
+
+        if (!tenantRow) {
+          t.fail("expected tenantRow");
+          return;
+        }
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const spec = tenantRow.openapi_spec as any;
+        t.ok(spec.paths["/users/{id}"]);
+        t.equal(spec.paths["/users/{id}"].get.summary, "Get user by ID");
+      },
+    );
+
+    await t.test("PUT updates endpoint and updates OpenAPI spec", async (t) => {
+      const user = await createUser("member@example.com");
+      const org = await createOrg("Team", "team");
+      await addMember(user.id, org.id);
+      const tenant = await createTenant(org.id, "my-tenant");
+
+      // Create endpoint via API
+      const createRes = await app.request(
+        `/api/tenants/${tenant.id}/endpoints`,
+        {
+          method: "POST",
+          headers: {
+            Cookie: `auth_token=${user.token}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            path: "/old-path",
+            description: "Old endpoint",
+          }),
+        },
+      );
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const created = (await createRes.json()) as any;
+      await new Promise((r) => setTimeout(r, 100));
+
+      // Update path
+      const updateRes = await app.request(
+        `/api/tenants/${tenant.id}/endpoints/${created.id}`,
+        {
+          method: "PUT",
+          headers: {
+            Cookie: `auth_token=${user.token}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            path: "/new-path",
+            description: "Updated endpoint",
+          }),
+        },
+      );
+      t.equal(updateRes.status, 200);
+      await new Promise((r) => setTimeout(r, 100));
+
+      const tenantRow = await db
+        .selectFrom("tenants")
+        .select(["openapi_spec"])
+        .where("id", "=", tenant.id)
+        .executeTakeFirst();
+
+      if (!tenantRow) {
+        t.fail("expected tenantRow");
+        return;
+      }
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const spec = tenantRow.openapi_spec as any;
+      t.notOk(spec.paths["/old-path"]);
+      t.ok(spec.paths["/new-path"]);
+      t.equal(spec.paths["/new-path"].get.summary, "Updated endpoint");
+    });
+
+    await t.test("DELETE removes endpoint from OpenAPI spec", async (t) => {
+      const user = await createUser("member@example.com");
+      const org = await createOrg("Team", "team");
+      await addMember(user.id, org.id);
+      const tenant = await createTenant(org.id, "my-tenant");
+
+      // Create two endpoints
+      const res1 = await app.request(`/api/tenants/${tenant.id}/endpoints`, {
+        method: "POST",
+        headers: {
+          Cookie: `auth_token=${user.token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ path: "/keep-me" }),
+      });
+      await res1.json();
+
+      const res2 = await app.request(`/api/tenants/${tenant.id}/endpoints`, {
+        method: "POST",
+        headers: {
+          Cookie: `auth_token=${user.token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ path: "/delete-me" }),
+      });
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const ep2 = (await res2.json()) as any;
+      await new Promise((r) => setTimeout(r, 100));
+
+      // Delete second endpoint
+      const deleteRes = await app.request(
+        `/api/tenants/${tenant.id}/endpoints/${ep2.id}`,
+        {
+          method: "DELETE",
+          headers: { Cookie: `auth_token=${user.token}` },
+        },
+      );
+      t.equal(deleteRes.status, 200);
+      await new Promise((r) => setTimeout(r, 100));
+
+      const tenantRow = await db
+        .selectFrom("tenants")
+        .select(["openapi_spec"])
+        .where("id", "=", tenant.id)
+        .executeTakeFirst();
+
+      if (!tenantRow) {
+        t.fail("expected tenantRow");
+        return;
+      }
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const spec = tenantRow.openapi_spec as any;
+      t.ok(spec.paths["/keep-me"]);
+      t.notOk(spec.paths["/delete-me"]);
+    });
+  },
+);

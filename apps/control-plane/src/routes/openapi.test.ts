@@ -834,3 +834,230 @@ await t.test(
     );
   },
 );
+
+await t.test("OpenAPI spec auto-sync with endpoint mutations", async (t) => {
+  await t.test(
+    "import spec then add manual endpoint preserves imported spec structure",
+    async (t) => {
+      const user = await createUser("member@example.com");
+      const org = await createOrg("Team", "team");
+      await addMember(user.id, org.id);
+      const tenant = await createTenant(org.id, "my-tenant");
+
+      // Import the USPTO spec
+      const importRes = await app.request(
+        `/api/tenants/${tenant.id}/openapi/import`,
+        {
+          method: "POST",
+          headers: {
+            Cookie: `auth_token=${user.token}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ spec: OPENAPI_USPTO }),
+        },
+      );
+      t.equal(importRes.status, 200);
+
+      // Manually add an endpoint (simulating the endpoint route sync)
+      const { syncOpenApiSpec } = await import("../lib/openapi-sync.js");
+      await db
+        .insertInto("endpoints")
+        .values({
+          tenant_id: tenant.id,
+          path: "/health",
+          path_pattern: "/health",
+          priority: 100,
+          is_active: true,
+          description: "Health check",
+        })
+        .execute();
+
+      await syncOpenApiSpec(tenant.id);
+
+      // Verify spec via GET /spec
+      const specRes = await app.request(
+        `/api/tenants/${tenant.id}/openapi/spec`,
+        {
+          headers: { Cookie: `auth_token=${user.token}` },
+        },
+      );
+      t.equal(specRes.status, 200);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const specData = (await specRes.json()) as any;
+      t.equal(specData.hasSpec, true);
+
+      const spec = specData.spec;
+      // Original info preserved
+      t.equal(spec.info.title, "USPTO Data Set API");
+      t.equal(spec.info.version, "1.0.0");
+      // Original servers preserved
+      t.ok(spec.servers);
+      t.equal(spec.servers.length, 1);
+      // Original components preserved
+      t.ok(spec.components);
+      // Imported paths preserved (with lineage endpoints still active)
+      t.ok(
+        spec.paths["/{dataset}/{version}/fields"] ||
+          spec.paths["/{dataset}/{version}/records"],
+      );
+      // Manual endpoint included
+      t.ok(spec.paths["/health"]);
+    },
+  );
+
+  await t.test(
+    "import spec then delete imported endpoint removes path from spec",
+    async (t) => {
+      const user = await createUser("member@example.com");
+      const org = await createOrg("Team", "team");
+      await addMember(user.id, org.id);
+      const tenant = await createTenant(org.id, "my-tenant");
+
+      // Import spec
+      await app.request(`/api/tenants/${tenant.id}/openapi/import`, {
+        method: "POST",
+        headers: {
+          Cookie: `auth_token=${user.token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ spec: OPENAPI_USPTO }),
+      });
+
+      // Get all endpoints to find one to delete
+      const endpoints = await db
+        .selectFrom("endpoints")
+        .selectAll()
+        .where("tenant_id", "=", tenant.id)
+        .where("is_active", "=", true)
+        .execute();
+
+      // Find the fields endpoint
+      const fieldsEndpoint = endpoints.find(
+        (e) =>
+          (e.openapi_source_paths as string[] | null)?.[0] ===
+          "/{dataset}/{version}/fields",
+      );
+      if (!fieldsEndpoint) {
+        t.fail("expected fieldsEndpoint");
+        return;
+      }
+
+      // Soft-delete it
+      await db
+        .updateTable("endpoints")
+        .set({ is_active: false, deleted_at: new Date() })
+        .where("id", "=", fieldsEndpoint.id)
+        .execute();
+
+      const { syncOpenApiSpec } = await import("../lib/openapi-sync.js");
+      await syncOpenApiSpec(tenant.id);
+
+      const tenantRow = await db
+        .selectFrom("tenants")
+        .select(["openapi_spec"])
+        .where("id", "=", tenant.id)
+        .executeTakeFirst();
+
+      if (!tenantRow) {
+        t.fail("expected tenantRow");
+        return;
+      }
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const spec = tenantRow.openapi_spec as any;
+      t.notOk(spec.paths["/{dataset}/{version}/fields"]);
+      // Other path should still exist
+      t.ok(spec.paths["/{dataset}/{version}/records"]);
+    },
+  );
+
+  await t.test(
+    "import spec, add manual endpoint, remove it - spec returns to imported paths only",
+    async (t) => {
+      const user = await createUser("member@example.com");
+      const org = await createOrg("Team", "team");
+      await addMember(user.id, org.id);
+      const tenant = await createTenant(org.id, "my-tenant");
+
+      // Import spec
+      const importRes = await app.request(
+        `/api/tenants/${tenant.id}/openapi/import`,
+        {
+          method: "POST",
+          headers: {
+            Cookie: `auth_token=${user.token}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ spec: OPENAPI_USPTO }),
+        },
+      );
+      t.equal(importRes.status, 200);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const importData = (await importRes.json()) as any;
+      const importedCount = importData.created + importData.linked;
+
+      // Add manual endpoint
+      const { syncOpenApiSpec } = await import("../lib/openapi-sync.js");
+      const manual = await db
+        .insertInto("endpoints")
+        .values({
+          tenant_id: tenant.id,
+          path: "/health",
+          path_pattern: "/health",
+          priority: 100,
+          is_active: true,
+          description: "Health check",
+        })
+        .returning(["id"])
+        .executeTakeFirstOrThrow();
+
+      await syncOpenApiSpec(tenant.id);
+
+      // Verify manual endpoint is in spec
+      let tenantRow = await db
+        .selectFrom("tenants")
+        .select(["openapi_spec"])
+        .where("id", "=", tenant.id)
+        .executeTakeFirst();
+      if (!tenantRow) {
+        t.fail("expected tenantRow");
+        return;
+      }
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      let spec = tenantRow.openapi_spec as any;
+      t.ok(spec.paths["/health"], "manual endpoint present after add");
+      const pathCountWithManual = Object.keys(spec.paths).length;
+      t.equal(pathCountWithManual, importedCount + 1);
+
+      // Remove the manual endpoint
+      await db
+        .updateTable("endpoints")
+        .set({ is_active: false, deleted_at: new Date() })
+        .where("id", "=", manual.id)
+        .execute();
+
+      await syncOpenApiSpec(tenant.id);
+
+      // Verify spec reverts to imported-only
+      tenantRow = await db
+        .selectFrom("tenants")
+        .select(["openapi_spec"])
+        .where("id", "=", tenant.id)
+        .executeTakeFirst();
+      if (!tenantRow) {
+        t.fail("expected tenantRow after remove");
+        return;
+      }
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      spec = tenantRow.openapi_spec as any;
+      t.notOk(spec.paths["/health"], "manual endpoint gone after remove");
+      t.equal(Object.keys(spec.paths).length, importedCount);
+      // Original imported paths still intact
+      t.ok(spec.paths["/{dataset}/{version}/fields"]);
+      t.ok(spec.paths["/{dataset}/{version}/records"]);
+      // Original spec metadata preserved
+      t.equal(spec.info.title, "USPTO Data Set API");
+      t.ok(spec.servers);
+      t.ok(spec.components);
+    },
+  );
+});
