@@ -8,8 +8,13 @@ import {
   createResourceLimiter,
   modifyResourceLimiter,
 } from "../middleware/rate-limit.js";
+import { type } from "arktype";
 import { arktypeValidator } from "@hono/arktype-validator";
-import { OpenApiImportSchema, ValidatePatternSchema } from "../lib/schemas.js";
+import {
+  OpenApiImportSchema,
+  ValidatePatternSchema,
+  OpenApiExtensionsSchema,
+} from "../lib/schemas.js";
 
 export const openapiRoutes = new Hono();
 
@@ -86,16 +91,17 @@ function openApiPathToRegex(path: string): string {
   return `^${regex}$`;
 }
 
-function extractPathsFromSpec(spec: OpenApiSpec): {
+interface ExtractedPath {
   path: string;
   pattern: string;
   description: string | null;
-}[] {
-  const paths: {
-    path: string;
-    pattern: string;
-    description: string | null;
-  }[] = [];
+  price_usdc: number | null;
+  scheme: string | null;
+  tags: string[] | null;
+}
+
+function extractPathsFromSpec(spec: OpenApiSpec): ExtractedPath[] {
+  const paths: ExtractedPath[] = [];
 
   if (!spec.paths) return paths;
 
@@ -124,11 +130,52 @@ function extractPathsFromSpec(spec: OpenApiSpec): {
       }
     }
 
-    paths.push({
-      path,
-      pattern: openApiPathToRegex(path),
-      description,
-    });
+    const raw = item as Record<string, unknown>;
+    const pricing = raw["x-corbits-pricing"] as
+      | Record<string, unknown>
+      | undefined;
+    const rawTags = raw["x-corbits-tags"];
+
+    const extInput: Record<string, unknown> = {};
+    if (pricing?.price_usdc !== undefined)
+      extInput.price_usdc = pricing.price_usdc;
+    if (pricing?.scheme !== undefined) extInput.scheme = pricing.scheme;
+    if (Array.isArray(rawTags) && rawTags.length > 0) extInput.tags = rawTags;
+
+    const ext = OpenApiExtensionsSchema(extInput);
+
+    const isOrphan = raw["x-corbits-orphan"] === true;
+    const originalPattern =
+      typeof raw["x-corbits-original-pattern"] === "string"
+        ? raw["x-corbits-original-pattern"]
+        : null;
+    const pattern =
+      isOrphan && originalPattern ? originalPattern : openApiPathToRegex(path);
+
+    if (ext instanceof type.errors) {
+      paths.push({
+        path,
+        pattern,
+        description,
+        price_usdc: null,
+        scheme: null,
+        tags: null,
+      });
+    } else {
+      const v = ext as {
+        price_usdc?: number | null;
+        scheme?: string | null;
+        tags?: string[];
+      };
+      paths.push({
+        path,
+        pattern,
+        description,
+        price_usdc: v.price_usdc ?? null,
+        scheme: v.scheme ?? null,
+        tags: v.tags ?? null,
+      });
+    }
   }
 
   return paths;
@@ -235,9 +282,19 @@ openapiRoutes.post(
       const existingId = existingPatternMap.get(pathInfo.pattern);
 
       if (existingId) {
+        const updates: Record<string, unknown> = {
+          openapi_source_paths: [pathInfo.path],
+        };
+        if (pathInfo.description !== null)
+          updates.description = pathInfo.description;
+        if (pathInfo.price_usdc !== null)
+          updates.price_usdc = pathInfo.price_usdc;
+        if (pathInfo.scheme !== null) updates.scheme = pathInfo.scheme;
+        if (pathInfo.tags !== null) updates.tags = pathInfo.tags;
+
         await db
           .updateTable("endpoints")
-          .set({ openapi_source_paths: [pathInfo.path] })
+          .set(updates)
           .where("id", "=", existingId)
           .execute();
         linked.push(pathInfo.path);
@@ -252,6 +309,11 @@ openapiRoutes.post(
             priority: 100,
             is_active: true,
             openapi_source_paths: [pathInfo.path],
+            ...(pathInfo.price_usdc !== null && {
+              price_usdc: pathInfo.price_usdc,
+            }),
+            ...(pathInfo.scheme !== null && { scheme: pathInfo.scheme }),
+            ...(pathInfo.tags !== null && { tags: pathInfo.tags }),
           })
           .execute();
         created.push(pathInfo.path);
@@ -343,18 +405,23 @@ openapiRoutes.get("/export", async (c) => {
           exportedSpec.paths[sourcePath] = {};
         }
 
-        (exportedSpec.paths[sourcePath] as Record<string, unknown>)[
-          "x-402-pricing"
-        ] = {
+        const pathObj = exportedSpec.paths[sourcePath] as Record<
+          string,
+          unknown
+        >;
+
+        if (endpoint.description) {
+          pathObj["description"] = endpoint.description;
+        }
+
+        pathObj["x-corbits-pricing"] = {
           price_usdc: endpoint.price_usdc ?? tenant.default_price_usdc,
           scheme: endpoint.scheme ?? tenant.default_scheme,
         };
 
         const tags = endpoint.tags as string[] | null;
         if (tags && tags.length > 0) {
-          (exportedSpec.paths[sourcePath] as Record<string, unknown>)[
-            "x-402-tags"
-          ] = tags;
+          pathObj["x-corbits-tags"] = tags;
         }
       }
     } else {
@@ -375,17 +442,21 @@ openapiRoutes.get("/export", async (c) => {
           exportedSpec.paths = {};
         }
         const orphanPath: Record<string, unknown> = {
-          "x-402-orphan": true,
-          "x-402-original-pattern": endpoint.path_pattern,
-          "x-402-pricing": {
+          "x-corbits-orphan": true,
+          "x-corbits-original-pattern": endpoint.path_pattern,
+          "x-corbits-pricing": {
             price_usdc: endpoint.price_usdc ?? tenant.default_price_usdc,
             scheme: endpoint.scheme ?? tenant.default_scheme,
           },
         };
 
+        if (endpoint.description) {
+          orphanPath["description"] = endpoint.description;
+        }
+
         const orphanTags = endpoint.tags as string[] | null;
         if (orphanTags && orphanTags.length > 0) {
-          orphanPath["x-402-tags"] = orphanTags;
+          orphanPath["x-corbits-tags"] = orphanTags;
         }
 
         exportedSpec.paths[displayPath] = orphanPath;

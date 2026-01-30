@@ -323,6 +323,12 @@ export const OpenApiImportSchema = type({
   spec: "unknown",
 });
 
+export const OpenApiExtensionsSchema = type({
+  "price_usdc?": `0 <= number <= ${MAX_PRICE_USDC} | null`,
+  "scheme?": "'exact' | 'per_request' | 'per_byte' | null",
+  "tags?": tagsArrayType,
+});
+
 export const ValidatePatternSchema = type({
   pattern: "string > 0",
 });
