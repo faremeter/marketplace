@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 import { db } from "../db/instance.js";
+import { endpointPathToOpenApiPath } from "../lib/openapi-sync.js";
 import { syncToNode } from "../lib/sync.js";
 import { logger } from "../logger.js";
 import { requireTenantAccess } from "../middleware/auth.js";
@@ -347,8 +348,14 @@ openapiRoutes.get("/export", async (c) => {
         ] = {
           price_usdc: endpoint.price_usdc ?? tenant.default_price_usdc,
           scheme: endpoint.scheme ?? tenant.default_scheme,
-          endpoint_id: endpoint.id,
         };
+
+        const tags = endpoint.tags as string[] | null;
+        if (tags && tags.length > 0) {
+          (exportedSpec.paths[sourcePath] as Record<string, unknown>)[
+            "x-402-tags"
+          ] = tags;
+        }
       }
     } else {
       // Orphan endpoint - no lineage
@@ -358,27 +365,30 @@ openapiRoutes.get("/export", async (c) => {
       });
 
       if (includeOrphans) {
-        let displayPath = endpoint.path_pattern;
-        displayPath = displayPath.replace(/^\^/, "").replace(/\$$/, "");
-        let paramCount = 0;
-        displayPath = displayPath.replace(
-          /\[\^\/\]\+/g,
-          () => `{param${++paramCount}}`,
+        const displayPath = endpointPathToOpenApiPath(
+          endpoint.path,
+          endpoint.path_pattern,
         );
-        displayPath = displayPath.replace(/\.\*/g, "{wildcard}");
+        if (!displayPath) continue;
 
         if (!exportedSpec.paths) {
           exportedSpec.paths = {};
         }
-        exportedSpec.paths[displayPath] = {
+        const orphanPath: Record<string, unknown> = {
           "x-402-orphan": true,
           "x-402-original-pattern": endpoint.path_pattern,
           "x-402-pricing": {
             price_usdc: endpoint.price_usdc ?? tenant.default_price_usdc,
             scheme: endpoint.scheme ?? tenant.default_scheme,
-            endpoint_id: endpoint.id,
           },
         };
+
+        const orphanTags = endpoint.tags as string[] | null;
+        if (orphanTags && orphanTags.length > 0) {
+          orphanPath["x-402-tags"] = orphanTags;
+        }
+
+        exportedSpec.paths[displayPath] = orphanPath;
       } else {
         warnings.push(
           `Endpoint '${endpoint.path_pattern}' has no OpenAPI lineage and will not be exported`,

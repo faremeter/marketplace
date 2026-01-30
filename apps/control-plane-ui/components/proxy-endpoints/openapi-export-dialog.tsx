@@ -34,7 +34,7 @@ export function OpenApiExportDialog({
   onOpenChange,
   tenantId,
 }: OpenApiExportDialogProps) {
-  const [includeOrphans, setIncludeOrphans] = useState(false);
+  const [includeOrphans, setIncludeOrphans] = useState(true);
   const [loading, setLoading] = useState(false);
   const [exportData, setExportData] = useState<ExportResult | null>(null);
   const [copied, setCopied] = useState(false);
@@ -43,7 +43,7 @@ export function OpenApiExportDialog({
   useEffect(() => {
     if (!open) {
       setExportData(null);
-      setIncludeOrphans(false);
+      setIncludeOrphans(true);
       setCopied(false);
       return;
     }
@@ -52,7 +52,7 @@ export function OpenApiExportDialog({
       setLoading(true);
       try {
         const result = await api.get<ExportResult>(
-          `/api/tenants/${tenantId}/openapi/export?include_orphans=${includeOrphans}`,
+          `/api/tenants/${tenantId}/openapi/export?include_orphans=true`,
         );
         setExportData(result);
       } catch {
@@ -66,14 +66,29 @@ export function OpenApiExportDialog({
     };
 
     fetchExport();
-  }, [open, tenantId, includeOrphans, toast]);
+  }, [open, tenantId, toast]);
+
+  const getExportSpec = () => {
+    if (!exportData) return null;
+    if (includeOrphans) return exportData.spec;
+    const spec = exportData.spec as Record<string, unknown>;
+    const paths = spec.paths as
+      | Record<string, Record<string, unknown>>
+      | undefined;
+    if (!paths) return spec;
+    const filtered: Record<string, unknown> = {};
+    for (const [path, value] of Object.entries(paths)) {
+      if (!value["x-corbits-orphan"]) filtered[path] = value;
+    }
+    return { ...spec, paths: filtered };
+  };
 
   const handleCopy = async () => {
     if (!exportData) return;
 
     try {
       await navigator.clipboard.writeText(
-        JSON.stringify(exportData.spec, null, 2),
+        JSON.stringify(getExportSpec(), null, 2),
       );
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
@@ -92,7 +107,7 @@ export function OpenApiExportDialog({
   const handleDownload = () => {
     if (!exportData) return;
 
-    const blob = new Blob([JSON.stringify(exportData.spec, null, 2)], {
+    const blob = new Blob([JSON.stringify(getExportSpec(), null, 2)], {
       type: "application/json",
     });
     const url = URL.createObjectURL(blob);
@@ -131,82 +146,70 @@ export function OpenApiExportDialog({
           ) : exportData ? (
             <div className="mt-4 space-y-4">
               <div className="rounded-md border border-gray-6 bg-gray-3 p-4">
-                <h4 className="mb-2 text-sm font-medium text-gray-12">
-                  Export Summary
-                </h4>
-                <div className="space-y-1 text-sm">
-                  <p className="text-gray-11">
-                    Total endpoints:{" "}
-                    <span className="text-gray-12">
-                      {exportData.stats.totalEndpoints}
+                <div className="flex items-baseline justify-between text-sm">
+                  <span className="text-gray-11">
+                    Imported from OpenAPI spec
+                  </span>
+                  <span className="font-medium text-green-400">
+                    {exportData.stats.withLineage}
+                  </span>
+                </div>
+                {exportData.stats.orphans > 0 && includeOrphans && (
+                  <div className="flex items-baseline justify-between text-sm">
+                    <span className="text-gray-11">Manually created</span>
+                    <span className="font-medium text-yellow-400">
+                      {exportData.stats.orphans}
                     </span>
-                  </p>
-                  <p className="text-green-400">
-                    With lineage: {exportData.stats.withLineage} (will export
-                    cleanly)
-                  </p>
-                  {exportData.stats.orphans > 0 && (
-                    <p className="text-yellow-400">
-                      Orphan endpoints: {exportData.stats.orphans}
-                    </p>
-                  )}
+                  </div>
+                )}
+                <div className="mt-1 flex items-baseline justify-between border-t border-gray-6 pt-1 text-sm">
+                  <span className="text-gray-11">Total</span>
+                  <span className="font-medium text-gray-12">
+                    {includeOrphans
+                      ? exportData.stats.totalEndpoints
+                      : exportData.stats.withLineage}
+                  </span>
                 </div>
               </div>
 
               {exportData.orphanEndpoints.length > 0 && (
-                <div className="space-y-2">
-                  <label className="flex items-center gap-2">
-                    <input
-                      type="checkbox"
-                      checked={includeOrphans}
-                      onChange={(e) => setIncludeOrphans(e.target.checked)}
-                      className="rounded border-gray-6"
-                    />
-                    <span className="text-sm text-gray-12">
-                      Include orphan endpoints
-                    </span>
-                  </label>
+                <details className="group">
+                  <summary className="cursor-pointer text-xs text-gray-11 hover:text-gray-12">
+                    Advanced
+                  </summary>
+                  <div className="mt-2 space-y-2">
+                    <label className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        checked={includeOrphans}
+                        onChange={(e) => setIncludeOrphans(e.target.checked)}
+                        className="rounded border-gray-6"
+                      />
+                      <span className="text-sm text-gray-12">
+                        Include orphan endpoints
+                      </span>
+                    </label>
 
-                  <div className="flex items-start gap-2 rounded-md border border-yellow-800 bg-yellow-900/20 p-3">
-                    <ExclamationTriangleIcon className="h-4 w-4 flex-shrink-0 text-yellow-400" />
-                    <div className="text-xs text-yellow-300">
-                      <p className="font-medium mb-1">
-                        Orphan endpoints have no OpenAPI lineage:
-                      </p>
-                      <ul className="space-y-0.5 font-mono">
-                        {exportData.orphanEndpoints.slice(0, 5).map((ep, i) => (
-                          <li key={i}>{ep.pattern}</li>
-                        ))}
-                        {exportData.orphanEndpoints.length > 5 && (
-                          <li>
-                            ... and {exportData.orphanEndpoints.length - 5} more
-                          </li>
-                        )}
-                      </ul>
-                      {includeOrphans && (
-                        <p className="mt-2">
-                          These will be marked with x-402-orphan extension.
-                        </p>
-                      )}
+                    <div className="flex items-start gap-2 rounded-md border border-yellow-800 bg-yellow-900/20 p-3">
+                      <ExclamationTriangleIcon className="h-4 w-4 flex-shrink-0 text-yellow-400" />
+                      <div className="text-xs text-yellow-300">
+                        <ul className="space-y-0.5 font-mono">
+                          {exportData.orphanEndpoints
+                            .slice(0, 5)
+                            .map((ep, i) => (
+                              <li key={i}>{ep.pattern}</li>
+                            ))}
+                          {exportData.orphanEndpoints.length > 5 && (
+                            <li>
+                              ... and {exportData.orphanEndpoints.length - 5}{" "}
+                              more
+                            </li>
+                          )}
+                        </ul>
+                      </div>
                     </div>
                   </div>
-                </div>
-              )}
-
-              {exportData.warnings.length > 0 && !includeOrphans && (
-                <div className="rounded-md border border-gray-6 bg-gray-3 p-3">
-                  <p className="mb-1 text-xs font-medium text-gray-11">
-                    Warnings:
-                  </p>
-                  <ul className="space-y-0.5 text-xs text-gray-11">
-                    {exportData.warnings.slice(0, 5).map((warning, i) => (
-                      <li key={i}>{warning}</li>
-                    ))}
-                    {exportData.warnings.length > 5 && (
-                      <li>... and {exportData.warnings.length - 5} more</li>
-                    )}
-                  </ul>
-                </div>
+                </details>
               )}
 
               <div className="flex justify-end gap-2">

@@ -6,6 +6,7 @@ import { api } from "@/lib/api/client";
 import {
   PlusIcon,
   UploadIcon,
+  DownloadIcon,
   Link2Icon,
   ExclamationTriangleIcon,
   TrashIcon,
@@ -119,6 +120,13 @@ export function EndpointsTab({
           </p>
         </div>
         <div className="flex items-center gap-2">
+          <button
+            onClick={() => setExportDialogOpen(true)}
+            className="inline-flex items-center gap-1.5 rounded-md border border-gray-6 bg-gray-3 px-3 py-1.5 text-sm font-medium text-gray-12 hover:bg-gray-4"
+          >
+            <DownloadIcon className="h-3.5 w-3.5" />
+            Export OpenAPI
+          </button>
           <button
             onClick={() => setImportDialogOpen(true)}
             className="inline-flex items-center gap-1.5 rounded-md border border-gray-6 bg-gray-3 px-3 py-1.5 text-sm font-medium text-gray-12 hover:bg-gray-4"
