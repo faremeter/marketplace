@@ -1061,3 +1061,1053 @@ await t.test("OpenAPI spec auto-sync with endpoint mutations", async (t) => {
     },
   );
 });
+
+function makeSpec(
+  paths: Record<string, unknown>,
+  info?: { title?: string; version?: string },
+) {
+  return {
+    openapi: "3.0.0",
+    info: { title: info?.title ?? "Test", version: info?.version ?? "1.0.0" },
+    paths,
+  };
+}
+
+function authHeaders(token: string) {
+  return {
+    Cookie: `auth_token=${token}`,
+    "Content-Type": "application/json",
+  };
+}
+
+async function importSpec(tenantId: number, token: string, spec: unknown) {
+  return app.request(`/api/tenants/${tenantId}/openapi/import`, {
+    method: "POST",
+    headers: authHeaders(token),
+    body: JSON.stringify({ spec }),
+  });
+}
+
+async function exportSpec(
+  tenantId: number,
+  token: string,
+  includeOrphans = false,
+) {
+  const url = includeOrphans
+    ? `/api/tenants/${tenantId}/openapi/export?include_orphans=true`
+    : `/api/tenants/${tenantId}/openapi/export`;
+  const res = await app.request(url, {
+    headers: { Cookie: `auth_token=${token}` },
+  });
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return { res, data: (await res.json()) as any };
+}
+
+async function setupTenant() {
+  const user = await createUser("member@example.com");
+  const org = await createOrg("Team", "team");
+  await addMember(user.id, org.id);
+  const tenant = await createTenant(org.id, "my-tenant");
+  return { user, org, tenant };
+}
+
+await t.test("x-402 export extensions", async (t) => {
+  await t.test(
+    "exports x-corbits-pricing with correct values on lineage endpoints",
+    async (t) => {
+      const { user, tenant } = await setupTenant();
+
+      const spec = makeSpec({
+        "/api/users": { get: { summary: "List users" } },
+        "/api/posts": { get: { summary: "List posts" } },
+      });
+
+      await importSpec(tenant.id, user.token, spec);
+
+      await db
+        .updateTable("endpoints")
+        .set({ price_usdc: 500, scheme: "per_request" })
+        .where("tenant_id", "=", tenant.id)
+        .where("path", "=", "/api/users")
+        .execute();
+
+      await db
+        .updateTable("endpoints")
+        .set({ price_usdc: 0, scheme: "exact" })
+        .where("tenant_id", "=", tenant.id)
+        .where("path", "=", "/api/posts")
+        .execute();
+
+      const { data } = await exportSpec(tenant.id, user.token);
+
+      t.equal(
+        data.spec.paths["/api/users"]["x-corbits-pricing"].price_usdc,
+        500,
+      );
+      t.equal(
+        data.spec.paths["/api/users"]["x-corbits-pricing"].scheme,
+        "per_request",
+      );
+      t.notOk(
+        data.spec.paths["/api/users"]["x-corbits-pricing"].endpoint_id,
+        "endpoint_id should not be exported",
+      );
+
+      t.equal(data.spec.paths["/api/posts"]["x-corbits-pricing"].price_usdc, 0);
+      t.equal(
+        data.spec.paths["/api/posts"]["x-corbits-pricing"].scheme,
+        "exact",
+      );
+      t.notOk(data.spec.paths["/api/posts"]["x-corbits-pricing"].endpoint_id);
+    },
+  );
+
+  await t.test("exports x-corbits-tags on lineage endpoints", async (t) => {
+    const { user, tenant } = await setupTenant();
+
+    await importSpec(
+      tenant.id,
+      user.token,
+      makeSpec({
+        "/api/users": { get: {} },
+      }),
+    );
+
+    await db
+      .updateTable("endpoints")
+      .set({ tags: ["production", "v2"] })
+      .where("tenant_id", "=", tenant.id)
+      .execute();
+
+    const { data } = await exportSpec(tenant.id, user.token);
+
+    t.same(data.spec.paths["/api/users"]["x-corbits-tags"], [
+      "production",
+      "v2",
+    ]);
+  });
+
+  await t.test("omits x-corbits-tags when tags are empty", async (t) => {
+    const { user, tenant } = await setupTenant();
+
+    await importSpec(
+      tenant.id,
+      user.token,
+      makeSpec({
+        "/api/users": { get: {} },
+      }),
+    );
+
+    const { data } = await exportSpec(tenant.id, user.token);
+
+    t.notOk(
+      data.spec.paths["/api/users"]["x-corbits-tags"],
+      "x-corbits-tags should be absent when no tags",
+    );
+  });
+
+  await t.test(
+    "uses tenant defaults when endpoint has no overrides",
+    async (t) => {
+      const { user, tenant } = await setupTenant();
+
+      await importSpec(
+        tenant.id,
+        user.token,
+        makeSpec({
+          "/api/users": { get: {} },
+        }),
+      );
+
+      const { data } = await exportSpec(tenant.id, user.token);
+
+      t.equal(
+        data.spec.paths["/api/users"]["x-corbits-pricing"].price_usdc,
+        0.01,
+      );
+      t.equal(
+        data.spec.paths["/api/users"]["x-corbits-pricing"].scheme,
+        "exact",
+      );
+    },
+  );
+
+  await t.test(
+    "orphan export includes x-corbits-pricing, x-corbits-tags, and x-corbits-orphan",
+    async (t) => {
+      const { user, tenant } = await setupTenant();
+
+      await db
+        .insertInto("endpoints")
+        .values({
+          tenant_id: tenant.id,
+          path: "/manual/endpoint",
+          path_pattern: "^/manual/endpoint$",
+          priority: 1,
+          is_active: true,
+          price_usdc: 250,
+          scheme: "per_byte",
+          tags: ["internal"],
+        })
+        .execute();
+
+      const { data } = await exportSpec(tenant.id, user.token, true);
+
+      const orphanPath = data.spec.paths["/manual/endpoint"];
+      t.ok(orphanPath, "orphan path should exist");
+      t.equal(orphanPath["x-corbits-orphan"], true);
+      t.equal(orphanPath["x-corbits-pricing"].price_usdc, 250);
+      t.equal(orphanPath["x-corbits-pricing"].scheme, "per_byte");
+      t.same(orphanPath["x-corbits-tags"], ["internal"]);
+    },
+  );
+});
+
+await t.test("x-402 import extensions", async (t) => {
+  await t.test(
+    "imports x-corbits-pricing and applies to created endpoints",
+    async (t) => {
+      const { user, tenant } = await setupTenant();
+
+      const spec = makeSpec({
+        "/api/users": {
+          get: { summary: "List users" },
+          "x-corbits-pricing": { price_usdc: 500, scheme: "per_request" },
+        },
+      });
+
+      const res = await importSpec(tenant.id, user.token, spec);
+      t.equal(res.status, 200);
+
+      const endpoint = await db
+        .selectFrom("endpoints")
+        .selectAll()
+        .where("tenant_id", "=", tenant.id)
+        .where("path", "=", "/api/users")
+        .executeTakeFirstOrThrow();
+
+      t.equal(endpoint.price_usdc, 500);
+      t.equal(endpoint.scheme, "per_request");
+    },
+  );
+
+  await t.test(
+    "imports x-corbits-tags and applies to created endpoints",
+    async (t) => {
+      const { user, tenant } = await setupTenant();
+
+      const spec = makeSpec({
+        "/api/users": {
+          get: {},
+          "x-corbits-tags": ["api", "v2"],
+        },
+      });
+
+      const res = await importSpec(tenant.id, user.token, spec);
+      t.equal(res.status, 200);
+
+      const endpoint = await db
+        .selectFrom("endpoints")
+        .selectAll()
+        .where("tenant_id", "=", tenant.id)
+        .where("path", "=", "/api/users")
+        .executeTakeFirstOrThrow();
+
+      t.same(endpoint.tags, ["api", "v2"]);
+    },
+  );
+
+  await t.test(
+    "ignores x-corbits-pricing with out-of-range price_usdc",
+    async (t) => {
+      const { user, tenant } = await setupTenant();
+
+      const spec = makeSpec({
+        "/api/users": {
+          get: {},
+          "x-corbits-pricing": { price_usdc: 999999999 },
+        },
+      });
+
+      const res = await importSpec(tenant.id, user.token, spec);
+      t.equal(res.status, 200);
+
+      const endpoint = await db
+        .selectFrom("endpoints")
+        .selectAll()
+        .where("tenant_id", "=", tenant.id)
+        .where("path", "=", "/api/users")
+        .executeTakeFirstOrThrow();
+
+      t.equal(
+        endpoint.price_usdc,
+        null,
+        "out-of-range price should fall back to null",
+      );
+    },
+  );
+
+  await t.test("ignores x-corbits-pricing with invalid scheme", async (t) => {
+    const { user, tenant } = await setupTenant();
+
+    const spec = makeSpec({
+      "/api/users": {
+        get: {},
+        "x-corbits-pricing": { price_usdc: 100, scheme: "bogus" },
+      },
+    });
+
+    const res = await importSpec(tenant.id, user.token, spec);
+    t.equal(res.status, 200);
+
+    const endpoint = await db
+      .selectFrom("endpoints")
+      .selectAll()
+      .where("tenant_id", "=", tenant.id)
+      .where("path", "=", "/api/users")
+      .executeTakeFirstOrThrow();
+
+    t.equal(
+      endpoint.price_usdc,
+      null,
+      "invalid scheme should invalidate all extensions",
+    );
+    t.equal(endpoint.scheme, null);
+  });
+
+  await t.test("ignores x-corbits-tags with invalid tag values", async (t) => {
+    const { user, tenant } = await setupTenant();
+
+    const spec = makeSpec({
+      "/api/users": {
+        get: {},
+        "x-corbits-tags": ["UPPERCASE", "invalid tag!"],
+      },
+    });
+
+    const res = await importSpec(tenant.id, user.token, spec);
+    t.equal(res.status, 200);
+
+    const endpoint = await db
+      .selectFrom("endpoints")
+      .selectAll()
+      .where("tenant_id", "=", tenant.id)
+      .where("path", "=", "/api/users")
+      .executeTakeFirstOrThrow();
+
+    t.same(endpoint.tags, [], "invalid tags should fall back to empty");
+  });
+
+  await t.test("ignores x-corbits-pricing with negative price", async (t) => {
+    const { user, tenant } = await setupTenant();
+
+    const spec = makeSpec({
+      "/api/users": {
+        get: {},
+        "x-corbits-pricing": { price_usdc: -5 },
+      },
+    });
+
+    const res = await importSpec(tenant.id, user.token, spec);
+    t.equal(res.status, 200);
+
+    const endpoint = await db
+      .selectFrom("endpoints")
+      .selectAll()
+      .where("tenant_id", "=", tenant.id)
+      .where("path", "=", "/api/users")
+      .executeTakeFirstOrThrow();
+
+    t.equal(
+      endpoint.price_usdc,
+      null,
+      "negative price should fall back to null",
+    );
+  });
+});
+
+await t.test("x-402 round-trip and deduplication", async (t) => {
+  await t.test(
+    "export then re-import preserves pricing and tags",
+    async (t) => {
+      const { user, tenant } = await setupTenant();
+
+      // Import a plain spec
+      await importSpec(
+        tenant.id,
+        user.token,
+        makeSpec({
+          "/api/users": { get: { summary: "List users" } },
+          "/api/posts": { get: { summary: "List posts" } },
+        }),
+      );
+
+      // Set pricing and tags
+      await db
+        .updateTable("endpoints")
+        .set({
+          price_usdc: 750,
+          scheme: "per_request",
+          tags: ["premium"],
+        })
+        .where("tenant_id", "=", tenant.id)
+        .where("path", "=", "/api/users")
+        .execute();
+
+      await db
+        .updateTable("endpoints")
+        .set({
+          price_usdc: 0,
+          scheme: "exact",
+          tags: ["free", "public"],
+        })
+        .where("tenant_id", "=", tenant.id)
+        .where("path", "=", "/api/posts")
+        .execute();
+
+      // Export
+      const { data: exportData } = await exportSpec(tenant.id, user.token);
+      const exportedSpec = exportData.spec;
+
+      // Clear all endpoints
+      await db
+        .deleteFrom("endpoints")
+        .where("tenant_id", "=", tenant.id)
+        .execute();
+
+      // Re-import the exported spec
+      const reimportRes = await importSpec(tenant.id, user.token, exportedSpec);
+      t.equal(reimportRes.status, 200);
+
+      // Verify
+      const endpoints = await db
+        .selectFrom("endpoints")
+        .selectAll()
+        .where("tenant_id", "=", tenant.id)
+        .where("is_active", "=", true)
+        .execute();
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const usersEp = endpoints.find((e) => e.path === "/api/users") as any;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const postsEp = endpoints.find((e) => e.path === "/api/posts") as any;
+
+      t.ok(usersEp);
+      t.equal(usersEp.price_usdc, 750);
+      t.equal(usersEp.scheme, "per_request");
+      t.same(usersEp.tags, ["premium"]);
+
+      t.ok(postsEp);
+      t.equal(postsEp.price_usdc, 0);
+      t.equal(postsEp.scheme, "exact");
+      t.same(postsEp.tags, ["free", "public"]);
+    },
+  );
+
+  await t.test(
+    "re-import with x-402 updates existing endpoints without duplication",
+    async (t) => {
+      const { user, tenant } = await setupTenant();
+
+      // First import: plain spec
+      const plainSpec = makeSpec({
+        "/api/users": { get: { summary: "List users" } },
+        "/api/posts": { get: { summary: "List posts" } },
+      });
+      const firstRes = await importSpec(tenant.id, user.token, plainSpec);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const firstData = (await firstRes.json()) as any;
+      t.equal(firstData.created, 2);
+
+      const countBefore = await db
+        .selectFrom("endpoints")
+        .where("tenant_id", "=", tenant.id)
+        .where("is_active", "=", true)
+        .select(db.fn.countAll().as("count"))
+        .executeTakeFirstOrThrow();
+
+      // Second import: same paths but with x-402 extensions
+      const specWithExtensions = makeSpec({
+        "/api/users": {
+          get: { summary: "List users" },
+          "x-corbits-pricing": { price_usdc: 1000, scheme: "per_byte" },
+          "x-corbits-tags": ["updated"],
+        },
+        "/api/posts": {
+          get: { summary: "List posts" },
+          "x-corbits-pricing": { price_usdc: 0, scheme: "exact" },
+        },
+      });
+
+      const secondRes = await importSpec(
+        tenant.id,
+        user.token,
+        specWithExtensions,
+      );
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const secondData = (await secondRes.json()) as any;
+      t.equal(secondData.created, 0, "no new endpoints created");
+      t.equal(secondData.linked, 2, "both linked to existing");
+
+      const countAfter = await db
+        .selectFrom("endpoints")
+        .where("tenant_id", "=", tenant.id)
+        .where("is_active", "=", true)
+        .select(db.fn.countAll().as("count"))
+        .executeTakeFirstOrThrow();
+
+      t.equal(
+        Number(countBefore.count),
+        Number(countAfter.count),
+        "endpoint count unchanged",
+      );
+
+      // Verify values were updated
+      const usersEp = await db
+        .selectFrom("endpoints")
+        .selectAll()
+        .where("tenant_id", "=", tenant.id)
+        .where("path", "=", "/api/users")
+        .executeTakeFirstOrThrow();
+
+      t.equal(usersEp.price_usdc, 1000);
+      t.equal(usersEp.scheme, "per_byte");
+      t.same(usersEp.tags, ["updated"]);
+    },
+  );
+
+  await t.test("tenant isolation - imports do not cross tenants", async (t) => {
+    const user = await createUser("member@example.com");
+    const org = await createOrg("Team", "team");
+    await addMember(user.id, org.id);
+    const tenantA = await createTenant(org.id, "tenant-a");
+    const tenantB = await createTenant(org.id, "tenant-b");
+
+    await importSpec(
+      tenantA.id,
+      user.token,
+      makeSpec({
+        "/api/alpha": {
+          get: {},
+          "x-corbits-pricing": { price_usdc: 100 },
+        },
+      }),
+    );
+
+    await importSpec(
+      tenantB.id,
+      user.token,
+      makeSpec({
+        "/api/beta": {
+          get: {},
+          "x-corbits-pricing": { price_usdc: 200 },
+        },
+      }),
+    );
+
+    const { data: exportA } = await exportSpec(tenantA.id, user.token);
+    const { data: exportB } = await exportSpec(tenantB.id, user.token);
+
+    t.ok(exportA.spec.paths["/api/alpha"], "tenant A has its own path");
+    t.notOk(
+      exportA.spec.paths["/api/beta"],
+      "tenant A does not have tenant B's path",
+    );
+
+    t.ok(exportB.spec.paths["/api/beta"], "tenant B has its own path");
+    t.notOk(
+      exportB.spec.paths["/api/alpha"],
+      "tenant B does not have tenant A's path",
+    );
+
+    t.equal(
+      exportA.spec.paths["/api/alpha"]["x-corbits-pricing"].price_usdc,
+      100,
+    );
+    t.equal(
+      exportB.spec.paths["/api/beta"]["x-corbits-pricing"].price_usdc,
+      200,
+    );
+  });
+
+  await t.test(
+    "orphan round-trip: export with orphans then re-import does not duplicate",
+    async (t) => {
+      const { user, tenant } = await setupTenant();
+
+      // Import a spec to have some lineage endpoints
+      await importSpec(
+        tenant.id,
+        user.token,
+        makeSpec({
+          "/api/users": { get: { summary: "List users" } },
+        }),
+      );
+
+      // Create an orphan endpoint (manually, no openapi_source_paths)
+      await db
+        .insertInto("endpoints")
+        .values({
+          tenant_id: tenant.id,
+          path: "/custom/data",
+          path_pattern: "^/custom/[^/]+/data$",
+          priority: 100,
+          is_active: true,
+          price_usdc: 300,
+          scheme: "per_request",
+          tags: ["orphan-tag"],
+        })
+        .execute();
+
+      const countBefore = await db
+        .selectFrom("endpoints")
+        .where("tenant_id", "=", tenant.id)
+        .where("is_active", "=", true)
+        .select(db.fn.countAll().as("count"))
+        .executeTakeFirstOrThrow();
+
+      // Export with orphans included
+      const { data: exportData } = await exportSpec(
+        tenant.id,
+        user.token,
+        true,
+      );
+      t.equal(exportData.stats.orphans, 1, "should have 1 orphan");
+
+      // Re-import the exported spec (which contains orphans with x-corbits-original-pattern)
+      const reimportRes = await importSpec(
+        tenant.id,
+        user.token,
+        exportData.spec,
+      );
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const reimportData = (await reimportRes.json()) as any;
+
+      // The orphan should be linked, not created as new
+      t.equal(reimportData.created, 0, "no new endpoints should be created");
+
+      const countAfter = await db
+        .selectFrom("endpoints")
+        .where("tenant_id", "=", tenant.id)
+        .where("is_active", "=", true)
+        .select(db.fn.countAll().as("count"))
+        .executeTakeFirstOrThrow();
+
+      t.equal(
+        Number(countBefore.count),
+        Number(countAfter.count),
+        "endpoint count should not increase",
+      );
+    },
+  );
+});
+
+await t.test("x-402 import edge cases", async (t) => {
+  await t.test(
+    "re-import without extensions preserves existing pricing and tags",
+    async (t) => {
+      const { user, tenant } = await setupTenant();
+
+      // First import with extensions
+      const specWithExt = makeSpec({
+        "/api/users": {
+          get: {},
+          "x-corbits-pricing": { price_usdc: 999, scheme: "per_byte" },
+          "x-corbits-tags": ["premium"],
+        },
+      });
+      await importSpec(tenant.id, user.token, specWithExt);
+
+      // Verify values were set
+      let endpoint = await db
+        .selectFrom("endpoints")
+        .selectAll()
+        .where("tenant_id", "=", tenant.id)
+        .where("path", "=", "/api/users")
+        .executeTakeFirstOrThrow();
+      t.equal(endpoint.price_usdc, 999);
+      t.equal(endpoint.scheme, "per_byte");
+      t.same(endpoint.tags, ["premium"]);
+
+      // Re-import same paths WITHOUT extensions
+      const plainSpec = makeSpec({
+        "/api/users": { get: {} },
+      });
+      const res = await importSpec(tenant.id, user.token, plainSpec);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const data = (await res.json()) as any;
+      t.equal(data.linked, 1, "should link, not create");
+      t.equal(data.created, 0);
+
+      // Verify existing values preserved
+      endpoint = await db
+        .selectFrom("endpoints")
+        .selectAll()
+        .where("tenant_id", "=", tenant.id)
+        .where("path", "=", "/api/users")
+        .executeTakeFirstOrThrow();
+      t.equal(endpoint.price_usdc, 999, "price should be preserved");
+      t.equal(endpoint.scheme, "per_byte", "scheme should be preserved");
+      t.same(endpoint.tags, ["premium"], "tags should be preserved");
+    },
+  );
+
+  await t.test(
+    "partial x-corbits-pricing: only price_usdc, no scheme",
+    async (t) => {
+      const { user, tenant } = await setupTenant();
+
+      const spec = makeSpec({
+        "/api/users": {
+          get: {},
+          "x-corbits-pricing": { price_usdc: 42 },
+        },
+      });
+      await importSpec(tenant.id, user.token, spec);
+
+      const endpoint = await db
+        .selectFrom("endpoints")
+        .selectAll()
+        .where("tenant_id", "=", tenant.id)
+        .where("path", "=", "/api/users")
+        .executeTakeFirstOrThrow();
+      t.equal(endpoint.price_usdc, 42);
+      t.equal(
+        endpoint.scheme,
+        null,
+        "scheme should remain null when not provided",
+      );
+    },
+  );
+
+  await t.test(
+    "partial x-corbits-pricing: only scheme, no price_usdc",
+    async (t) => {
+      const { user, tenant } = await setupTenant();
+
+      const spec = makeSpec({
+        "/api/users": {
+          get: {},
+          "x-corbits-pricing": { scheme: "exact" },
+        },
+      });
+      await importSpec(tenant.id, user.token, spec);
+
+      const endpoint = await db
+        .selectFrom("endpoints")
+        .selectAll()
+        .where("tenant_id", "=", tenant.id)
+        .where("path", "=", "/api/users")
+        .executeTakeFirstOrThrow();
+      t.equal(
+        endpoint.price_usdc,
+        null,
+        "price should remain null when not provided",
+      );
+      t.equal(endpoint.scheme, "exact");
+    },
+  );
+
+  await t.test("boundary: price_usdc = 0 (free)", async (t) => {
+    const { user, tenant } = await setupTenant();
+
+    const spec = makeSpec({
+      "/api/free": {
+        get: {},
+        "x-corbits-pricing": { price_usdc: 0 },
+      },
+    });
+    await importSpec(tenant.id, user.token, spec);
+
+    const endpoint = await db
+      .selectFrom("endpoints")
+      .selectAll()
+      .where("tenant_id", "=", tenant.id)
+      .where("path", "=", "/api/free")
+      .executeTakeFirstOrThrow();
+    t.equal(endpoint.price_usdc, 0);
+  });
+
+  await t.test("boundary: price_usdc = 100000000 (max)", async (t) => {
+    const { user, tenant } = await setupTenant();
+
+    const spec = makeSpec({
+      "/api/max": {
+        get: {},
+        "x-corbits-pricing": { price_usdc: 100000000 },
+      },
+    });
+    await importSpec(tenant.id, user.token, spec);
+
+    const endpoint = await db
+      .selectFrom("endpoints")
+      .selectAll()
+      .where("tenant_id", "=", tenant.id)
+      .where("path", "=", "/api/max")
+      .executeTakeFirstOrThrow();
+    t.equal(endpoint.price_usdc, 100000000);
+  });
+
+  await t.test("boundary: exactly 5 tags (max allowed)", async (t) => {
+    const { user, tenant } = await setupTenant();
+
+    const spec = makeSpec({
+      "/api/users": {
+        get: {},
+        "x-corbits-tags": ["t1", "t2", "t3", "t4", "t5"],
+      },
+    });
+    await importSpec(tenant.id, user.token, spec);
+
+    const endpoint = await db
+      .selectFrom("endpoints")
+      .selectAll()
+      .where("tenant_id", "=", tenant.id)
+      .where("path", "=", "/api/users")
+      .executeTakeFirstOrThrow();
+    t.same(endpoint.tags, ["t1", "t2", "t3", "t4", "t5"]);
+  });
+
+  await t.test("boundary: 6 tags (over limit) rejected", async (t) => {
+    const { user, tenant } = await setupTenant();
+
+    const spec = makeSpec({
+      "/api/users": {
+        get: {},
+        "x-corbits-tags": ["t1", "t2", "t3", "t4", "t5", "t6"],
+      },
+    });
+    await importSpec(tenant.id, user.token, spec);
+
+    const endpoint = await db
+      .selectFrom("endpoints")
+      .selectAll()
+      .where("tenant_id", "=", tenant.id)
+      .where("path", "=", "/api/users")
+      .executeTakeFirstOrThrow();
+    t.same(endpoint.tags, [], "over-limit tags should fall back to empty");
+  });
+
+  await t.test("boundary: tag at exactly 50 chars (max length)", async (t) => {
+    const { user, tenant } = await setupTenant();
+
+    const longTag = "a".repeat(50);
+    const spec = makeSpec({
+      "/api/users": {
+        get: {},
+        "x-corbits-tags": [longTag],
+      },
+    });
+    await importSpec(tenant.id, user.token, spec);
+
+    const endpoint = await db
+      .selectFrom("endpoints")
+      .selectAll()
+      .where("tenant_id", "=", tenant.id)
+      .where("path", "=", "/api/users")
+      .executeTakeFirstOrThrow();
+    t.same(endpoint.tags, [longTag]);
+  });
+
+  await t.test("boundary: tag at 51 chars (over max) rejected", async (t) => {
+    const { user, tenant } = await setupTenant();
+
+    const tooLong = "a".repeat(51);
+    const spec = makeSpec({
+      "/api/users": {
+        get: {},
+        "x-corbits-tags": [tooLong],
+      },
+    });
+    await importSpec(tenant.id, user.token, spec);
+
+    const endpoint = await db
+      .selectFrom("endpoints")
+      .selectAll()
+      .where("tenant_id", "=", tenant.id)
+      .where("path", "=", "/api/users")
+      .executeTakeFirstOrThrow();
+    t.same(endpoint.tags, [], "over-length tag should fall back to empty");
+  });
+
+  await t.test("type mismatch: price_usdc as string", async (t) => {
+    const { user, tenant } = await setupTenant();
+
+    const spec = makeSpec({
+      "/api/users": {
+        get: {},
+        "x-corbits-pricing": { price_usdc: "500" },
+      },
+    });
+    await importSpec(tenant.id, user.token, spec);
+
+    const endpoint = await db
+      .selectFrom("endpoints")
+      .selectAll()
+      .where("tenant_id", "=", tenant.id)
+      .where("path", "=", "/api/users")
+      .executeTakeFirstOrThrow();
+    t.equal(endpoint.price_usdc, null, "string price should be rejected");
+  });
+
+  await t.test(
+    "type mismatch: x-corbits-tags as string instead of array",
+    async (t) => {
+      const { user, tenant } = await setupTenant();
+
+      const spec = makeSpec({
+        "/api/users": {
+          get: {},
+          "x-corbits-tags": "api",
+        },
+      });
+      await importSpec(tenant.id, user.token, spec);
+
+      const endpoint = await db
+        .selectFrom("endpoints")
+        .selectAll()
+        .where("tenant_id", "=", tenant.id)
+        .where("path", "=", "/api/users")
+        .executeTakeFirstOrThrow();
+      t.same(endpoint.tags, [], "string tags should be ignored");
+    },
+  );
+
+  await t.test("type mismatch: x-corbits-pricing as string", async (t) => {
+    const { user, tenant } = await setupTenant();
+
+    const spec = makeSpec({
+      "/api/users": {
+        get: {},
+        "x-corbits-pricing": "invalid",
+      },
+    });
+    await importSpec(tenant.id, user.token, spec);
+
+    const endpoint = await db
+      .selectFrom("endpoints")
+      .selectAll()
+      .where("tenant_id", "=", tenant.id)
+      .where("path", "=", "/api/users")
+      .executeTakeFirstOrThrow();
+    t.equal(endpoint.price_usdc, null, "non-object pricing should be ignored");
+    t.equal(endpoint.scheme, null);
+  });
+
+  await t.test("junk values: price_usdc as boolean", async (t) => {
+    const { user, tenant } = await setupTenant();
+
+    const spec = makeSpec({
+      "/api/users": {
+        get: {},
+        "x-corbits-pricing": { price_usdc: true, scheme: 123 },
+      },
+    });
+    await importSpec(tenant.id, user.token, spec);
+
+    const endpoint = await db
+      .selectFrom("endpoints")
+      .selectAll()
+      .where("tenant_id", "=", tenant.id)
+      .where("path", "=", "/api/users")
+      .executeTakeFirstOrThrow();
+    t.equal(endpoint.price_usdc, null);
+    t.equal(endpoint.scheme, null);
+  });
+
+  await t.test(
+    "junk values: tags array with non-string elements",
+    async (t) => {
+      const { user, tenant } = await setupTenant();
+
+      const spec = makeSpec({
+        "/api/users": {
+          get: {},
+          "x-corbits-tags": [123, null, true],
+        },
+      });
+      await importSpec(tenant.id, user.token, spec);
+
+      const endpoint = await db
+        .selectFrom("endpoints")
+        .selectAll()
+        .where("tenant_id", "=", tenant.id)
+        .where("path", "=", "/api/users")
+        .executeTakeFirstOrThrow();
+      t.same(endpoint.tags, [], "non-string tag elements should be rejected");
+    },
+  );
+
+  await t.test(
+    "mixed paths: some with valid extensions, some without, some invalid",
+    async (t) => {
+      const { user, tenant } = await setupTenant();
+
+      const spec = makeSpec({
+        "/api/valid": {
+          get: {},
+          "x-corbits-pricing": { price_usdc: 100, scheme: "exact" },
+          "x-corbits-tags": ["production"],
+        },
+        "/api/none": {
+          get: {},
+        },
+        "/api/invalid": {
+          get: {},
+          "x-corbits-pricing": { price_usdc: -1, scheme: "fake" },
+          "x-corbits-tags": ["UPPERCASE!"],
+        },
+      });
+
+      const res = await importSpec(tenant.id, user.token, spec);
+      t.equal(res.status, 200);
+
+      const endpoints = await db
+        .selectFrom("endpoints")
+        .selectAll()
+        .where("tenant_id", "=", tenant.id)
+        .where("is_active", "=", true)
+        .execute();
+      t.equal(endpoints.length, 3, "all three paths should create endpoints");
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const valid = endpoints.find((e) => e.path === "/api/valid") as any;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const none = endpoints.find((e) => e.path === "/api/none") as any;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const invalid = endpoints.find((e) => e.path === "/api/invalid") as any;
+
+      t.equal(valid.price_usdc, 100);
+      t.equal(valid.scheme, "exact");
+      t.same(valid.tags, ["production"]);
+
+      t.equal(none.price_usdc, null, "no-extension path gets null");
+      t.equal(none.scheme, null);
+
+      t.equal(invalid.price_usdc, null, "invalid extensions get null");
+      t.equal(invalid.scheme, null);
+      t.same(invalid.tags, []);
+    },
+  );
+
+  await t.test("price_usdc as null in x-corbits-pricing", async (t) => {
+    const { user, tenant } = await setupTenant();
+
+    const spec = makeSpec({
+      "/api/users": {
+        get: {},
+        "x-corbits-pricing": { price_usdc: null, scheme: "exact" },
+      },
+    });
+    await importSpec(tenant.id, user.token, spec);
+
+    const endpoint = await db
+      .selectFrom("endpoints")
+      .selectAll()
+      .where("tenant_id", "=", tenant.id)
+      .where("path", "=", "/api/users")
+      .executeTakeFirstOrThrow();
+    t.equal(endpoint.price_usdc, null);
+    t.equal(endpoint.scheme, "exact");
+  });
+});
