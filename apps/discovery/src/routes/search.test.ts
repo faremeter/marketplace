@@ -2,7 +2,7 @@ import "../tests/setup/env.js";
 import t from "tap";
 import { Hono } from "hono";
 import { db, setupTestSchema, clearTestData } from "../db/instance.js";
-import { searchRoutes } from "./search.js";
+import { searchRoutes, buildTsquery } from "./search.js";
 
 const app = new Hono();
 app.route("/api/v1/search", searchRoutes);
@@ -435,4 +435,98 @@ await t.test("GET /api/v1/search", async (t) => {
     t.equal(data.tenants.length, 1);
     t.equal(data.tenants[0].name, "Tenant with \\ backslash");
   });
+});
+
+await t.test("buildTsquery", async (t) => {
+  await t.test("single word gets prefix operator", async (t) => {
+    t.equal(buildTsquery("weather"), "weather:*");
+  });
+
+  await t.test("multiple words joined with AND", async (t) => {
+    t.equal(buildTsquery("weather api"), "weather:* & api:*");
+  });
+
+  await t.test("trims whitespace", async (t) => {
+    t.equal(buildTsquery("  spaced  "), "spaced:*");
+  });
+
+  await t.test("treats special characters as word boundaries", async (t) => {
+    t.equal(buildTsquery("special!@#$chars"), "special:* & chars:*");
+  });
+
+  await t.test("returns empty string for empty input", async (t) => {
+    t.equal(buildTsquery(""), "");
+  });
+
+  await t.test("returns empty string for whitespace-only input", async (t) => {
+    t.equal(buildTsquery("   "), "");
+  });
+
+  await t.test("replaces hyphens with spaces and splits", async (t) => {
+    t.equal(buildTsquery("acme-corp"), "acme:* & corp:*");
+  });
+
+  await t.test("preserves underscores", async (t) => {
+    t.equal(buildTsquery("user_id"), "user_id:*");
+  });
+
+  await t.test("handles mixed content", async (t) => {
+    t.equal(buildTsquery("acme-corp api v2"), "acme:* & corp:* & api:* & v2:*");
+  });
+
+  await t.test("returns empty for special-characters-only input", async (t) => {
+    t.equal(buildTsquery("!@#$%^&*()"), "");
+  });
+
+  await t.test("handles numeric-only input", async (t) => {
+    t.equal(buildTsquery("123"), "123:*");
+  });
+
+  await t.test("handles single character input", async (t) => {
+    t.equal(buildTsquery("a"), "a:*");
+  });
+
+  await t.test("preserves unicode letters", async (t) => {
+    t.equal(buildTsquery("caf\u00e9"), "caf\u00e9:*");
+    t.equal(buildTsquery("M\u00fcnchen"), "M\u00fcnchen:*");
+  });
+
+  await t.test("handles multiple consecutive hyphens", async (t) => {
+    t.equal(buildTsquery("a--b"), "a:* & b:*");
+  });
+
+  await t.test("handles multiple consecutive spaces", async (t) => {
+    t.equal(buildTsquery("hello     world"), "hello:* & world:*");
+  });
+
+  await t.test("splits slashes into separate words", async (t) => {
+    t.equal(buildTsquery("/users/profile"), "users:* & profile:*");
+  });
+
+  await t.test("splits dots into separate words", async (t) => {
+    t.equal(buildTsquery("v1.2"), "v1:* & 2:*");
+  });
+
+  await t.test("handles path pattern with mixed separators", async (t) => {
+    t.equal(
+      buildTsquery("/api/v2/users/{id}"),
+      "api:* & v2:* & users:* & id:*",
+    );
+  });
+});
+
+await t.test("GET /api/v1/search with special-char-only query", async (t) => {
+  await t.test(
+    "returns empty results for query with only special characters",
+    async (t) => {
+      await createTenant({ name: "Some API" });
+
+      const res = await app.request("/api/v1/search?q=!@%23$");
+      t.equal(res.status, 200);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const data = (await res.json()) as any;
+      t.equal(data.tenants.length, 0);
+      t.equal(data.endpoints.length, 0);
+    },
+  );
 });

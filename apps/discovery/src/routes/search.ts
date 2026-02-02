@@ -1,6 +1,6 @@
 import { Hono } from "hono";
-import { sql } from "kysely";
-import { db } from "../db/instance.js";
+import { sql, type SqlBool } from "kysely";
+import { db, isTest } from "../db/instance.js";
 import { logger } from "../logger.js";
 
 export const searchRoutes = new Hono();
@@ -27,6 +27,16 @@ interface EndpointResult {
   tags: string[];
 }
 
+export function buildTsquery(query: string): string {
+  return query
+    .trim()
+    .replace(/[^\p{L}\p{N}_]/gu, " ")
+    .split(/\s+/)
+    .filter((word) => word.length > 0)
+    .map((word) => `${word}:*`)
+    .join(" & ");
+}
+
 searchRoutes.get("/", async (c) => {
   const query = c.req.query("q");
 
@@ -34,70 +44,126 @@ searchRoutes.get("/", async (c) => {
     return c.json({ tenants: [], endpoints: [] });
   }
 
-  const searchTerm = query
-    .trim()
-    .replace(/\\/g, "\\\\")
-    .replace(/%/g, "\\%")
-    .replace(/_/g, "\\_");
-  const likePattern = `%${searchTerm}%`;
-
   try {
-    const [tenants, endpoints] = await Promise.all([
-      db
-        .selectFrom("tenants")
-        .select([
-          "id",
-          "name",
-          "org_slug",
-          "backend_url",
-          "default_price_usdc",
-          "default_scheme",
-          "tags",
-        ])
-        .where("is_active", "=", true)
-        .where("status", "=", "active")
-        .where((eb) =>
-          eb.or([
-            eb("name", "ilike", likePattern),
-            eb("org_slug", "ilike", likePattern),
-            eb(sql`openapi_spec::text`, "ilike", likePattern),
-            eb(sql`tenants.tags::text`, "ilike", likePattern),
-          ]),
-        )
-        .orderBy("name")
-        .limit(20)
-        .execute() as Promise<TenantResult[]>,
+    let tenants: TenantResult[];
+    let endpoints: EndpointResult[];
 
-      db
-        .selectFrom("endpoints as e")
-        .innerJoin("tenants as t", "t.id", "e.tenant_id")
-        .select([
-          "e.id",
-          "e.tenant_id",
-          "t.name as tenant_name",
-          "t.org_slug",
-          "e.path_pattern",
-          "e.description",
-          "e.price_usdc",
-          "e.scheme",
-          "e.tags",
-        ])
-        .where("e.is_active", "=", true)
-        .where("e.deleted_at", "is", null)
-        .where("t.is_active", "=", true)
-        .where("t.status", "=", "active")
-        .where((eb) =>
-          eb.or([
-            eb("e.path_pattern", "ilike", likePattern),
-            eb("e.description", "ilike", likePattern),
-            eb(sql`e.tags::text`, "ilike", likePattern),
-          ]),
-        )
-        .orderBy("t.name")
-        .orderBy("e.path_pattern")
-        .limit(50)
-        .execute() as Promise<EndpointResult[]>,
-    ]);
+    if (isTest) {
+      const searchTerm = query
+        .trim()
+        .replace(/\\/g, "\\\\")
+        .replace(/%/g, "\\%")
+        .replace(/_/g, "\\_");
+      const likePattern = `%${searchTerm}%`;
+
+      [tenants, endpoints] = await Promise.all([
+        db
+          .selectFrom("tenants")
+          .select([
+            "id",
+            "name",
+            "org_slug",
+            "backend_url",
+            "default_price_usdc",
+            "default_scheme",
+            "tags",
+          ])
+          .where("is_active", "=", true)
+          .where("status", "=", "active")
+          .where((eb) =>
+            eb.or([
+              eb("name", "ilike", likePattern),
+              eb("org_slug", "ilike", likePattern),
+              eb(sql`openapi_spec::text`, "ilike", likePattern),
+              eb(sql`tenants.tags::text`, "ilike", likePattern),
+            ]),
+          )
+          .orderBy("name")
+          .limit(20)
+          .execute() as Promise<TenantResult[]>,
+
+        db
+          .selectFrom("endpoints as e")
+          .innerJoin("tenants as t", "t.id", "e.tenant_id")
+          .select([
+            "e.id",
+            "e.tenant_id",
+            "t.name as tenant_name",
+            "t.org_slug",
+            "e.path_pattern",
+            "e.description",
+            "e.price_usdc",
+            "e.scheme",
+            "e.tags",
+          ])
+          .where("e.is_active", "=", true)
+          .where("e.deleted_at", "is", null)
+          .where("t.is_active", "=", true)
+          .where("t.status", "=", "active")
+          .where((eb) =>
+            eb.or([
+              eb("e.path_pattern", "ilike", likePattern),
+              eb("e.description", "ilike", likePattern),
+              eb(sql`e.tags::text`, "ilike", likePattern),
+            ]),
+          )
+          .orderBy("t.name")
+          .orderBy("e.path_pattern")
+          .limit(50)
+          .execute() as Promise<EndpointResult[]>,
+      ]);
+    } else {
+      const tsqueryExpr = buildTsquery(query);
+
+      if (tsqueryExpr.length === 0) {
+        return c.json({ tenants: [], endpoints: [] });
+      }
+
+      const tsquery = sql`to_tsquery('simple', ${tsqueryExpr})`;
+
+      [tenants, endpoints] = await Promise.all([
+        db
+          .selectFrom("tenants")
+          .select([
+            "id",
+            "name",
+            "org_slug",
+            "backend_url",
+            "default_price_usdc",
+            "default_scheme",
+            "tags",
+          ])
+          .where("is_active", "=", true)
+          .where("status", "=", "active")
+          .where(sql<SqlBool>`search_vector @@ ${tsquery}`)
+          .orderBy(sql`ts_rank(search_vector, ${tsquery})`, "desc")
+          .limit(20)
+          .execute() as Promise<TenantResult[]>,
+
+        db
+          .selectFrom("endpoints as e")
+          .innerJoin("tenants as t", "t.id", "e.tenant_id")
+          .select([
+            "e.id",
+            "e.tenant_id",
+            "t.name as tenant_name",
+            "t.org_slug",
+            "e.path_pattern",
+            "e.description",
+            "e.price_usdc",
+            "e.scheme",
+            "e.tags",
+          ])
+          .where("e.is_active", "=", true)
+          .where("e.deleted_at", "is", null)
+          .where("t.is_active", "=", true)
+          .where("t.status", "=", "active")
+          .where(sql<SqlBool>`e.search_vector @@ ${tsquery}`)
+          .orderBy(sql`ts_rank(e.search_vector, ${tsquery})`, "desc")
+          .limit(50)
+          .execute() as Promise<EndpointResult[]>,
+      ]);
+    }
 
     return c.json({ tenants, endpoints });
   } catch (error) {

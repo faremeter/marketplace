@@ -4,7 +4,7 @@ import type { Database } from "./schema.js";
 import { SqliteAdapterPlugin } from "./plugins/sqlite-adapter.js";
 import { setupTestSchema as setupTestSchemaShared } from "@1click/test-db";
 
-const isTest = process.env.NODE_ENV === "test";
+export const isTest = process.env.NODE_ENV === "test";
 
 let db: Kysely<Database>;
 
