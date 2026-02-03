@@ -17,8 +17,8 @@ interface TenantResult {
 
 interface EndpointResult {
   id: number;
-  tenant_id: number;
-  tenant_name: string;
+  proxy_id: number;
+  proxy_name: string;
   org_slug: string | null;
   path_pattern: string;
   description: string | null;
@@ -41,7 +41,7 @@ searchRoutes.get("/", async (c) => {
   const query = c.req.query("q");
 
   if (!query || query.trim().length === 0) {
-    return c.json({ tenants: [], endpoints: [] });
+    return c.json({ proxies: [], endpoints: [] });
   }
 
   try {
@@ -87,8 +87,8 @@ searchRoutes.get("/", async (c) => {
           .innerJoin("tenants as t", "t.id", "e.tenant_id")
           .select([
             "e.id",
-            "e.tenant_id",
-            "t.name as tenant_name",
+            "e.tenant_id as proxy_id",
+            "t.name as proxy_name",
             "t.org_slug",
             "e.path_pattern",
             "e.description",
@@ -116,7 +116,7 @@ searchRoutes.get("/", async (c) => {
       const tsqueryExpr = buildTsquery(query);
 
       if (tsqueryExpr.length === 0) {
-        return c.json({ tenants: [], endpoints: [] });
+        return c.json({ proxies: [], endpoints: [] });
       }
 
       const tsquery = sql`to_tsquery('simple', ${tsqueryExpr})`;
@@ -145,8 +145,8 @@ searchRoutes.get("/", async (c) => {
           .innerJoin("tenants as t", "t.id", "e.tenant_id")
           .select([
             "e.id",
-            "e.tenant_id",
-            "t.name as tenant_name",
+            "e.tenant_id as proxy_id",
+            "t.name as proxy_name",
             "t.org_slug",
             "e.path_pattern",
             "e.description",
@@ -165,7 +165,7 @@ searchRoutes.get("/", async (c) => {
       ]);
     }
 
-    return c.json({ tenants, endpoints });
+    return c.json({ proxies: tenants, endpoints });
   } catch (error) {
     logger.error("Search error", { error });
     return c.json({ error: "Search failed" }, 500);

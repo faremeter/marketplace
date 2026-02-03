@@ -70,7 +70,7 @@ await t.test("GET /api/v1/search", async (t) => {
     t.equal(res.status, 200);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const data = (await res.json()) as any;
-    t.same(data, { tenants: [], endpoints: [] });
+    t.same(data, { proxies: [], endpoints: [] });
   });
 
   await t.test("returns empty arrays for whitespace query", async (t) => {
@@ -78,7 +78,7 @@ await t.test("GET /api/v1/search", async (t) => {
     t.equal(res.status, 200);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const data = (await res.json()) as any;
-    t.same(data, { tenants: [], endpoints: [] });
+    t.same(data, { proxies: [], endpoints: [] });
   });
 
   await t.test("searches tenants by name", async (t) => {
@@ -89,8 +89,8 @@ await t.test("GET /api/v1/search", async (t) => {
     t.equal(res.status, 200);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const data = (await res.json()) as any;
-    t.equal(data.tenants.length, 1);
-    t.equal(data.tenants[0].name, "Weather API");
+    t.equal(data.proxies.length, 1);
+    t.equal(data.proxies[0].name, "Weather API");
   });
 
   await t.test("searches tenants by org_slug", async (t) => {
@@ -101,8 +101,8 @@ await t.test("GET /api/v1/search", async (t) => {
     t.equal(res.status, 200);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const data = (await res.json()) as any;
-    t.equal(data.tenants.length, 1);
-    t.equal(data.tenants[0].org_slug, "acme-corp");
+    t.equal(data.proxies.length, 1);
+    t.equal(data.proxies[0].org_slug, "acme-corp");
   });
 
   await t.test("searches tenants by openapi_spec content", async (t) => {
@@ -116,8 +116,8 @@ await t.test("GET /api/v1/search", async (t) => {
     t.equal(res.status, 200);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const data = (await res.json()) as any;
-    t.equal(data.tenants.length, 1);
-    t.equal(data.tenants[0].name, "API with Spec");
+    t.equal(data.proxies.length, 1);
+    t.equal(data.proxies[0].name, "API with Spec");
   });
 
   await t.test("searches endpoints by path_pattern", async (t) => {
@@ -160,8 +160,8 @@ await t.test("GET /api/v1/search", async (t) => {
     t.equal(res.status, 200);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const data = (await res.json()) as any;
-    t.equal(data.tenants.length, 1);
-    t.equal(data.tenants[0].name, "Active API");
+    t.equal(data.proxies.length, 1);
+    t.equal(data.proxies[0].name, "Active API");
   });
 
   await t.test("only returns tenants with status=active", async (t) => {
@@ -172,8 +172,8 @@ await t.test("GET /api/v1/search", async (t) => {
     t.equal(res.status, 200);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const data = (await res.json()) as any;
-    t.equal(data.tenants.length, 1);
-    t.equal(data.tenants[0].name, "Active Status API");
+    t.equal(data.proxies.length, 1);
+    t.equal(data.proxies[0].name, "Active Status API");
   });
 
   await t.test("only returns active endpoints (is_active=true)", async (t) => {
@@ -223,7 +223,7 @@ await t.test("GET /api/v1/search", async (t) => {
     t.equal(res.status, 200);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const data = (await res.json()) as any;
-    t.equal(data.tenants.length, 20);
+    t.equal(data.proxies.length, 20);
   });
 
   await t.test("limits endpoint results to 50", async (t) => {
@@ -246,8 +246,8 @@ await t.test("GET /api/v1/search", async (t) => {
     t.equal(res.status, 200);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const data = (await res.json()) as any;
-    t.equal(data.tenants.length, 1);
-    t.equal(data.tenants[0].name, "Weather API");
+    t.equal(data.proxies.length, 1);
+    t.equal(data.proxies[0].name, "Weather API");
   });
 
   await t.test("escapes SQL LIKE wildcards in search query", async (t) => {
@@ -259,15 +259,15 @@ await t.test("GET /api/v1/search", async (t) => {
     t.equal(res1.status, 200);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const data1 = (await res1.json()) as any;
-    t.equal(data1.tenants.length, 1);
-    t.equal(data1.tenants[0].name, "100% Complete API");
+    t.equal(data1.proxies.length, 1);
+    t.equal(data1.proxies[0].name, "100% Complete API");
 
     const res2 = await app.request("/api/v1/search?q=user_id");
     t.equal(res2.status, 200);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const data2 = (await res2.json()) as any;
-    t.equal(data2.tenants.length, 1);
-    t.equal(data2.tenants[0].name, "user_id API");
+    t.equal(data2.proxies.length, 1);
+    t.equal(data2.proxies[0].name, "user_id API");
   });
 
   await t.test(
@@ -284,8 +284,8 @@ await t.test("GET /api/v1/search", async (t) => {
       t.equal(res.status, 200);
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const data = (await res.json()) as any;
-      t.equal(data.tenants.length, 1);
-      t.equal(data.tenants[0].name, "Payment Gateway");
+      t.equal(data.proxies.length, 1);
+      t.equal(data.proxies[0].name, "Payment Gateway");
       t.equal(data.endpoints.length, 1);
       t.equal(data.endpoints[0].path_pattern, "/payment/process");
     },
@@ -304,8 +304,8 @@ await t.test("GET /api/v1/search", async (t) => {
       t.equal(res.status, 200);
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const data = (await res.json()) as any;
-      t.equal(data.tenants.length, 1);
-      t.equal(data.tenants[0].name, "API with spec");
+      t.equal(data.proxies.length, 1);
+      t.equal(data.proxies[0].name, "API with spec");
     },
   );
 
@@ -323,7 +323,7 @@ await t.test("GET /api/v1/search", async (t) => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const data = (await res.json()) as any;
     t.equal(data.endpoints.length, 1);
-    t.equal(data.endpoints[0].tenant_id, activeTenant.id);
+    t.equal(data.endpoints[0].proxy_id, activeTenant.id);
   });
 
   await t.test(
@@ -345,7 +345,7 @@ await t.test("GET /api/v1/search", async (t) => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const data = (await res.json()) as any;
       t.equal(data.endpoints.length, 1);
-      t.equal(data.endpoints[0].tenant_id, activeTenant.id);
+      t.equal(data.endpoints[0].proxy_id, activeTenant.id);
     },
   );
 
@@ -357,8 +357,8 @@ await t.test("GET /api/v1/search", async (t) => {
     t.equal(res.status, 200);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const data = (await res.json()) as any;
-    t.equal(data.tenants.length, 1);
-    t.equal(data.tenants[0].name, "Tagged API");
+    t.equal(data.proxies.length, 1);
+    t.equal(data.proxies[0].name, "Tagged API");
   });
 
   await t.test("searches endpoints by tag", async (t) => {
@@ -395,8 +395,8 @@ await t.test("GET /api/v1/search", async (t) => {
     t.equal(res.status, 200);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const data = (await res.json()) as any;
-    t.equal(data.tenants.length, 1);
-    t.same(data.tenants[0].tags, ["xyzzy-unique-tag", "ml"]);
+    t.equal(data.proxies.length, 1);
+    t.same(data.proxies[0].tags, ["xyzzy-unique-tag", "ml"]);
     t.equal(data.endpoints.length, 1);
     t.same(data.endpoints[0].tags, ["xyzzy-unique-tag", "experimental"]);
   });
@@ -413,8 +413,8 @@ await t.test("GET /api/v1/search", async (t) => {
     t.equal(res.status, 200);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const data = (await res.json()) as any;
-    t.equal(data.tenants.length, 1);
-    t.equal(data.tenants[0].name, "Case API");
+    t.equal(data.proxies.length, 1);
+    t.equal(data.proxies[0].name, "Case API");
 
     const res2 = await app.request("/api/v1/search?q=staging");
     t.equal(res2.status, 200);
@@ -432,8 +432,8 @@ await t.test("GET /api/v1/search", async (t) => {
     t.equal(res.status, 200);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const data = (await res.json()) as any;
-    t.equal(data.tenants.length, 1);
-    t.equal(data.tenants[0].name, "Tenant with \\ backslash");
+    t.equal(data.proxies.length, 1);
+    t.equal(data.proxies[0].name, "Tenant with \\ backslash");
   });
 });
 
@@ -525,7 +525,7 @@ await t.test("GET /api/v1/search with special-char-only query", async (t) => {
       t.equal(res.status, 200);
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const data = (await res.json()) as any;
-      t.equal(data.tenants.length, 0);
+      t.equal(data.proxies.length, 0);
       t.equal(data.endpoints.length, 0);
     },
   );
