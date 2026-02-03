@@ -80,7 +80,10 @@ for_each_stack() {
         log::info "[$stack] $1"
         pulumi stack select "$stack" >/dev/null 2>&1
         get_ssh_details $SERVER_INDEX
-        eval "$2"
+        if ! eval "$2"; then
+            pulumi stack select "$original_stack" >/dev/null 2>&1
+            log::fatal "[$stack] Failed: $1"
+        fi
     done
     pulumi stack select "$original_stack" >/dev/null 2>&1
 }
@@ -135,7 +138,7 @@ step::40::install() {
         target_dir=$(get_inactive_release)
         log::info "  -> installing in $target_dir"
         remote::exec "cp $SYMLINK_DIR/.env $target_dir/.env 2>/dev/null || true"
-        remote::exec "cd $target_dir && pnpm install"
+        remote::exec "rm -rf $target_dir/node_modules && cd $target_dir && pnpm install"
     '
 }
 
