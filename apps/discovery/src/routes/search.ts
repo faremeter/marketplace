@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import { sql, type SqlBool } from "kysely";
 import { db, isTest } from "../db/instance.js";
 import { logger } from "../logger.js";
+import { buildProxyUrl } from "../lib/proxy-url.js";
 
 export const searchRoutes = new Hono();
 
@@ -162,7 +163,11 @@ searchRoutes.get("/", async (c) => {
       ]);
     }
 
-    return c.json({ proxies: tenants, endpoints });
+    const proxies = tenants.map((t) => ({
+      ...t,
+      url: buildProxyUrl(t.name, t.org_slug),
+    }));
+    return c.json({ proxies, endpoints });
   } catch (error) {
     logger.error("Search error", { error });
     return c.json({ error: "Search failed" }, 500);

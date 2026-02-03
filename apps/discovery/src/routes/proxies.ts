@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import { db } from "../db/instance.js";
 import { logger } from "../logger.js";
+import { buildProxyUrl } from "../lib/proxy-url.js";
 import {
   parseCursorPagination,
   buildCursorResponse,
@@ -15,10 +16,6 @@ interface ProxyListItem {
   default_price_usdc: number;
   default_scheme: string;
   tags: string[];
-}
-
-interface ProxyDetail extends ProxyListItem {
-  endpoint_count: number;
 }
 
 proxiesRoutes.get("/", async (c) => {
@@ -48,8 +45,12 @@ proxiesRoutes.get("/", async (c) => {
     }
 
     const results = (await query.execute()) as ProxyListItem[];
+    const withUrls = results.map((r) => ({
+      ...r,
+      url: buildProxyUrl(r.name, r.org_slug),
+    }));
 
-    return c.json(buildCursorResponse(results, limit));
+    return c.json(buildCursorResponse(withUrls, limit));
   } catch (error) {
     logger.error("Proxies list error", { error });
     return c.json({ error: "Failed to list proxies" }, 500);
@@ -91,8 +92,9 @@ proxiesRoutes.get("/:id", async (c) => {
       .where("deleted_at", "is", null)
       .executeTakeFirst();
 
-    const result: ProxyDetail = {
+    const result = {
       ...(proxy as ProxyListItem),
+      url: buildProxyUrl(proxy.name, proxy.org_slug),
       endpoint_count: Number(endpointCount?.count ?? 0),
     };
 

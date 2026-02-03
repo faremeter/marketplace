@@ -93,6 +93,21 @@ await t.test("GET /api/v1/search", async (t) => {
     t.equal(data.proxies[0].name, "Weather API");
   });
 
+  await t.test("includes url in proxy results", async (t) => {
+    await createTenant({ name: "weather" });
+    await createTenant({ name: "legiscan", org_slug: "acme" });
+
+    const res = await app.request("/api/v1/search?q=weather");
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const data = (await res.json()) as any;
+    t.equal(data.proxies[0].url, "https://weather.api.corbits.dev");
+
+    const res2 = await app.request("/api/v1/search?q=legiscan");
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const data2 = (await res2.json()) as any;
+    t.equal(data2.proxies[0].url, "https://legiscan.acme.api.corbits.dev");
+  });
+
   await t.test("searches tenants by org_slug", async (t) => {
     await createTenant({ name: "API 1", org_slug: "acme-corp" });
     await createTenant({ name: "API 2", org_slug: "other-org" });

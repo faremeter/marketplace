@@ -171,7 +171,7 @@ await t.test("GET /api/v1/proxies", async (t) => {
 
   await t.test("returns correct fields", async (t) => {
     await createTenant({
-      name: "Test API",
+      name: "test-api",
       org_slug: "test-org",
       backend_url: "https://backend.example.com",
       default_price_usdc: 0.05,
@@ -185,6 +185,7 @@ await t.test("GET /api/v1/proxies", async (t) => {
         id: number;
         name: string;
         org_slug: string;
+        url: string;
         default_price_usdc: number;
         default_scheme: string;
       }[];
@@ -193,10 +194,21 @@ await t.test("GET /api/v1/proxies", async (t) => {
     const proxy = data.data[0];
     if (!proxy) throw new Error("Expected proxy");
     t.ok(proxy.id);
-    t.equal(proxy.name, "Test API");
+    t.equal(proxy.name, "test-api");
     t.equal(proxy.org_slug, "test-org");
+    t.equal(proxy.url, "https://test-api.test-org.api.corbits.dev");
     t.equal(proxy.default_price_usdc, 0.05);
     t.equal(proxy.default_scheme, "per_byte");
+  });
+
+  await t.test("returns url without org_slug", async (t) => {
+    await createTenant({ name: "weather" });
+
+    const res = await app.request("/api/v1/proxies");
+    t.equal(res.status, 200);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const data = (await res.json()) as any;
+    t.equal(data.data[0].url, "https://weather.api.corbits.dev");
   });
 
   await t.test("returns tags in proxy list", async (t) => {
@@ -264,7 +276,7 @@ await t.test("GET /api/v1/proxies", async (t) => {
 
 await t.test("GET /api/v1/proxies/:id", async (t) => {
   await t.test("returns proxy details with endpoint count", async (t) => {
-    const tenant = await createTenant({ name: "Detailed API" });
+    const tenant = await createTenant({ name: "detailed-api" });
     await createEndpoint(tenant.id);
     await createEndpoint(tenant.id);
     await createEndpoint(tenant.id, { is_active: false });
@@ -273,9 +285,10 @@ await t.test("GET /api/v1/proxies/:id", async (t) => {
     const res = await app.request(`/api/v1/proxies/${tenant.id}`);
     t.equal(res.status, 200);
     const data = (await res.json()) as {
-      data: { name: string; endpoint_count: number };
+      data: { name: string; url: string; endpoint_count: number };
     };
-    t.equal(data.data.name, "Detailed API");
+    t.equal(data.data.name, "detailed-api");
+    t.equal(data.data.url, "https://detailed-api.api.corbits.dev");
     t.equal(data.data.endpoint_count, 2);
   });
 
