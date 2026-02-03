@@ -18,6 +18,15 @@ interface ProxyListItem {
   tags: string[];
 }
 
+interface EndpointListItem {
+  id: number;
+  path_pattern: string;
+  description: string | null;
+  price_usdc: number | null;
+  scheme: string | null;
+  tags: string[];
+}
+
 proxiesRoutes.get("/", async (c) => {
   const { cursor, limit } = parseCursorPagination(
     c.req.query("cursor"),
@@ -139,5 +148,108 @@ proxiesRoutes.get("/:id/openapi", async (c) => {
   } catch (error) {
     logger.error("Proxy OpenAPI error", { error });
     return c.json({ error: "Failed to get OpenAPI spec" }, 500);
+  }
+});
+
+proxiesRoutes.get("/:id/endpoints/:endpointId", async (c) => {
+  const id = parseInt(c.req.param("id"), 10);
+  const endpointId = parseInt(c.req.param("endpointId"), 10);
+
+  if (isNaN(id) || isNaN(endpointId)) {
+    return c.json({ error: "Invalid ID" }, 400);
+  }
+
+  try {
+    const proxy = await db
+      .selectFrom("tenants")
+      .select(["id"])
+      .where("id", "=", id)
+      .where("is_active", "=", true)
+      .where("status", "=", "active")
+      .executeTakeFirst();
+
+    if (!proxy) {
+      return c.json({ error: "Proxy not found" }, 404);
+    }
+
+    const endpoint = await db
+      .selectFrom("endpoints")
+      .select([
+        "id",
+        "path_pattern",
+        "description",
+        "price_usdc",
+        "scheme",
+        "priority",
+        "tags",
+        "created_at",
+      ])
+      .where("id", "=", endpointId)
+      .where("tenant_id", "=", id)
+      .where("is_active", "=", true)
+      .where("deleted_at", "is", null)
+      .executeTakeFirst();
+
+    if (!endpoint) {
+      return c.json({ error: "Endpoint not found" }, 404);
+    }
+
+    return c.json({ data: endpoint });
+  } catch (error) {
+    logger.error("Endpoint detail error", { error });
+    return c.json({ error: "Failed to get endpoint" }, 500);
+  }
+});
+
+proxiesRoutes.get("/:id/endpoints", async (c) => {
+  const id = parseInt(c.req.param("id"), 10);
+
+  if (isNaN(id)) {
+    return c.json({ error: "Invalid proxy ID" }, 400);
+  }
+
+  try {
+    const proxy = await db
+      .selectFrom("tenants")
+      .select(["id"])
+      .where("id", "=", id)
+      .where("is_active", "=", true)
+      .where("status", "=", "active")
+      .executeTakeFirst();
+
+    if (!proxy) {
+      return c.json({ error: "Proxy not found" }, 404);
+    }
+
+    const { cursor, limit } = parseCursorPagination(
+      c.req.query("cursor"),
+      c.req.query("limit"),
+    );
+
+    let query = db
+      .selectFrom("endpoints")
+      .select([
+        "id",
+        "path_pattern",
+        "description",
+        "price_usdc",
+        "scheme",
+        "tags",
+      ])
+      .where("tenant_id", "=", id)
+      .where("is_active", "=", true)
+      .where("deleted_at", "is", null)
+      .orderBy("id", "asc")
+      .limit(limit + 1);
+
+    if (cursor !== null) {
+      query = query.where("id", ">", cursor);
+    }
+
+    const results = (await query.execute()) as EndpointListItem[];
+    return c.json(buildCursorResponse(results, limit));
+  } catch (error) {
+    logger.error("Proxy endpoints error", { error });
+    return c.json({ error: "Failed to list endpoints" }, 500);
   }
 });

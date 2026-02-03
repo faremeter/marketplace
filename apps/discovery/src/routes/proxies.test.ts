@@ -30,7 +30,7 @@ async function createTenant(overrides: {
       name: overrides.name ?? "Test Tenant",
       backend_url: overrides.backend_url ?? "https://api.example.com",
       default_price_usdc: overrides.default_price_usdc ?? 0.01,
-      default_scheme: overrides.default_scheme ?? "per_request",
+      default_scheme: overrides.default_scheme ?? "exact",
       is_active: overrides.is_active ?? true,
       status: overrides.status ?? "active",
       org_slug: overrides.org_slug ?? null,
@@ -48,6 +48,11 @@ async function createEndpoint(
     path_pattern?: string;
     is_active?: boolean;
     deleted_at?: string;
+    description?: string;
+    price_usdc?: number;
+    scheme?: string;
+    priority?: number;
+    tags?: string[];
   },
 ) {
   const endpoint = await db
@@ -57,6 +62,13 @@ async function createEndpoint(
       path_pattern: overrides?.path_pattern ?? "/api/test",
       is_active: overrides?.is_active ?? true,
       deleted_at: overrides?.deleted_at ?? null,
+      description: overrides?.description ?? null,
+      price_usdc: overrides?.price_usdc ?? null,
+      scheme: overrides?.scheme ?? null,
+      ...(overrides?.priority !== undefined
+        ? { priority: overrides.priority }
+        : {}),
+      ...(overrides?.tags !== undefined ? { tags: overrides.tags } : {}),
     })
     .returning("id")
     .executeTakeFirstOrThrow();
@@ -391,4 +403,276 @@ await t.test("GET /api/v1/proxies/:id/openapi", async (t) => {
     const res = await app.request("/api/v1/proxies/abc/openapi");
     t.equal(res.status, 400);
   });
+});
+
+await t.test("GET /api/v1/proxies/:id/endpoints", async (t) => {
+  await t.test("returns paginated endpoints for a proxy", async (t) => {
+    const tenant = await createTenant({ name: "API with endpoints" });
+    await createEndpoint(tenant.id, { path_pattern: "/v1/users" });
+    await createEndpoint(tenant.id, { path_pattern: "/v1/posts" });
+
+    const res = await app.request(`/api/v1/proxies/${tenant.id}/endpoints`);
+    t.equal(res.status, 200);
+    const data = (await res.json()) as {
+      data: { path_pattern: string }[];
+      pagination: { hasMore: boolean; nextCursor: string | null };
+    };
+    t.equal(data.data.length, 2);
+    t.equal(data.pagination.hasMore, false);
+    t.equal(data.pagination.nextCursor, null);
+  });
+
+  await t.test("returns empty list for proxy with no endpoints", async (t) => {
+    const tenant = await createTenant({ name: "Empty API" });
+
+    const res = await app.request(`/api/v1/proxies/${tenant.id}/endpoints`);
+    t.equal(res.status, 200);
+    const data = (await res.json()) as {
+      data: unknown[];
+      pagination: { hasMore: boolean };
+    };
+    t.equal(data.data.length, 0);
+    t.equal(data.pagination.hasMore, false);
+  });
+
+  await t.test("excludes inactive endpoints", async (t) => {
+    const tenant = await createTenant({ name: "Mixed API" });
+    await createEndpoint(tenant.id, { path_pattern: "/v1/active" });
+    await createEndpoint(tenant.id, {
+      path_pattern: "/v1/inactive",
+      is_active: false,
+    });
+
+    const res = await app.request(`/api/v1/proxies/${tenant.id}/endpoints`);
+    t.equal(res.status, 200);
+    const data = (await res.json()) as {
+      data: { path_pattern: string }[];
+    };
+    t.equal(data.data.length, 1);
+    t.equal(data.data[0]?.path_pattern, "/v1/active");
+  });
+
+  await t.test("excludes soft-deleted endpoints", async (t) => {
+    const tenant = await createTenant({ name: "Deleted API" });
+    await createEndpoint(tenant.id, { path_pattern: "/v1/alive" });
+    await createEndpoint(tenant.id, {
+      path_pattern: "/v1/deleted",
+      deleted_at: new Date().toISOString(),
+    });
+
+    const res = await app.request(`/api/v1/proxies/${tenant.id}/endpoints`);
+    t.equal(res.status, 200);
+    const data = (await res.json()) as {
+      data: { path_pattern: string }[];
+    };
+    t.equal(data.data.length, 1);
+    t.equal(data.data[0]?.path_pattern, "/v1/alive");
+  });
+
+  await t.test("cursor pagination works", async (t) => {
+    const tenant = await createTenant({ name: "Paginated API" });
+    for (let i = 0; i < 5; i++) {
+      await createEndpoint(tenant.id, { path_pattern: `/v1/ep${i}` });
+    }
+
+    const res1 = await app.request(
+      `/api/v1/proxies/${tenant.id}/endpoints?limit=2`,
+    );
+    t.equal(res1.status, 200);
+    const data1 = (await res1.json()) as {
+      data: { id: number }[];
+      pagination: { nextCursor: string; hasMore: boolean };
+    };
+    t.equal(data1.data.length, 2);
+    t.equal(data1.pagination.hasMore, true);
+    t.ok(data1.pagination.nextCursor);
+
+    const res2 = await app.request(
+      `/api/v1/proxies/${tenant.id}/endpoints?limit=2&cursor=${data1.pagination.nextCursor}`,
+    );
+    t.equal(res2.status, 200);
+    const data2 = (await res2.json()) as {
+      data: { id: number }[];
+    };
+    t.equal(data2.data.length, 2);
+    const secondPageFirst = data2.data[0];
+    const firstPageLast = data1.data[1];
+    t.ok(
+      secondPageFirst && firstPageLast && secondPageFirst.id > firstPageLast.id,
+    );
+  });
+
+  await t.test("returns 400 for invalid proxy ID", async (t) => {
+    const res = await app.request("/api/v1/proxies/invalid/endpoints");
+    t.equal(res.status, 400);
+    const data = (await res.json()) as { error: string };
+    t.equal(data.error, "Invalid proxy ID");
+  });
+
+  await t.test("returns 404 for non-existent proxy", async (t) => {
+    const res = await app.request("/api/v1/proxies/99999/endpoints");
+    t.equal(res.status, 404);
+    const data = (await res.json()) as { error: string };
+    t.equal(data.error, "Proxy not found");
+  });
+
+  await t.test("returns 404 for inactive proxy", async (t) => {
+    const tenant = await createTenant({
+      name: "Inactive",
+      is_active: false,
+    });
+    await createEndpoint(tenant.id);
+
+    const res = await app.request(`/api/v1/proxies/${tenant.id}/endpoints`);
+    t.equal(res.status, 404);
+  });
+});
+
+await t.test("GET /api/v1/proxies/:id/endpoints/:endpointId", async (t) => {
+  await t.test("returns endpoint details", async (t) => {
+    const tenant = await createTenant({ name: "Detail API" });
+    const endpoint = await createEndpoint(tenant.id, {
+      path_pattern: "/v1/users",
+      description: "List users",
+      price_usdc: 0.02,
+      scheme: "per_request",
+      priority: 5,
+      tags: ["users", "read"],
+    });
+
+    const res = await app.request(
+      `/api/v1/proxies/${tenant.id}/endpoints/${endpoint.id}`,
+    );
+    t.equal(res.status, 200);
+    const data = (await res.json()) as {
+      data: {
+        id: number;
+        path_pattern: string;
+        description: string;
+        price_usdc: number;
+        scheme: string;
+        priority: number;
+        tags: string[];
+        created_at: string;
+      };
+    };
+    t.equal(data.data.id, endpoint.id);
+    t.equal(data.data.path_pattern, "/v1/users");
+    t.equal(data.data.description, "List users");
+    t.equal(data.data.price_usdc, 0.02);
+    t.equal(data.data.scheme, "per_request");
+    t.equal(data.data.priority, 5);
+    t.same(data.data.tags, ["users", "read"]);
+    t.ok(data.data.created_at);
+  });
+
+  await t.test("returns 400 for invalid proxy ID", async (t) => {
+    const res = await app.request("/api/v1/proxies/invalid/endpoints/1");
+    t.equal(res.status, 400);
+    const data = (await res.json()) as { error: string };
+    t.equal(data.error, "Invalid ID");
+  });
+
+  await t.test("returns 400 for invalid endpoint ID", async (t) => {
+    const tenant = await createTenant({ name: "Valid Proxy" });
+
+    const res = await app.request(`/api/v1/proxies/${tenant.id}/endpoints/abc`);
+    t.equal(res.status, 400);
+    const data = (await res.json()) as { error: string };
+    t.equal(data.error, "Invalid ID");
+  });
+
+  await t.test("returns 404 for non-existent proxy", async (t) => {
+    const res = await app.request("/api/v1/proxies/99999/endpoints/1");
+    t.equal(res.status, 404);
+    const data = (await res.json()) as { error: string };
+    t.equal(data.error, "Proxy not found");
+  });
+
+  await t.test("returns 404 for inactive proxy", async (t) => {
+    const tenant = await createTenant({
+      name: "Inactive",
+      is_active: false,
+    });
+    const endpoint = await createEndpoint(tenant.id);
+
+    const res = await app.request(
+      `/api/v1/proxies/${tenant.id}/endpoints/${endpoint.id}`,
+    );
+    t.equal(res.status, 404);
+    const data = (await res.json()) as { error: string };
+    t.equal(data.error, "Proxy not found");
+  });
+
+  await t.test("returns 404 for non-active status proxy", async (t) => {
+    const tenant = await createTenant({
+      name: "Pending",
+      status: "pending",
+    });
+    const endpoint = await createEndpoint(tenant.id);
+
+    const res = await app.request(
+      `/api/v1/proxies/${tenant.id}/endpoints/${endpoint.id}`,
+    );
+    t.equal(res.status, 404);
+    const data = (await res.json()) as { error: string };
+    t.equal(data.error, "Proxy not found");
+  });
+
+  await t.test("returns 404 for non-existent endpoint", async (t) => {
+    const tenant = await createTenant({ name: "Valid Proxy" });
+
+    const res = await app.request(
+      `/api/v1/proxies/${tenant.id}/endpoints/99999`,
+    );
+    t.equal(res.status, 404);
+    const data = (await res.json()) as { error: string };
+    t.equal(data.error, "Endpoint not found");
+  });
+
+  await t.test("returns 404 for inactive endpoint", async (t) => {
+    const tenant = await createTenant({ name: "Active Proxy" });
+    const endpoint = await createEndpoint(tenant.id, {
+      is_active: false,
+    });
+
+    const res = await app.request(
+      `/api/v1/proxies/${tenant.id}/endpoints/${endpoint.id}`,
+    );
+    t.equal(res.status, 404);
+    const data = (await res.json()) as { error: string };
+    t.equal(data.error, "Endpoint not found");
+  });
+
+  await t.test("returns 404 for soft-deleted endpoint", async (t) => {
+    const tenant = await createTenant({ name: "Active Proxy" });
+    const endpoint = await createEndpoint(tenant.id, {
+      deleted_at: new Date().toISOString(),
+    });
+
+    const res = await app.request(
+      `/api/v1/proxies/${tenant.id}/endpoints/${endpoint.id}`,
+    );
+    t.equal(res.status, 404);
+    const data = (await res.json()) as { error: string };
+    t.equal(data.error, "Endpoint not found");
+  });
+
+  await t.test(
+    "returns 404 for endpoint belonging to different proxy",
+    async (t) => {
+      const tenant1 = await createTenant({ name: "Proxy One" });
+      const tenant2 = await createTenant({ name: "Proxy Two" });
+      const endpoint = await createEndpoint(tenant1.id, {
+        path_pattern: "/v1/secret",
+      });
+
+      const res = await app.request(
+        `/api/v1/proxies/${tenant2.id}/endpoints/${endpoint.id}`,
+      );
+      t.equal(res.status, 404);
+      const data = (await res.json()) as { error: string };
+      t.equal(data.error, "Endpoint not found");
+    },
+  );
 });
