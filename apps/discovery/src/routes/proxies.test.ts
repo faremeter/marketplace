@@ -185,7 +185,6 @@ await t.test("GET /api/v1/proxies", async (t) => {
         id: number;
         name: string;
         org_slug: string;
-        backend_url: string;
         default_price_usdc: number;
         default_scheme: string;
       }[];
@@ -196,7 +195,6 @@ await t.test("GET /api/v1/proxies", async (t) => {
     t.ok(proxy.id);
     t.equal(proxy.name, "Test API");
     t.equal(proxy.org_slug, "test-org");
-    t.equal(proxy.backend_url, "https://backend.example.com");
     t.equal(proxy.default_price_usdc, 0.05);
     t.equal(proxy.default_scheme, "per_byte");
   });

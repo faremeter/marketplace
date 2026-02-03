@@ -12,7 +12,6 @@ interface ProxyListItem {
   id: number;
   name: string;
   org_slug: string | null;
-  backend_url: string;
   default_price_usdc: number;
   default_scheme: string;
   tags: string[];
@@ -35,7 +34,6 @@ proxiesRoutes.get("/", async (c) => {
         "id",
         "name",
         "org_slug",
-        "backend_url",
         "default_price_usdc",
         "default_scheme",
         "tags",
@@ -72,7 +70,6 @@ proxiesRoutes.get("/:id", async (c) => {
         "id",
         "name",
         "org_slug",
-        "backend_url",
         "default_price_usdc",
         "default_scheme",
         "tags",

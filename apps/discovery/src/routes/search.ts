@@ -9,7 +9,6 @@ interface TenantResult {
   id: number;
   name: string;
   org_slug: string | null;
-  backend_url: string;
   default_price_usdc: number;
   default_scheme: string;
   tags: string[];
@@ -63,7 +62,6 @@ searchRoutes.get("/", async (c) => {
             "id",
             "name",
             "org_slug",
-            "backend_url",
             "default_price_usdc",
             "default_scheme",
             "tags",
@@ -128,7 +126,6 @@ searchRoutes.get("/", async (c) => {
             "id",
             "name",
             "org_slug",
-            "backend_url",
             "default_price_usdc",
             "default_scheme",
             "tags",
