@@ -62,6 +62,10 @@ interface WalletBalances {
   monad: ChainBalances;
 }
 
+interface WalletBalancesResponse extends WalletBalances {
+  isFunded?: boolean;
+}
+
 const CHAINS = [
   { id: "solana", name: "Solana", native: "SOL", color: "purple" },
   { id: "base", name: "Base", native: "ETH", color: "blue" },
@@ -531,9 +535,13 @@ function WalletCard({
     data: balances,
     isLoading: balancesLoading,
     mutate: mutateBalances,
-  } = useSWR<WalletBalances>(`/api/wallets/${wallet.id}/balances`, api.get, {
-    refreshInterval: 60000,
-  });
+  } = useSWR<WalletBalancesResponse>(
+    `/api/wallets/${wallet.id}/balances`,
+    api.get,
+    {
+      refreshInterval: 60000,
+    },
+  );
 
   const addresses = extractAddresses(wallet.wallet_config);
 
@@ -807,7 +815,7 @@ export default function WalletsPage() {
     !walletsLoading &&
     (forceShowFundingModal || fundingFlowActive);
 
-  const { data: fundingModalBalances } = useSWR<WalletBalances>(
+  const { data: fundingModalBalances } = useSWR<WalletBalancesResponse>(
     showFundingModal && wallets?.[0]
       ? `/api/wallets/${wallets[0].id}/balances`
       : null,
@@ -815,10 +823,7 @@ export default function WalletsPage() {
     { refreshInterval: 5000 },
   );
 
-  const isSolanaFunded =
-    fundingModalBalances &&
-    (parseFloat(fundingModalBalances.solana.native) > 0 ||
-      parseFloat(fundingModalBalances.solana.usdc) > 0);
+  const isSolanaFunded = fundingModalBalances?.isFunded ?? false;
 
   const handleFundingEditSave = async (data: {
     name: string;

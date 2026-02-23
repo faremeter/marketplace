@@ -159,7 +159,14 @@ walletsRoutes.get("/:id/balances", async (c) => {
     Date.now() - new Date(cachedAt).getTime() < BALANCE_CACHE_TTL_MS;
 
   if (isCacheFresh) {
-    return c.json(wallet.cached_balances);
+    const cached =
+      typeof wallet.cached_balances === "string"
+        ? JSON.parse(wallet.cached_balances)
+        : wallet.cached_balances;
+    return c.json({
+      ...cached,
+      isFunded: wallet.funding_status === "funded",
+    });
   }
 
   const config = wallet.wallet_config as WalletConfig;
@@ -190,7 +197,7 @@ walletsRoutes.get("/:id/balances", async (c) => {
     .where("id", "=", id)
     .execute();
 
-  return c.json(balances);
+  return c.json({ ...balances, isFunded });
 });
 
 walletsRoutes.post(
