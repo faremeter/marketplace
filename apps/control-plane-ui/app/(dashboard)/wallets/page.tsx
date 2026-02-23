@@ -1261,7 +1261,7 @@ export default function WalletsPage() {
                       setFundingFlowActive(false);
                     }, 4000);
                   }}
-                  disabled={isContinuing}
+                  disabled={!isSolanaFunded || isContinuing}
                   className="inline-flex items-center gap-2 rounded-md bg-corbits-orange px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-corbits-orange/90 disabled:opacity-70"
                 >
                   Continue
