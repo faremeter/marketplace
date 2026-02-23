@@ -194,8 +194,15 @@ export async function startQueue(config: {
   await boss.createQueue(TENANT_RENAME_QUEUE);
   logger.info(`Created queue: ${TENANT_RENAME_QUEUE}`);
 
-  await boss.createQueue(BALANCE_CHECK_QUEUE);
-  logger.info(`Created queue: ${BALANCE_CHECK_QUEUE}`);
+  await boss.createQueue(BALANCE_CHECK_QUEUE, {
+    name: BALANCE_CHECK_QUEUE,
+    policy: "stately",
+  });
+  await boss.updateQueue(BALANCE_CHECK_QUEUE, {
+    name: BALANCE_CHECK_QUEUE,
+    policy: "stately",
+  });
+  logger.info(`Created queue: ${BALANCE_CHECK_QUEUE} (policy=stately)`);
 
   await boss.createQueue(TRANSACTION_RECORDING_QUEUE);
   logger.info(`Created queue: ${TRANSACTION_RECORDING_QUEUE}`);
@@ -569,7 +576,8 @@ export async function startQueue(config: {
               { walletId, solanaAddress },
               {
                 retryLimit: 0,
-                startAfter: 30, // Check again in 30 seconds
+                startAfter: 30,
+                singletonKey: `wallet-${walletId}`,
               },
             );
           }
@@ -653,7 +661,11 @@ export async function startQueue(config: {
               await boss.send(
                 BALANCE_CHECK_QUEUE,
                 { walletId: wallet.id, solanaAddress: addresses.solana },
-                { retryLimit: 0, startAfter: 30 },
+                {
+                  retryLimit: 0,
+                  startAfter: 30,
+                  singletonKey: `wallet-${wallet.id}`,
+                },
               );
             }
 
@@ -669,6 +681,39 @@ export async function startQueue(config: {
       logger.info(
         `Balance audit complete: checked ${checkedCount} wallets, ${unfundedCount} marked unfunded`,
       );
+
+      // Recovery: re-enqueue checks for pending wallets that may have fallen out of the queue
+      if (boss) {
+        const pendingWallets = await db
+          .selectFrom("wallets")
+          .select(["id", "wallet_config"])
+          .where("funding_status", "=", "pending")
+          .execute();
+
+        let recoveredCount = 0;
+        for (const wallet of pendingWallets) {
+          const config = wallet.wallet_config as Record<string, unknown> | null;
+          const addresses = extractAddresses(config);
+          if (addresses.solana) {
+            await boss.send(
+              BALANCE_CHECK_QUEUE,
+              { walletId: wallet.id, solanaAddress: addresses.solana },
+              {
+                retryLimit: 0,
+                startAfter: 30,
+                singletonKey: `wallet-${wallet.id}`,
+              },
+            );
+            recoveredCount++;
+          }
+        }
+
+        if (recoveredCount > 0) {
+          logger.info(
+            `Balance audit: re-enqueued checks for ${recoveredCount} pending wallets`,
+          );
+        }
+      }
     } catch (error) {
       logger.error(`Balance audit failed: ${error}`);
       throw error;
@@ -938,11 +983,15 @@ export async function enqueueBalanceCheck(
       retryDelay: 30,
       retryBackoff: true,
       expireInSeconds: 600,
+      singletonKey: `wallet-${walletId}`,
     },
   );
 
   if (!jobId) {
-    throw new Error(`Failed to enqueue balance check for wallet ${walletId}`);
+    logger.info(
+      `Balance check for wallet ${walletId} already queued, skipping`,
+    );
+    return;
   }
 
   logger.info(

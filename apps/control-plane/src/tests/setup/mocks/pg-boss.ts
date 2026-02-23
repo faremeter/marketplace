@@ -20,6 +20,11 @@ export class MockPgBoss {
     return true;
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  async updateQueue(name: string, options?: unknown) {
+    return true;
+  }
+
   async work(
     queue: string,
     _opts: unknown,
