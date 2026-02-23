@@ -745,7 +745,20 @@ export default function WalletsPage() {
   )?.role;
   const isOwner = currentRole === "owner" || user?.is_admin;
 
-  const [dismissedFundingModal, setDismissedFundingModal] = useState(false);
+  const [dismissedFundingModal, _setDismissedFundingModal] = useState(() => {
+    if (typeof window === "undefined") return false;
+    return sessionStorage.getItem("funding-modal-dismissed") === "true";
+  });
+  const setDismissedFundingModal = (value: boolean) => {
+    _setDismissedFundingModal(value);
+    if (typeof window !== "undefined") {
+      if (value) {
+        sessionStorage.setItem("funding-modal-dismissed", "true");
+      } else {
+        sessionStorage.removeItem("funding-modal-dismissed");
+      }
+    }
+  };
   const [isContinuing, setIsContinuing] = useState(false);
   const [showFundingEditModal, setShowFundingEditModal] = useState(false);
   const [isSavingFundingEdit, setIsSavingFundingEdit] = useState(false);
@@ -825,6 +838,7 @@ export default function WalletsPage() {
       });
       await mutateWallets();
       setShowFundingEditModal(false);
+      setDismissedFundingModal(false);
       setForceShowFundingModal(true);
     } catch {
       toast({
