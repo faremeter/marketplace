@@ -145,27 +145,31 @@ export async function fetchWalletBalances(addresses: {
   solana: string | null;
   evm: string | null;
 }): Promise<WalletBalances> {
-  const [solanaBalances, baseBalances, polygonBalances, monadBalances] =
-    await Promise.all([
-      addresses.solana
-        ? getSolanaBalances(addresses.solana)
-        : { native: "0.0000", usdc: "0.00" },
-      addresses.evm
-        ? getEvmBalances(addresses.evm, base, BASE_USDC?.address)
-        : { native: "0.000000", usdc: "0.00" },
-      addresses.evm
-        ? getEvmBalances(addresses.evm, polygon, POLYGON_USDC?.address)
-        : { native: "0.000000", usdc: "0.00" },
-      addresses.evm
-        ? getEvmBalances(addresses.evm, monadTestnet, MONAD_USDC?.address)
-        : { native: "0.000000", usdc: "0.00" },
-    ]);
+  const defaults = {
+    solana: { native: "0.0000", usdc: "0.00" },
+    evm: { native: "0.000000", usdc: "0.00" },
+  };
+
+  const results = await Promise.allSettled([
+    addresses.solana ? getSolanaBalances(addresses.solana) : defaults.solana,
+    addresses.evm
+      ? getEvmBalances(addresses.evm, base, BASE_USDC?.address)
+      : defaults.evm,
+    addresses.evm
+      ? getEvmBalances(addresses.evm, polygon, POLYGON_USDC?.address)
+      : defaults.evm,
+    addresses.evm
+      ? getEvmBalances(addresses.evm, monadTestnet, MONAD_USDC?.address)
+      : defaults.evm,
+  ]);
 
   return {
-    solana: solanaBalances,
-    base: baseBalances,
-    polygon: polygonBalances,
-    monad: monadBalances,
+    solana:
+      results[0].status === "fulfilled" ? results[0].value : defaults.solana,
+    base: results[1].status === "fulfilled" ? results[1].value : defaults.evm,
+    polygon:
+      results[2].status === "fulfilled" ? results[2].value : defaults.evm,
+    monad: results[3].status === "fulfilled" ? results[3].value : defaults.evm,
   };
 }
 
