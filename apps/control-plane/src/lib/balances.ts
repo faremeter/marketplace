@@ -150,6 +150,8 @@ export async function fetchWalletBalances(addresses: {
     evm: { native: "0.000000", usdc: "0.00" },
   };
 
+  const chainNames = ["solana", "base", "polygon", "monad"] as const;
+
   const results = await Promise.allSettled([
     addresses.solana ? getSolanaBalances(addresses.solana) : defaults.solana,
     addresses.evm
@@ -162,6 +164,14 @@ export async function fetchWalletBalances(addresses: {
       ? getEvmBalances(addresses.evm, monadTestnet, MONAD_USDC?.address)
       : defaults.evm,
   ]);
+
+  for (const [i, r] of results.entries()) {
+    if (r.status === "rejected") {
+      logger.error(
+        `${chainNames[i]} balance fetch failed: ${r.reason instanceof Error ? r.reason.message : String(r.reason)}`,
+      );
+    }
+  }
 
   return {
     solana:
