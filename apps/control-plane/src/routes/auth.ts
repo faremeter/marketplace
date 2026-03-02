@@ -21,6 +21,7 @@ import {
 } from "../lib/schemas.js";
 import { enqueueEmail } from "../lib/queue.js";
 import { getSiteUrl } from "../lib/email.js";
+import { syncContactToAttio } from "../lib/attio.js";
 import { logger } from "../logger.js";
 
 export const authRoutes = new Hono();
@@ -106,6 +107,8 @@ authRoutes.post(
         user_email: email,
       }).catch(() => undefined);
     }
+
+    syncContactToAttio(email).catch(() => undefined);
 
     const token = signToken({
       userId: user.id,
