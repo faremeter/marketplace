@@ -24,6 +24,8 @@ export interface User {
   is_admin: boolean;
   email_verified?: boolean;
   organizations: Organization[];
+  impersonating?: boolean;
+  impersonated_by?: { id: number; email: string };
 }
 
 interface AuthContextValue {
@@ -36,6 +38,7 @@ interface AuthContextValue {
   signup: (email: string, password: string) => Promise<User>;
   logout: () => Promise<void>;
   refresh: () => Promise<void>;
+  stopImpersonation: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -114,6 +117,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await mutate();
   }, [mutate]);
 
+  const stopImpersonation = useCallback(async () => {
+    await api.post("/api/auth/stop-impersonation", {});
+    await mutate();
+  }, [mutate]);
+
   const value = useMemo(
     () => ({
       user: user ?? null,
@@ -130,6 +138,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       signup,
       logout,
       refresh,
+      stopImpersonation,
     }),
     [
       user,
@@ -141,6 +150,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       signup,
       logout,
       refresh,
+      stopImpersonation,
     ],
   );
 

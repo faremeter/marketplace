@@ -1,6 +1,7 @@
 import { Hono } from "hono";
+import { getCookie, setCookie } from "hono/cookie";
 import { db } from "../db/instance.js";
-import { requireAdmin } from "../middleware/auth.js";
+import { requireAdmin, signToken } from "../middleware/auth.js";
 import { syncToNode } from "../lib/sync.js";
 import { syncOpenApiSpec } from "../lib/openapi-sync.js";
 import { logger } from "../logger.js";
@@ -158,6 +159,57 @@ adminRoutes.delete("/users/:id", async (c) => {
   }
 
   return c.json({ deleted: true });
+});
+
+adminRoutes.post("/impersonate/:userId", async (c) => {
+  const targetId = parseInt(c.req.param("userId"));
+  const admin = c.get("user");
+
+  if (getCookie(c, "admin_token")) {
+    return c.json({ error: "Already impersonating" }, 400);
+  }
+
+  if (admin.id === targetId) {
+    return c.json({ error: "Cannot impersonate yourself" }, 400);
+  }
+
+  const targetUser = await db
+    .selectFrom("users")
+    .select(["id", "email", "is_admin"])
+    .where("id", "=", targetId)
+    .executeTakeFirst();
+
+  if (!targetUser) {
+    return c.json({ error: "User not found" }, 404);
+  }
+
+  const cookieOpts = {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "lax" as const,
+    maxAge: 7 * 24 * 60 * 60,
+    path: "/",
+  };
+
+  const freshAdminToken = signToken({
+    userId: admin.id,
+    email: admin.email,
+    isAdmin: admin.is_admin,
+  });
+  setCookie(c, "admin_token", freshAdminToken, cookieOpts);
+
+  const impersonationToken = signToken({
+    userId: targetUser.id,
+    email: targetUser.email,
+    isAdmin: targetUser.is_admin,
+  });
+  setCookie(c, "auth_token", impersonationToken, cookieOpts);
+
+  logger.info(
+    `Admin ${admin.email} (${admin.id}) impersonating user ${targetUser.email} (${targetUser.id})`,
+  );
+
+  return c.json({ user: targetUser });
 });
 
 adminRoutes.post("/organizations", async (c) => {

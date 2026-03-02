@@ -1,9 +1,9 @@
 import { Hono } from "hono";
-import { setCookie, deleteCookie } from "hono/cookie";
+import { getCookie, setCookie, deleteCookie } from "hono/cookie";
 import bcrypt from "bcrypt";
 import crypto from "crypto";
 import { db } from "../db/instance.js";
-import { signToken, requireAuth } from "../middleware/auth.js";
+import { signToken, verifyToken, requireAuth } from "../middleware/auth.js";
 import {
   signupLimiter,
   loginLimiter,
@@ -21,6 +21,7 @@ import {
 } from "../lib/schemas.js";
 import { enqueueEmail } from "../lib/queue.js";
 import { getSiteUrl } from "../lib/email.js";
+import { logger } from "../logger.js";
 
 export const authRoutes = new Hono();
 
@@ -209,6 +210,7 @@ authRoutes.post(
 
 authRoutes.post("/logout", (c) => {
   deleteCookie(c, "auth_token", { path: "/" });
+  deleteCookie(c, "admin_token", { path: "/" });
   return c.json({ success: true });
 });
 
@@ -232,12 +234,73 @@ authRoutes.get("/me", requireAuth, async (c) => {
     .orderBy("organizations.name", "asc")
     .execute();
 
+  const adminToken = getCookie(c, "admin_token");
+  let impersonation: {
+    impersonating: boolean;
+    impersonated_by: { id: number; email: string };
+  } | null = null;
+
+  if (adminToken) {
+    const adminPayload = verifyToken(adminToken);
+    if (adminPayload) {
+      const adminUser = await db
+        .selectFrom("users")
+        .select(["id", "email", "is_admin"])
+        .where("id", "=", adminPayload.userId)
+        .executeTakeFirst();
+      if (adminUser?.is_admin) {
+        impersonation = {
+          impersonating: true,
+          impersonated_by: { id: adminUser.id, email: adminUser.email },
+        };
+      }
+    }
+  }
+
   return c.json({
     id: user.id,
     email: user.email,
     is_admin: user.is_admin,
     organizations,
+    ...impersonation,
   });
+});
+
+authRoutes.post("/stop-impersonation", requireAuth, async (c) => {
+  const adminToken = getCookie(c, "admin_token");
+  if (!adminToken) {
+    return c.json({ error: "Not impersonating" }, 400);
+  }
+
+  const payload = verifyToken(adminToken);
+  if (!payload) {
+    return c.json({ error: "Invalid admin token" }, 401);
+  }
+
+  const admin = await db
+    .selectFrom("users")
+    .select(["id", "email", "is_admin"])
+    .where("id", "=", payload.userId)
+    .executeTakeFirst();
+
+  if (!admin || !admin.is_admin) {
+    return c.json({ error: "Invalid admin token" }, 401);
+  }
+
+  const cookieOpts = {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "lax" as const,
+    maxAge: 7 * 24 * 60 * 60,
+    path: "/",
+  };
+
+  setCookie(c, "auth_token", adminToken, cookieOpts);
+  deleteCookie(c, "admin_token", { path: "/" });
+
+  logger.info(`Admin ${admin.email} (${admin.id}) stopped impersonation`);
+
+  return c.json({ user: admin });
 });
 
 authRoutes.post(

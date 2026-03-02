@@ -2,6 +2,7 @@
 
 import { AdminRoute } from "@/lib/auth/guard";
 import { AdminSidebar } from "@/components/sidebar";
+import { ImpersonationBanner } from "@/components/impersonation-banner";
 
 export default function AdminLayout({
   children,
@@ -10,6 +11,7 @@ export default function AdminLayout({
 }) {
   return (
     <AdminRoute>
+      <ImpersonationBanner />
       <div className="flex h-screen overflow-hidden">
         <AdminSidebar />
         <main className="flex-1 overflow-auto bg-gray-1 p-6">{children}</main>

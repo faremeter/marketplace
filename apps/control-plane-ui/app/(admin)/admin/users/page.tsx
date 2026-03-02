@@ -1,8 +1,11 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import useSWR from "swr";
 import { api } from "@/lib/api/client";
+import { useAuth } from "@/lib/auth/context";
+import { useToast } from "@/components/ui/toast";
 import {
   MagnifyingGlassIcon,
   ChevronLeftIcon,
@@ -22,6 +25,10 @@ interface User {
 export default function AdminUsersPage() {
   const [page, setPage] = useState(0);
   const [search, setSearch] = useState("");
+  const [impersonatingId, setImpersonatingId] = useState<number | null>(null);
+  const { user: currentUser, refresh, setCurrentOrg } = useAuth();
+  const { toast } = useToast();
+  const router = useRouter();
 
   const { data: users, isLoading } = useSWR(
     "/api/admin/users",
@@ -38,6 +45,19 @@ export default function AdminUsersPage() {
   const paginatedUsers = filteredUsers.slice(offset, offset + PAGE_SIZE);
   const hasNextPage = page < totalPages - 1;
   const hasPrevPage = page > 0;
+
+  const handleImpersonate = async (userId: number) => {
+    setImpersonatingId(userId);
+    try {
+      await api.post(`/api/admin/impersonate/${userId}`, {});
+      setCurrentOrg(null);
+      await refresh();
+      router.push("/dashboard");
+    } catch {
+      toast({ title: "Failed to impersonate user", variant: "error" });
+      setImpersonatingId(null);
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -86,6 +106,9 @@ export default function AdminUsersPage() {
                   <th className="px-4 py-3 text-left text-sm font-medium text-gray-11">
                     Created
                   </th>
+                  <th className="px-4 py-3 text-right text-sm font-medium text-gray-11">
+                    Actions
+                  </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-6 bg-gray-2">
@@ -121,6 +144,22 @@ export default function AdminUsersPage() {
                     </td>
                     <td className="px-4 py-3 text-sm text-gray-11">
                       {new Date(user.created_at).toLocaleDateString()}
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      {user.id !== currentUser?.id && (
+                        <button
+                          onClick={() => handleImpersonate(user.id)}
+                          disabled={
+                            !!currentUser?.impersonating ||
+                            impersonatingId === user.id
+                          }
+                          className="rounded border border-gray-6 px-2.5 py-1 text-xs text-gray-11 transition-colors hover:bg-gray-4 hover:text-gray-12 disabled:opacity-50"
+                        >
+                          {impersonatingId === user.id
+                            ? "Switching..."
+                            : "Impersonate"}
+                        </button>
+                      )}
                     </td>
                   </tr>
                 ))}
