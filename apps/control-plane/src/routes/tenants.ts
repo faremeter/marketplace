@@ -12,7 +12,7 @@ import {
 import { toDomainInfo } from "../lib/domain.js";
 import { enqueueCertProvisioning } from "../lib/queue.js";
 import { validateProxyName } from "../lib/proxy-name.js";
-import { requireAdmin } from "../middleware/auth.js";
+import { requireAdmin, requireTenantAccess } from "../middleware/auth.js";
 import { arktypeValidator } from "@hono/arktype-validator";
 import {
   CreateTenantSchema,
@@ -22,7 +22,9 @@ import {
 
 export const tenantsRoutes = new Hono();
 
-tenantsRoutes.use("*", requireAdmin);
+tenantsRoutes.use("/", requireAdmin);
+tenantsRoutes.use("/:id", requireTenantAccess);
+tenantsRoutes.use("/:id/*", requireTenantAccess);
 
 tenantsRoutes.get("/", async (c) => {
   const tenants = await db

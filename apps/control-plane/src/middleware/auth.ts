@@ -143,7 +143,7 @@ export async function requireTenantAccess(c: Context, next: Next) {
     return next();
   }
 
-  const tenantId = parseInt(c.req.param("tenantId") ?? "");
+  const tenantId = parseInt(c.req.param("tenantId") ?? c.req.param("id") ?? "");
   if (!tenantId) {
     return c.json({ error: "Tenant ID required" }, 400);
   }
