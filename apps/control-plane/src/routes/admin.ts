@@ -1452,6 +1452,61 @@ adminRoutes.put(
   },
 );
 
+adminRoutes.delete("/tenants/:tenantId/endpoints/:endpointId", async (c) => {
+  const tenantId = parseInt(c.req.param("tenantId"));
+  const endpointId = parseInt(c.req.param("endpointId"));
+
+  const result = await db
+    .updateTable("endpoints")
+    .set({
+      is_active: false,
+      deleted_at: new Date(),
+    })
+    .where("id", "=", endpointId)
+    .where("tenant_id", "=", tenantId)
+    .where("is_active", "=", true)
+    .returningAll()
+    .executeTakeFirst();
+
+  if (!result) {
+    return c.json({ error: "Endpoint not found" }, 404);
+  }
+
+  const tenantNodes = await db
+    .selectFrom("tenant_nodes")
+    .select("node_id")
+    .where("tenant_id", "=", tenantId)
+    .execute();
+
+  for (const tn of tenantNodes) {
+    syncToNode(tn.node_id).catch((err) => logger.error(String(err)));
+  }
+  syncOpenApiSpec(tenantId).catch((err) =>
+    logger.error(`Failed to sync OpenAPI spec for tenant ${tenantId}: ${err}`),
+  );
+
+  return c.json({ deleted: true, endpoint: result });
+});
+
+adminRoutes.get("/tenants/:tenantId/openapi/spec", async (c) => {
+  const tenantId = parseInt(c.req.param("tenantId"));
+
+  const tenant = await db
+    .selectFrom("tenants")
+    .select(["openapi_spec"])
+    .where("id", "=", tenantId)
+    .executeTakeFirst();
+
+  if (!tenant) {
+    return c.json({ error: "Tenant not found" }, 404);
+  }
+
+  return c.json({
+    spec: tenant.openapi_spec ?? null,
+    hasSpec: tenant.openapi_spec !== null,
+  });
+});
+
 adminRoutes.get("/transactions", async (c) => {
   const { limit, offset } = parsePagination(
     c.req.query("limit"),

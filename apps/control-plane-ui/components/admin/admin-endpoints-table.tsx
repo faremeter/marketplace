@@ -77,7 +77,7 @@ export function AdminEndpointsTable({
   );
 
   const { data: specData } = useSWR(
-    enabled ? `/api/tenants/${tenantId}/openapi/spec` : null,
+    enabled ? `/api/admin/tenants/${tenantId}/openapi/spec` : null,
     api.get<OpenApiSpecResponse>,
   );
 
@@ -89,7 +89,7 @@ export function AdminEndpointsTable({
     setIsDeleting(true);
     try {
       await api.delete(
-        `/api/tenants/${tenantId}/endpoints/${endpointToDelete.id}`,
+        `/api/admin/tenants/${tenantId}/endpoints/${endpointToDelete.id}`,
       );
       toast({
         title: "Endpoint deleted",

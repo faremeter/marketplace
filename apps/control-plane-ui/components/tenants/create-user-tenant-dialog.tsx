@@ -330,7 +330,9 @@ export function CreateUserTenantDialog({
     if (createdTenantId) {
       setIsGoingBack(true);
       try {
-        await api.delete(`/api/tenants/${createdTenantId}`);
+        await api.delete(
+          `/api/organizations/${organizationId}/tenants/${createdTenantId}`,
+        );
       } catch {
         toast({
           title: "Failed to clean up proxy",
@@ -424,7 +426,9 @@ export function CreateUserTenantDialog({
     setShowDiscardConfirm(false);
     if (createdTenantId) {
       try {
-        await api.delete(`/api/tenants/${createdTenantId}`);
+        await api.delete(
+          `/api/organizations/${organizationId}/tenants/${createdTenantId}`,
+        );
       } catch {
         toast({
           title: "Failed to clean up proxy",

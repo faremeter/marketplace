@@ -1593,7 +1593,7 @@ await t.test("org role-based access control", async (t) => {
     t.equal(res.status, 200);
   });
 
-  await t.test("member can PUT tenant", async (t) => {
+  await t.test("member cannot PUT tenant (admin-only)", async (t) => {
     const { token, tenantId } = await createOrgMemberWithTenant("member");
 
     const res = await app.request(`/api/tenants/${tenantId}`, {
@@ -1604,44 +1604,50 @@ await t.test("org role-based access control", async (t) => {
       },
       body: JSON.stringify({ backend_url: "http://member-updated.com" }),
     });
-    t.equal(res.status, 200);
+    t.equal(res.status, 403);
   });
 
-  await t.test("member can DELETE tenant", async (t) => {
+  await t.test("member cannot DELETE tenant (admin-only)", async (t) => {
     const { token, tenantId } = await createOrgMemberWithTenant("member");
 
     const res = await app.request(`/api/tenants/${tenantId}`, {
       method: "DELETE",
       headers: { Cookie: `auth_token=${token}` },
     });
-    t.equal(res.status, 200);
+    t.equal(res.status, 403);
   });
 
-  await t.test("admin can PUT tenant", async (t) => {
-    const { token, tenantId } = await createOrgMemberWithTenant("admin");
+  await t.test(
+    "org admin cannot PUT tenant (platform admin-only)",
+    async (t) => {
+      const { token, tenantId } = await createOrgMemberWithTenant("admin");
 
-    const res = await app.request(`/api/tenants/${tenantId}`, {
-      method: "PUT",
-      headers: {
-        Cookie: `auth_token=${token}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ backend_url: "http://updated.com" }),
-    });
-    t.equal(res.status, 200);
-  });
+      const res = await app.request(`/api/tenants/${tenantId}`, {
+        method: "PUT",
+        headers: {
+          Cookie: `auth_token=${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ backend_url: "http://updated.com" }),
+      });
+      t.equal(res.status, 403);
+    },
+  );
 
-  await t.test("admin can DELETE tenant", async (t) => {
-    const { token, tenantId } = await createOrgMemberWithTenant("admin");
+  await t.test(
+    "org admin cannot DELETE tenant (platform admin-only)",
+    async (t) => {
+      const { token, tenantId } = await createOrgMemberWithTenant("admin");
 
-    const res = await app.request(`/api/tenants/${tenantId}`, {
-      method: "DELETE",
-      headers: { Cookie: `auth_token=${token}` },
-    });
-    t.equal(res.status, 200);
-  });
+      const res = await app.request(`/api/tenants/${tenantId}`, {
+        method: "DELETE",
+        headers: { Cookie: `auth_token=${token}` },
+      });
+      t.equal(res.status, 403);
+    },
+  );
 
-  await t.test("owner can PUT tenant", async (t) => {
+  await t.test("owner cannot PUT tenant (platform admin-only)", async (t) => {
     const { token, tenantId } = await createOrgMemberWithTenant("owner");
 
     const res = await app.request(`/api/tenants/${tenantId}`, {
@@ -1652,18 +1658,21 @@ await t.test("org role-based access control", async (t) => {
       },
       body: JSON.stringify({ backend_url: "http://owner-updated.com" }),
     });
-    t.equal(res.status, 200);
+    t.equal(res.status, 403);
   });
 
-  await t.test("owner can DELETE tenant", async (t) => {
-    const { token, tenantId } = await createOrgMemberWithTenant("owner");
+  await t.test(
+    "owner cannot DELETE tenant (platform admin-only)",
+    async (t) => {
+      const { token, tenantId } = await createOrgMemberWithTenant("owner");
 
-    const res = await app.request(`/api/tenants/${tenantId}`, {
-      method: "DELETE",
-      headers: { Cookie: `auth_token=${token}` },
-    });
-    t.equal(res.status, 200);
-  });
+      const res = await app.request(`/api/tenants/${tenantId}`, {
+        method: "DELETE",
+        headers: { Cookie: `auth_token=${token}` },
+      });
+      t.equal(res.status, 403);
+    },
+  );
 
   await t.test("member can GET nodes (read-only)", async (t) => {
     const { token, tenantId } = await createOrgMemberWithTenant("member");

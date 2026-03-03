@@ -112,7 +112,7 @@ export function OrgEndpointsTable({
     setIsDeleting(true);
     try {
       await api.delete(
-        `/api/tenants/${endpointToDelete.tenant_id}/endpoints/${endpointToDelete.id}`,
+        `/api/admin/tenants/${endpointToDelete.tenant_id}/endpoints/${endpointToDelete.id}`,
       );
       toast({
         title: "Endpoint deleted",

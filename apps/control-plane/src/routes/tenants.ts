@@ -105,8 +105,11 @@ tenantsRoutes.put(
   arktypeValidator("json", UpdateTenantSchema),
   async (c) => {
     const memberRole = c.get("memberRole");
-    if (memberRole && !["owner", "admin", "member"].includes(memberRole)) {
-      return c.json({ error: "Insufficient permissions" }, 403);
+    if (memberRole !== null) {
+      return c.json(
+        { error: "Use organization routes to manage tenants" },
+        403,
+      );
     }
 
     const id = parseInt(c.req.param("id"));
@@ -191,8 +194,8 @@ tenantsRoutes.put(
 
 tenantsRoutes.delete("/:id", async (c) => {
   const memberRole = c.get("memberRole");
-  if (memberRole && !["owner", "admin", "member"].includes(memberRole)) {
-    return c.json({ error: "Insufficient permissions" }, 403);
+  if (memberRole !== null) {
+    return c.json({ error: "Use organization routes to manage tenants" }, 403);
   }
 
   const id = parseInt(c.req.param("id"));
