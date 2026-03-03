@@ -38,6 +38,51 @@ async function createNonAdminUser() {
   return signToken({ userId: user.id, email: user.email, isAdmin: false });
 }
 
+async function createOrgMemberWithTenant(role: string) {
+  const org = await db
+    .insertInto("organizations")
+    .values({ name: "test-org", slug: "test-org" })
+    .returning("id")
+    .executeTakeFirstOrThrow();
+
+  const user = await db
+    .insertInto("users")
+    .values({
+      email: `${role}@example.com`,
+      password_hash: "hash",
+      is_admin: false,
+    })
+    .returning(["id", "email"])
+    .executeTakeFirstOrThrow();
+
+  await db
+    .insertInto("user_organizations")
+    .values({ user_id: user.id, organization_id: org.id, role })
+    .execute();
+
+  const tenant = await db
+    .insertInto("tenants")
+    .values({
+      name: "org-tenant",
+      backend_url: "http://backend.com",
+      default_price_usdc: 0.01,
+      default_scheme: "exact",
+      organization_id: org.id,
+      org_slug: "test-org",
+      status: "active",
+    })
+    .returning("id")
+    .executeTakeFirstOrThrow();
+
+  const token = signToken({
+    userId: user.id,
+    email: user.email,
+    isAdmin: false,
+  });
+
+  return { token, tenantId: tenant.id };
+}
+
 t.beforeEach(async () => {
   await clearTestData();
 });
@@ -1536,4 +1581,147 @@ await t.test("DELETE /api/tenants/:id/nodes/:nodeId", async (t) => {
       t.equal(first?.is_primary, false);
     },
   );
+});
+
+await t.test("org role-based access control", async (t) => {
+  await t.test("member can GET tenant (read-only)", async (t) => {
+    const { token, tenantId } = await createOrgMemberWithTenant("member");
+
+    const res = await app.request(`/api/tenants/${tenantId}`, {
+      headers: { Cookie: `auth_token=${token}` },
+    });
+    t.equal(res.status, 200);
+  });
+
+  await t.test("member can PUT tenant", async (t) => {
+    const { token, tenantId } = await createOrgMemberWithTenant("member");
+
+    const res = await app.request(`/api/tenants/${tenantId}`, {
+      method: "PUT",
+      headers: {
+        Cookie: `auth_token=${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ backend_url: "http://member-updated.com" }),
+    });
+    t.equal(res.status, 200);
+  });
+
+  await t.test("member can DELETE tenant", async (t) => {
+    const { token, tenantId } = await createOrgMemberWithTenant("member");
+
+    const res = await app.request(`/api/tenants/${tenantId}`, {
+      method: "DELETE",
+      headers: { Cookie: `auth_token=${token}` },
+    });
+    t.equal(res.status, 200);
+  });
+
+  await t.test("admin can PUT tenant", async (t) => {
+    const { token, tenantId } = await createOrgMemberWithTenant("admin");
+
+    const res = await app.request(`/api/tenants/${tenantId}`, {
+      method: "PUT",
+      headers: {
+        Cookie: `auth_token=${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ backend_url: "http://updated.com" }),
+    });
+    t.equal(res.status, 200);
+  });
+
+  await t.test("admin can DELETE tenant", async (t) => {
+    const { token, tenantId } = await createOrgMemberWithTenant("admin");
+
+    const res = await app.request(`/api/tenants/${tenantId}`, {
+      method: "DELETE",
+      headers: { Cookie: `auth_token=${token}` },
+    });
+    t.equal(res.status, 200);
+  });
+
+  await t.test("owner can PUT tenant", async (t) => {
+    const { token, tenantId } = await createOrgMemberWithTenant("owner");
+
+    const res = await app.request(`/api/tenants/${tenantId}`, {
+      method: "PUT",
+      headers: {
+        Cookie: `auth_token=${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ backend_url: "http://owner-updated.com" }),
+    });
+    t.equal(res.status, 200);
+  });
+
+  await t.test("owner can DELETE tenant", async (t) => {
+    const { token, tenantId } = await createOrgMemberWithTenant("owner");
+
+    const res = await app.request(`/api/tenants/${tenantId}`, {
+      method: "DELETE",
+      headers: { Cookie: `auth_token=${token}` },
+    });
+    t.equal(res.status, 200);
+  });
+
+  await t.test("member can GET nodes (read-only)", async (t) => {
+    const { token, tenantId } = await createOrgMemberWithTenant("member");
+
+    const res = await app.request(`/api/tenants/${tenantId}/nodes`, {
+      headers: { Cookie: `auth_token=${token}` },
+    });
+    t.equal(res.status, 200);
+  });
+
+  await t.test("member can POST nodes", async (t) => {
+    const { token, tenantId } = await createOrgMemberWithTenant("member");
+
+    const node = await db
+      .insertInto("nodes")
+      .values({
+        name: "member-node",
+        internal_ip: "10.0.0.1",
+        public_ip: "1.2.3.4",
+        status: "active",
+      })
+      .returning("id")
+      .executeTakeFirstOrThrow();
+
+    const res = await app.request(`/api/tenants/${tenantId}/nodes`, {
+      method: "POST",
+      headers: {
+        Cookie: `auth_token=${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ node_id: node.id }),
+    });
+    t.equal(res.status, 201);
+  });
+
+  await t.test("member can DELETE nodes", async (t) => {
+    const { token, tenantId } = await createOrgMemberWithTenant("member");
+
+    const node = await db
+      .insertInto("nodes")
+      .values({
+        name: "member-del-node",
+        internal_ip: "10.0.0.2",
+        public_ip: "2.3.4.5",
+        status: "active",
+      })
+      .returning("id")
+      .executeTakeFirstOrThrow();
+
+    await db
+      .insertInto("tenant_nodes")
+      .values({ tenant_id: tenantId, node_id: node.id, is_primary: false })
+      .execute();
+
+    const res = await app.request(`/api/tenants/${tenantId}/nodes/${node.id}`, {
+      method: "DELETE",
+      headers: { Cookie: `auth_token=${token}` },
+    });
+    t.equal(res.status, 200);
+  });
 });

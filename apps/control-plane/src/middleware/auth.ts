@@ -24,6 +24,7 @@ export interface AuthUser {
 declare module "hono" {
   interface ContextVariableMap {
     user: AuthUser;
+    memberRole: string | null;
   }
 }
 
@@ -140,6 +141,7 @@ export async function requireTenantAccess(c: Context, next: Next) {
 
   if (user.is_admin) {
     c.set("user", user);
+    c.set("memberRole", null);
     return next();
   }
 
@@ -170,5 +172,6 @@ export async function requireTenantAccess(c: Context, next: Next) {
   }
 
   c.set("user", user);
+  c.set("memberRole", membership.role);
   await next();
 }

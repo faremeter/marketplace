@@ -104,6 +104,11 @@ tenantsRoutes.put(
   "/:id",
   arktypeValidator("json", UpdateTenantSchema),
   async (c) => {
+    const memberRole = c.get("memberRole");
+    if (memberRole && !["owner", "admin", "member"].includes(memberRole)) {
+      return c.json({ error: "Insufficient permissions" }, 403);
+    }
+
     const id = parseInt(c.req.param("id"));
     const body = c.req.valid("json");
 
@@ -185,6 +190,11 @@ tenantsRoutes.put(
 );
 
 tenantsRoutes.delete("/:id", async (c) => {
+  const memberRole = c.get("memberRole");
+  if (memberRole && !["owner", "admin", "member"].includes(memberRole)) {
+    return c.json({ error: "Insufficient permissions" }, 403);
+  }
+
   const id = parseInt(c.req.param("id"));
 
   const tenant = await db
@@ -270,6 +280,12 @@ tenantsRoutes.post(
   "/:id/nodes",
   arktypeValidator("json", AssignNodeSchema),
   async (c) => {
+    // TODO: tighten to specific roles once role-based permissions are defined
+    const memberRole = c.get("memberRole");
+    if (memberRole && !["owner", "admin", "member"].includes(memberRole)) {
+      return c.json({ error: "Insufficient permissions" }, 403);
+    }
+
     const tenantId = parseInt(c.req.param("id"));
     const body = c.req.valid("json");
     const nodeId = body.node_id;
@@ -365,6 +381,11 @@ tenantsRoutes.post(
 );
 
 tenantsRoutes.delete("/:id/nodes/:nodeId", async (c) => {
+  const memberRole = c.get("memberRole");
+  if (memberRole && !["owner", "admin", "member"].includes(memberRole)) {
+    return c.json({ error: "Insufficient permissions" }, 403);
+  }
+
   const tenantId = parseInt(c.req.param("id"));
   const nodeId = parseInt(c.req.param("nodeId"));
 
