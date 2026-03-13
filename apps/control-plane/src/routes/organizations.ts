@@ -44,6 +44,7 @@ import {
   OrgCreateTenantSchema,
   OrgUpdateTenantSchema,
   AddMemberSchema,
+  UpdateMemberSchema,
   CreateOrganizationSchema,
   UpdateOrganizationSchema,
 } from "../lib/schemas.js";
@@ -426,6 +427,69 @@ organizationsRoutes.delete(
       .execute();
 
     return c.json({ deleted: true });
+  },
+);
+
+organizationsRoutes.patch(
+  "/:id/members/:userId",
+  modifyResourceLimiter,
+  arktypeValidator("json", UpdateMemberSchema),
+  async (c) => {
+    const user = c.get("user");
+    const orgId = parseInt(c.req.param("id"));
+    const targetUserId = parseInt(c.req.param("userId"));
+    const body = c.req.valid("json");
+
+    const membership = await db
+      .selectFrom("user_organizations")
+      .select("role")
+      .where("user_id", "=", user.id)
+      .where("organization_id", "=", orgId)
+      .executeTakeFirst();
+
+    if (!membership && !user.is_admin) {
+      return c.json({ error: "Organization not found" }, 404);
+    }
+
+    if (
+      membership &&
+      !["owner", "admin"].includes(membership.role) &&
+      !user.is_admin
+    ) {
+      return c.json({ error: "Insufficient permissions" }, 403);
+    }
+
+    const target = await db
+      .selectFrom("user_organizations")
+      .select(["id", "role"])
+      .where("user_id", "=", targetUserId)
+      .where("organization_id", "=", orgId)
+      .executeTakeFirst();
+
+    if (!target) {
+      return c.json({ error: "Member not found" }, 404);
+    }
+
+    const isOwner = membership?.role === "owner";
+    const isPlatformAdmin = user.is_admin;
+
+    if (!isOwner && !isPlatformAdmin) {
+      if (body.role === "owner") {
+        return c.json({ error: "Only owners can assign the owner role" }, 403);
+      }
+      if (target.role === "owner") {
+        return c.json({ error: "Only owners can change an owner's role" }, 403);
+      }
+    }
+
+    await db
+      .updateTable("user_organizations")
+      .set({ role: body.role })
+      .where("user_id", "=", targetUserId)
+      .where("organization_id", "=", orgId)
+      .execute();
+
+    return c.json({ success: true });
   },
 );
 

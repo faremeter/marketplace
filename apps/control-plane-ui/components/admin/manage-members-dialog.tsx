@@ -3,11 +3,14 @@
 import { useState, useMemo, useRef, useEffect } from "react";
 import useSWR from "swr";
 import * as Dialog from "@radix-ui/react-dialog";
+import * as Select from "@radix-ui/react-select";
 import {
   Cross2Icon,
   TrashIcon,
   PlusIcon,
   EnvelopeClosedIcon,
+  ChevronDownIcon,
+  CheckIcon,
 } from "@radix-ui/react-icons";
 import { api, ApiError } from "@/lib/api/client";
 import { useToast } from "@/components/ui/toast";
@@ -54,6 +57,7 @@ export function ManageMembersDialog({
   const [error, setError] = useState("");
   const [isAdding, setIsAdding] = useState(false);
   const [removingId, setRemovingId] = useState<number | null>(null);
+  const [updatingRoleId, setUpdatingRoleId] = useState<number | null>(null);
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
   const [selectedEmail, setSelectedEmail] = useState<string | null>(null);
@@ -209,6 +213,30 @@ export function ManageMembersDialog({
     }
   };
 
+  const handleRoleChange = async (member: Member, newRole: string) => {
+    if (newRole === member.role) return;
+    setUpdatingRoleId(member.id);
+    try {
+      await api.patch(`/api/organizations/${orgId}/members/${member.id}`, {
+        role: newRole,
+      });
+      toast({
+        title: "Role updated",
+        description: `${member.email} is now ${newRole}.`,
+        variant: "success",
+      });
+      mutateMembers();
+    } catch (err) {
+      toast({
+        title: "Failed to update role",
+        description: err instanceof ApiError ? err.message : "Unknown error",
+        variant: "error",
+      });
+    } finally {
+      setUpdatingRoleId(null);
+    }
+  };
+
   const roleBadgeClass = (r: string) => {
     switch (r) {
       case "owner":
@@ -263,11 +291,40 @@ export function ManageMembersDialog({
                         {m.email}
                       </td>
                       <td className="px-3 py-2">
-                        <span
-                          className={`rounded-full border px-2 py-0.5 text-xs ${roleBadgeClass(m.role)}`}
+                        <Select.Root
+                          value={m.role}
+                          onValueChange={(v) => handleRoleChange(m, v)}
+                          disabled={updatingRoleId === m.id}
                         >
-                          {m.role}
-                        </span>
+                          <Select.Trigger
+                            className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs transition-colors focus:outline-none focus:ring-1 focus:ring-accent-8 disabled:opacity-50 ${roleBadgeClass(m.role)}`}
+                          >
+                            <Select.Value />
+                            <ChevronDownIcon className="h-3 w-3" />
+                          </Select.Trigger>
+                          <Select.Portal>
+                            <Select.Content
+                              className="overflow-hidden rounded-md border border-gray-6 bg-gray-2 shadow-lg"
+                              position="popper"
+                              sideOffset={4}
+                            >
+                              <Select.Viewport className="p-1">
+                                {["member", "admin", "owner"].map((r) => (
+                                  <Select.Item
+                                    key={r}
+                                    value={r}
+                                    className="relative flex cursor-pointer select-none items-center rounded px-7 py-1.5 text-xs text-gray-12 outline-none hover:bg-gray-4 data-[highlighted]:bg-gray-4"
+                                  >
+                                    <Select.ItemIndicator className="absolute left-1.5 inline-flex items-center">
+                                      <CheckIcon className="h-3 w-3" />
+                                    </Select.ItemIndicator>
+                                    <Select.ItemText>{r}</Select.ItemText>
+                                  </Select.Item>
+                                ))}
+                              </Select.Viewport>
+                            </Select.Content>
+                          </Select.Portal>
+                        </Select.Root>
                       </td>
                       <td className="px-3 py-2 text-right">
                         <button
