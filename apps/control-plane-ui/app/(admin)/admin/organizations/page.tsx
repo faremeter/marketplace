@@ -16,6 +16,7 @@ import {
 import { ImportOrgsDialog } from "@/components/admin/import-orgs-dialog";
 import { CreateOrgDialog } from "@/components/admin/create-org-dialog";
 import { InlineOnboardingEdit } from "@/components/admin/inline-onboarding-edit";
+import { ManageMembersDialog } from "@/components/admin/manage-members-dialog";
 
 const PAGE_SIZE = 10;
 
@@ -47,6 +48,10 @@ export default function AdminOrganizationsPage() {
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [sortColumn, setSortColumn] = useState<SortColumn>("id");
   const [sortDirection, setSortDirection] = useState<SortDirection>("asc");
+  const [manageMembersOrg, setManageMembersOrg] = useState<{
+    id: number;
+    name: string;
+  } | null>(null);
 
   const {
     data: organizations,
@@ -172,6 +177,18 @@ export default function AdminOrganizationsPage() {
         onSuccess={() => mutate()}
       />
 
+      {manageMembersOrg && (
+        <ManageMembersDialog
+          open={true}
+          onOpenChange={(open) => {
+            if (!open) setManageMembersOrg(null);
+          }}
+          orgId={manageMembersOrg.id}
+          orgName={manageMembersOrg.name}
+          onSuccess={() => mutate()}
+        />
+      )}
+
       {isLoading ? (
         <div className="flex items-center justify-center py-12">
           <div className="h-8 w-8 animate-spin rounded-full border-2 border-gray-6 border-t-accent-9" />
@@ -245,6 +262,9 @@ export default function AdminOrganizationsPage() {
                       <SortIcon column="created" />
                     </button>
                   </th>
+                  <th className="px-4 py-3 text-right text-sm font-medium text-gray-11">
+                    Actions
+                  </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-6 bg-gray-2">
@@ -282,6 +302,16 @@ export default function AdminOrganizationsPage() {
                     </td>
                     <td className="px-4 py-3 text-sm text-gray-11">
                       {new Date(org.created_at).toLocaleDateString()}
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      <button
+                        onClick={() =>
+                          setManageMembersOrg({ id: org.id, name: org.name })
+                        }
+                        className="rounded border border-gray-6 px-2 py-1 text-xs text-gray-11 hover:bg-gray-3 hover:text-gray-12"
+                      >
+                        Members
+                      </button>
                     </td>
                   </tr>
                 ))}
