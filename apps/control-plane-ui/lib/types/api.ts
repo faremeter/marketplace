@@ -17,7 +17,7 @@ export type Scheme = (typeof SCHEMES)[number];
 
 export const SCHEME_OPTIONS = [
   ...SCHEMES.map((s) => ({ value: s, label: s, disabled: false })),
-  { value: "dynamic", label: "dynamic", disabled: true },
+  { value: "flex", label: "FLEX", disabled: true },
 ];
 
 export const TenantSchema = type({
