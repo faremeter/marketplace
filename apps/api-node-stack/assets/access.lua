@@ -450,10 +450,10 @@ if settle_res.status ~= 200 or not settle_response.success then
     return ngx.exit(402)
 end
 
-ngx.log(ngx.INFO, "Payment settled successfully: ", settle_response.txHash or "unknown")
+ngx.log(ngx.INFO, "Payment settled successfully: ", settle_response.transaction or "unknown")
 ngx.log(ngx.INFO, "Tenant: ", proxy_name, " Request: ", ngx.req.get_method(), " ", ngx.var.uri)
 
-local tx_hash = settle_response.txHash
+local tx_hash = settle_response.transaction or settle_response.txHash
 if tx_hash then
     local tx_ngx_request_id = ngx.var.request_id
     local tx_network = matching_req.network
