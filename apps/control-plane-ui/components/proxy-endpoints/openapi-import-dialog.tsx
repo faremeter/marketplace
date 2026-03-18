@@ -69,8 +69,16 @@ export function OpenApiImportDialog({
 
   const handleFileSelect = useCallback(
     (file: File) => {
-      if (file.type !== "application/json" && !file.name.endsWith(".json")) {
-        setParseErrors(["Please select a JSON file"]);
+      const validTypes = [
+        "application/json",
+        "application/x-yaml",
+        "text/yaml",
+      ];
+      const validExts = [".json", ".yaml", ".yml"];
+      const hasValidType = validTypes.includes(file.type);
+      const hasValidExt = validExts.some((ext) => file.name.endsWith(ext));
+      if (!hasValidType && !hasValidExt) {
+        setParseErrors(["Please select a JSON or YAML file"]);
         return;
       }
 
@@ -198,7 +206,7 @@ export function OpenApiImportDialog({
                       : "text-gray-11 hover:bg-gray-3 hover:text-gray-12"
                   }`}
                 >
-                  Paste JSON
+                  Paste Spec
                 </button>
               </div>
 
@@ -218,14 +226,14 @@ export function OpenApiImportDialog({
                 >
                   <UploadIcon className="mb-2 h-8 w-8 text-gray-11" />
                   <p className="text-sm text-gray-11">
-                    Drag and drop your OpenAPI JSON file here
+                    Drag and drop your OpenAPI spec file (JSON or YAML)
                   </p>
                   <p className="mt-1 text-xs text-gray-11">or</p>
                   <label className="mt-2 cursor-pointer rounded-md bg-gray-4 px-3 py-1.5 text-sm font-medium text-gray-12 hover:bg-gray-5">
                     Browse Files
                     <input
                       type="file"
-                      accept=".json,application/json"
+                      accept=".json,.yaml,.yml,application/json,application/x-yaml"
                       onChange={(e) => {
                         const file = e.target.files?.[0];
                         if (file) handleFileSelect(file);
@@ -242,7 +250,7 @@ export function OpenApiImportDialog({
                       setJsonText(e.target.value);
                       handleParse(e.target.value);
                     }}
-                    placeholder='{"openapi": "3.0.3", "info": {...}, "paths": {...}}'
+                    placeholder="Paste OpenAPI spec (JSON or YAML)"
                     className="h-48 w-full rounded-md border border-gray-6 bg-gray-3 px-3 py-2 font-mono text-sm text-gray-12 placeholder-gray-9 focus:border-accent-8 focus:outline-none focus:ring-1 focus:ring-accent-8"
                   />
                 </div>
