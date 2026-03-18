@@ -1126,7 +1126,7 @@ await t.test("x-402 export extensions", async (t) => {
 
       await db
         .updateTable("endpoints")
-        .set({ price_usdc: 500, scheme: "per_request" })
+        .set({ price_usdc: 500, scheme: "exact" })
         .where("tenant_id", "=", tenant.id)
         .where("path", "=", "/api/users")
         .execute();
@@ -1146,7 +1146,7 @@ await t.test("x-402 export extensions", async (t) => {
       );
       t.equal(
         data.spec.paths["/api/users"]["x-corbits-pricing"].scheme,
-        "per_request",
+        "exact",
       );
       t.notOk(
         data.spec.paths["/api/users"]["x-corbits-pricing"].endpoint_id,
@@ -1246,7 +1246,7 @@ await t.test("x-402 export extensions", async (t) => {
           priority: 1,
           is_active: true,
           price_usdc: 250,
-          scheme: "per_byte",
+          scheme: "exact",
           tags: ["internal"],
         })
         .execute();
@@ -1257,7 +1257,7 @@ await t.test("x-402 export extensions", async (t) => {
       t.ok(orphanPath, "orphan path should exist");
       t.equal(orphanPath["x-corbits-orphan"], true);
       t.equal(orphanPath["x-corbits-pricing"].price_usdc, 250);
-      t.equal(orphanPath["x-corbits-pricing"].scheme, "per_byte");
+      t.equal(orphanPath["x-corbits-pricing"].scheme, "exact");
       t.same(orphanPath["x-corbits-tags"], ["internal"]);
     },
   );
@@ -1272,7 +1272,7 @@ await t.test("x-402 import extensions", async (t) => {
       const spec = makeSpec({
         "/api/users": {
           get: { summary: "List users" },
-          "x-corbits-pricing": { price_usdc: 500, scheme: "per_request" },
+          "x-corbits-pricing": { price_usdc: 500, scheme: "exact" },
         },
       });
 
@@ -1287,7 +1287,7 @@ await t.test("x-402 import extensions", async (t) => {
         .executeTakeFirstOrThrow();
 
       t.equal(endpoint.price_usdc, 500);
-      t.equal(endpoint.scheme, "per_request");
+      t.equal(endpoint.scheme, "exact");
     },
   );
 
@@ -1447,7 +1447,7 @@ await t.test("x-402 round-trip and deduplication", async (t) => {
         .updateTable("endpoints")
         .set({
           price_usdc: 750,
-          scheme: "per_request",
+          scheme: "exact",
           tags: ["premium"],
         })
         .where("tenant_id", "=", tenant.id)
@@ -1494,7 +1494,7 @@ await t.test("x-402 round-trip and deduplication", async (t) => {
 
       t.ok(usersEp);
       t.equal(usersEp.price_usdc, 750);
-      t.equal(usersEp.scheme, "per_request");
+      t.equal(usersEp.scheme, "exact");
       t.same(usersEp.tags, ["premium"]);
 
       t.ok(postsEp);
@@ -1530,7 +1530,7 @@ await t.test("x-402 round-trip and deduplication", async (t) => {
       const specWithExtensions = makeSpec({
         "/api/users": {
           get: { summary: "List users" },
-          "x-corbits-pricing": { price_usdc: 1000, scheme: "per_byte" },
+          "x-corbits-pricing": { price_usdc: 1000, scheme: "exact" },
           "x-corbits-tags": ["updated"],
         },
         "/api/posts": {
@@ -1571,7 +1571,7 @@ await t.test("x-402 round-trip and deduplication", async (t) => {
         .executeTakeFirstOrThrow();
 
       t.equal(usersEp.price_usdc, 1000);
-      t.equal(usersEp.scheme, "per_byte");
+      t.equal(usersEp.scheme, "exact");
       t.same(usersEp.tags, ["updated"]);
     },
   );
@@ -1654,7 +1654,7 @@ await t.test("x-402 round-trip and deduplication", async (t) => {
           priority: 100,
           is_active: true,
           price_usdc: 300,
-          scheme: "per_request",
+          scheme: "exact",
           tags: ["orphan-tag"],
         })
         .execute();
@@ -1712,7 +1712,7 @@ await t.test("x-402 import edge cases", async (t) => {
       const specWithExt = makeSpec({
         "/api/users": {
           get: {},
-          "x-corbits-pricing": { price_usdc: 999, scheme: "per_byte" },
+          "x-corbits-pricing": { price_usdc: 999, scheme: "exact" },
           "x-corbits-tags": ["premium"],
         },
       });
@@ -1726,7 +1726,7 @@ await t.test("x-402 import edge cases", async (t) => {
         .where("path", "=", "/api/users")
         .executeTakeFirstOrThrow();
       t.equal(endpoint.price_usdc, 999);
-      t.equal(endpoint.scheme, "per_byte");
+      t.equal(endpoint.scheme, "exact");
       t.same(endpoint.tags, ["premium"]);
 
       // Re-import same paths WITHOUT extensions
@@ -1747,7 +1747,7 @@ await t.test("x-402 import edge cases", async (t) => {
         .where("path", "=", "/api/users")
         .executeTakeFirstOrThrow();
       t.equal(endpoint.price_usdc, 999, "price should be preserved");
-      t.equal(endpoint.scheme, "per_byte", "scheme should be preserved");
+      t.equal(endpoint.scheme, "exact", "scheme should be preserved");
       t.same(endpoint.tags, ["premium"], "tags should be preserved");
     },
   );

@@ -187,7 +187,7 @@ await t.test("GET /api/v1/proxies", async (t) => {
       org_slug: "test-org",
       backend_url: "https://backend.example.com",
       default_price_usdc: 0.05,
-      default_scheme: "per_byte",
+      default_scheme: "exact",
     });
 
     const res = await app.request("/api/v1/proxies");
@@ -210,7 +210,7 @@ await t.test("GET /api/v1/proxies", async (t) => {
     t.equal(proxy.org_slug, "test-org");
     t.equal(proxy.url, "https://test-api.test-org.api.corbits.dev");
     t.equal(proxy.default_price_usdc, 0.05);
-    t.equal(proxy.default_scheme, "per_byte");
+    t.equal(proxy.default_scheme, "exact");
   });
 
   await t.test("returns url without org_slug", async (t) => {
@@ -535,7 +535,7 @@ await t.test("GET /api/v1/proxies/:id/endpoints/:endpointId", async (t) => {
       path_pattern: "/v1/users",
       description: "List users",
       price_usdc: 0.02,
-      scheme: "per_request",
+      scheme: "exact",
       priority: 5,
       tags: ["users", "read"],
     });
@@ -560,7 +560,7 @@ await t.test("GET /api/v1/proxies/:id/endpoints/:endpointId", async (t) => {
     t.equal(data.data.path_pattern, "/v1/users");
     t.equal(data.data.description, "List users");
     t.equal(data.data.price_usdc, 0.02);
-    t.equal(data.data.scheme, "per_request");
+    t.equal(data.data.scheme, "exact");
     t.equal(data.data.priority, 5);
     t.same(data.data.tags, ["users", "read"]);
     t.ok(data.data.created_at);

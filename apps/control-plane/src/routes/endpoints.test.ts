@@ -411,7 +411,7 @@ await t.test("POST /api/tenants/:tenantId/endpoints", async (t) => {
       body: JSON.stringify({
         path: "/premium/endpoint",
         price_usdc: 1.5,
-        scheme: "per_request",
+        scheme: "exact",
         description: "Premium API endpoint",
         priority: 10,
       }),
@@ -421,7 +421,7 @@ await t.test("POST /api/tenants/:tenantId/endpoints", async (t) => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const data = (await res.json()) as any;
     t.equal(data.price_usdc, 1.5);
-    t.equal(data.scheme, "per_request");
+    t.equal(data.scheme, "exact");
     t.equal(data.description, "Premium API endpoint");
     t.equal(data.priority, 10);
   });
@@ -834,14 +834,14 @@ await t.test("PUT /api/tenants/:tenantId/endpoints/:id", async (t) => {
           Cookie: `auth_token=${user.token}`,
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ scheme: "per_request" }),
+        body: JSON.stringify({ scheme: "exact" }),
       },
     );
 
     t.equal(res.status, 200);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const data = (await res.json()) as any;
-    t.equal(data.scheme, "per_request");
+    t.equal(data.scheme, "exact");
   });
 
   await t.test("updates tags", async (t) => {
@@ -1475,7 +1475,7 @@ await t.test(
           path_pattern: "/schemed-endpoint",
           priority: 100,
           is_active: true,
-          scheme: "per_request",
+          scheme: "exact",
         })
         .returning(["id"])
         .executeTakeFirstOrThrow();

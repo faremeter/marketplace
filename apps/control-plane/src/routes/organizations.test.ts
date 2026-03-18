@@ -2252,7 +2252,7 @@ await t.test("POST /api/organizations/:id/tenants", async (t) => {
         backend_url: "http://backend.com",
         wallet_id: wallet.id,
         default_price_usdc: 0.05,
-        default_scheme: "per_request",
+        default_scheme: "exact",
         upstream_auth_header: "X-API-Key",
         upstream_auth_value: "secret123",
       }),
@@ -2262,7 +2262,7 @@ await t.test("POST /api/organizations/:id/tenants", async (t) => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const data = (await res.json()) as any;
     t.equal(data.default_price_usdc, 0.05);
-    t.equal(data.default_scheme, "per_request");
+    t.equal(data.default_scheme, "exact");
     t.equal(data.upstream_auth_header, "X-API-Key");
     t.equal(data.upstream_auth_value, "secret123");
   });

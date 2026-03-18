@@ -217,7 +217,7 @@ await t.test("POST /api/tenants", async (t) => {
         name: "full-tenant",
         backend_url: "http://full-backend.com",
         default_price_usdc: 0.1,
-        default_scheme: "per_request",
+        default_scheme: "exact",
         upstream_auth_header: "X-API-Key",
         upstream_auth_value: "secret123",
       }),
@@ -227,7 +227,7 @@ await t.test("POST /api/tenants", async (t) => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const data = (await res.json()) as any;
     t.equal(data.default_price_usdc, 0.1);
-    t.equal(data.default_scheme, "per_request");
+    t.equal(data.default_scheme, "exact");
     t.equal(data.upstream_auth_header, "X-API-Key");
   });
 

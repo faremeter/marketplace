@@ -118,7 +118,7 @@ export async function createTestTenant(
       wallet_id: walletId,
       status: overrides.status ?? "active",
       default_price_usdc: overrides.default_price_usdc ?? 0.01,
-      default_scheme: overrides.default_scheme ?? "per_request",
+      default_scheme: overrides.default_scheme ?? "exact",
     })
     .returning("id")
     .executeTakeFirstOrThrow();

@@ -106,7 +106,7 @@ await t.test("CreateEndpointSchema", async (t) => {
     const result = CreateEndpointSchema({
       path: "/api/test",
       price_usdc: 10000, // $0.01 in micro-USDC
-      scheme: "per_request",
+      scheme: "exact",
       description: "Test endpoint",
       priority: 10,
     });
@@ -121,7 +121,7 @@ await t.test("CreateEndpointSchema", async (t) => {
   await t.test("rejects invalid scheme", async (t) => {
     const result = CreateEndpointSchema({
       path: "/api/test",
-      scheme: "invalid" as "per_request",
+      scheme: "invalid" as "exact",
     });
     t.equal(isError(result), true);
   });
@@ -207,7 +207,7 @@ await t.test("CreateTenantSchema", async (t) => {
       backend_url: "https://api.example.com",
       wallet_id: 1,
       default_price_usdc: 0.01,
-      default_scheme: "per_request",
+      default_scheme: "exact",
       upstream_auth_header: "Authorization",
       upstream_auth_value: "Bearer token",
       is_active: true,
@@ -228,7 +228,7 @@ await t.test("CreateTenantSchema", async (t) => {
     const result = CreateTenantSchema({
       name: "my-tenant",
       backend_url: "https://api.example.com",
-      default_scheme: "invalid" as "per_request",
+      default_scheme: "invalid" as "exact",
     });
     t.equal(isError(result), true);
   });
