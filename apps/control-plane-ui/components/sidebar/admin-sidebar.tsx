@@ -14,6 +14,7 @@ import {
   ShadowOuterIcon,
   EnvelopeClosedIcon,
   PieChartIcon,
+  ActivityLogIcon,
 } from "@radix-ui/react-icons";
 import { UserMenu } from "./user-menu";
 import { SidebarItem } from "./sidebar-item";
@@ -40,6 +41,11 @@ export function AdminSidebar() {
           href="/admin/analytics"
           icon={<PieChartIcon />}
           label="Analytics"
+        />
+        <SidebarItem
+          href="/admin/telemetry"
+          icon={<ActivityLogIcon />}
+          label="Telemetry"
         />
         <SidebarItem href="/admin/nodes" icon={<CubeIcon />} label="Nodes" />
         <SidebarItem

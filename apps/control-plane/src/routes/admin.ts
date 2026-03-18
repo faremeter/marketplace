@@ -71,6 +71,168 @@ adminRoutes.get("/analytics", async (c) => {
   return c.json(analytics);
 });
 
+adminRoutes.get("/telemetry", async (c) => {
+  const type = c.req.query("type") || "all";
+  if (!["all", "search", "view"].includes(type)) {
+    return c.json({ error: "type must be 'all', 'search', or 'view'" }, 400);
+  }
+  const from = c.req.query("from");
+  const to = c.req.query("to");
+  if (from && isNaN(Date.parse(from))) {
+    return c.json({ error: "Invalid 'from' date" }, 400);
+  }
+  if (to && isNaN(Date.parse(to))) {
+    return c.json({ error: "Invalid 'to' date" }, 400);
+  }
+  const limit = Math.min(
+    parseInt(c.req.query("limit") || "100", 10) || 100,
+    500,
+  );
+
+  try {
+    let query = db
+      .selectFrom("discovery_telemetry")
+      .selectAll()
+      .orderBy("bucket", "desc")
+      .limit(limit);
+
+    if (type !== "all") {
+      query = query.where("event_type", "=", type);
+    }
+    if (from) {
+      query = query.where("bucket", ">=", new Date(from));
+    }
+    if (to) {
+      query = query.where("bucket", "<=", new Date(to));
+    }
+
+    const rows = await query.execute();
+    return c.json(rows);
+  } catch (error) {
+    logger.error("Telemetry query error", { error });
+    return c.json({ error: "Failed to query telemetry" }, 500);
+  }
+});
+
+adminRoutes.get("/telemetry/top-searches", async (c) => {
+  const from = c.req.query("from");
+  const to = c.req.query("to");
+  if (from && isNaN(Date.parse(from))) {
+    return c.json({ error: "Invalid 'from' date" }, 400);
+  }
+  if (to && isNaN(Date.parse(to))) {
+    return c.json({ error: "Invalid 'to' date" }, 400);
+  }
+  const limit = Math.min(parseInt(c.req.query("limit") || "20", 10) || 20, 100);
+
+  try {
+    let query = db
+      .selectFrom("discovery_telemetry")
+      .select(["event_key", db.fn.sum<string>("count").as("total")])
+      .where("event_type", "=", "search")
+      .where("event_key", "is not", null)
+      .groupBy("event_key")
+      .orderBy("total", "desc")
+      .limit(limit);
+
+    if (from) {
+      query = query.where("bucket", ">=", new Date(from));
+    }
+    if (to) {
+      query = query.where("bucket", "<=", new Date(to));
+    }
+
+    const rows = await query.execute();
+    return c.json(rows.map((r) => ({ ...r, total: Number(r.total) })));
+  } catch (error) {
+    logger.error("Telemetry top-searches error", { error });
+    return c.json({ error: "Failed to query top searches" }, 500);
+  }
+});
+
+adminRoutes.get("/telemetry/top-proxies", async (c) => {
+  const from = c.req.query("from");
+  const to = c.req.query("to");
+  if (from && isNaN(Date.parse(from))) {
+    return c.json({ error: "Invalid 'from' date" }, 400);
+  }
+  if (to && isNaN(Date.parse(to))) {
+    return c.json({ error: "Invalid 'to' date" }, 400);
+  }
+  const limit = Math.min(parseInt(c.req.query("limit") || "20", 10) || 20, 100);
+
+  try {
+    let query = db
+      .selectFrom("discovery_telemetry as dt")
+      .innerJoin("tenants as t", "t.id", "dt.proxy_id")
+      .leftJoin("endpoints as e", "e.id", "dt.endpoint_id")
+      .select([
+        "dt.proxy_id",
+        "t.name as proxy_name",
+        "dt.endpoint_id",
+        "e.path_pattern",
+        db.fn.sum<string>("count").as("total"),
+      ])
+      .where("dt.event_type", "=", "view")
+      .groupBy(["dt.proxy_id", "t.name", "dt.endpoint_id", "e.path_pattern"])
+      .orderBy("total", "desc")
+      .limit(limit);
+
+    if (from) {
+      query = query.where("dt.bucket", ">=", new Date(from));
+    }
+    if (to) {
+      query = query.where("dt.bucket", "<=", new Date(to));
+    }
+
+    const rows = await query.execute();
+    return c.json(rows.map((r) => ({ ...r, total: Number(r.total) })));
+  } catch (error) {
+    logger.error("Telemetry top-proxies error", { error });
+    return c.json({ error: "Failed to query top proxies" }, 500);
+  }
+});
+
+adminRoutes.get("/telemetry/timeseries", async (c) => {
+  const from = c.req.query("from");
+  const to = c.req.query("to");
+  const type = c.req.query("type") || "all";
+  if (!["all", "search", "view"].includes(type)) {
+    return c.json({ error: "type must be 'all', 'search', or 'view'" }, 400);
+  }
+  if (from && isNaN(Date.parse(from))) {
+    return c.json({ error: "Invalid 'from' date" }, 400);
+  }
+  if (to && isNaN(Date.parse(to))) {
+    return c.json({ error: "Invalid 'to' date" }, 400);
+  }
+
+  try {
+    let query = db
+      .selectFrom("discovery_telemetry")
+      .select(["event_type", "bucket", db.fn.sum<string>("count").as("total")])
+      .groupBy(["event_type", "bucket"])
+      .orderBy("bucket", "asc")
+      .limit(1000);
+
+    if (type !== "all") {
+      query = query.where("event_type", "=", type);
+    }
+    if (from) {
+      query = query.where("bucket", ">=", new Date(from));
+    }
+    if (to) {
+      query = query.where("bucket", "<=", new Date(to));
+    }
+
+    const rows = await query.execute();
+    return c.json(rows.map((r) => ({ ...r, total: Number(r.total) })));
+  } catch (error) {
+    logger.error("Telemetry timeseries error", { error });
+    return c.json({ error: "Failed to query timeseries" }, 500);
+  }
+});
+
 adminRoutes.get("/users", async (c) => {
   const users = await db
     .selectFrom("users")

@@ -27,6 +27,7 @@ export interface Database {
   wallets: WalletsTable;
   waitlist: WaitlistTable;
   password_reset_tokens: PasswordResetTokensTable;
+  discovery_telemetry: DiscoveryTelemetryTable;
 }
 
 export interface OrganizationsTable {
@@ -181,4 +182,16 @@ export interface PasswordResetTokensTable {
   expires_at: DateColumn;
   used_at: NullableDateColumn;
   created_at: AutoDateColumn;
+}
+
+export interface DiscoveryTelemetryTable {
+  id: ColumnType<number, never, never>;
+  event_type: string;
+  event_key: string | null;
+  proxy_id: number | null;
+  endpoint_id: number | null;
+  bucket: DateColumn;
+  count: ColumnType<number, number | undefined, number>;
+  created_at: AutoDateColumn;
+  updated_at: OptionalDateColumn;
 }

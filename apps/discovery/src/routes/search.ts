@@ -167,6 +167,12 @@ searchRoutes.get("/", async (c) => {
       ...t,
       url: buildProxyUrl(t.name, t.org_slug),
     }));
+
+    (c as unknown as { set: (k: string, v: unknown) => void }).set(
+      "searchResultCounts",
+      { proxies: proxies.length, endpoints: endpoints.length },
+    );
+
     return c.json({ proxies, endpoints });
   } catch (error) {
     logger.error("Search error", { error });

@@ -53,6 +53,7 @@ export async function setupTestSchema(): Promise<void> {
 export async function clearTestData(): Promise<void> {
   if (!isTest) return;
 
+  await db.deleteFrom("discovery_telemetry").execute();
   await db.deleteFrom("endpoints").execute();
   await db.deleteFrom("tenants").execute();
   await db.deleteFrom("wallets").execute();
