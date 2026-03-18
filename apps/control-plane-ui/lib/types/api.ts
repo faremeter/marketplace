@@ -11,7 +11,7 @@ export const MAX_TAG_LENGTH = 50;
 // Add new schemes here - this is the single source of truth
 export const SCHEMES = ["exact"] as const;
 
-export const SchemeSchema = type("'exact'");
+export const SchemeSchema = type("'exact' | 'flex'");
 
 export type Scheme = (typeof SCHEMES)[number];
 
