@@ -1,17 +1,20 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import * as Select from "@radix-ui/react-select";
+import { useState, useMemo, useRef, useEffect } from "react";
+import * as Popover from "@radix-ui/react-popover";
 import * as Dialog from "@radix-ui/react-dialog";
 import {
   ChevronDownIcon,
   CheckIcon,
   Cross2Icon,
   ExclamationTriangleIcon,
+  MagnifyingGlassIcon,
 } from "@radix-ui/react-icons";
 import useSWR from "swr";
 import { api } from "@/lib/api/client";
 import { useToast } from "@/components/ui/toast";
+
+const PAGE_SIZE = 10;
 
 interface Organization {
   id: number;
@@ -56,12 +59,15 @@ export function InlineOrgSelect({
   const { toast } = useToast();
   const [isOpen, setIsOpen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [search, setSearch] = useState("");
+  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
   const [walletDialogOpen, setWalletDialogOpen] = useState(false);
   const [domainDialogOpen, setDomainDialogOpen] = useState(false);
   const [pendingOrgId, setPendingOrgId] = useState<number | null>(null);
   const [pendingOrgName, setPendingOrgName] = useState<string | null>(null);
   const [pendingOrgSlug, setPendingOrgSlug] = useState<string | null>(null);
   const [selectedWalletId, setSelectedWalletId] = useState<number | null>(null);
+  const searchRef = useRef<HTMLInputElement>(null);
 
   const { data: organizations } = useSWR(
     isOpen ? "/api/admin/organizations" : null,
@@ -93,6 +99,27 @@ export function InlineOrgSelect({
     }
   }, [walletDialogOpen, newOrgWallets]);
 
+  useEffect(() => {
+    if (isOpen) {
+      setSearch("");
+      setVisibleCount(PAGE_SIZE);
+      setTimeout(() => searchRef.current?.focus(), 0);
+    }
+  }, [isOpen]);
+
+  const filtered = useMemo(() => {
+    if (!organizations) return [];
+    if (!search.trim()) return organizations;
+    const q = search.toLowerCase();
+    return organizations.filter(
+      (o) =>
+        o.name.toLowerCase().includes(q) || o.slug.toLowerCase().includes(q),
+    );
+  }, [organizations, search]);
+
+  const visible = filtered.slice(0, visibleCount);
+  const hasMore = filtered.length > visibleCount;
+
   const needsWalletChange = (newOrgId: number | null): boolean => {
     if (!currentWalletId) return false;
     if (currentWalletOrgId === null) return false;
@@ -104,19 +131,17 @@ export function InlineOrgSelect({
     return currentOrgSlug !== newOrgSlug;
   };
 
-  const handleOrgChange = async (value: string) => {
-    const newOrgId = value === "none" ? null : parseInt(value);
-
-    if (newOrgId === currentOrgId) {
+  const handleOrgChange = async (orgId: number | null) => {
+    if (orgId === currentOrgId) {
       setIsOpen(false);
       return;
     }
 
-    const org = organizations?.find((o) => o.id === newOrgId);
+    const org = organizations?.find((o) => o.id === orgId);
     const newOrgSlug = org?.slug ?? null;
 
     if (needsDomainChange(newOrgSlug)) {
-      setPendingOrgId(newOrgId);
+      setPendingOrgId(orgId);
       setPendingOrgName(org?.name ?? null);
       setPendingOrgSlug(newOrgSlug);
       setIsOpen(false);
@@ -124,8 +149,8 @@ export function InlineOrgSelect({
       return;
     }
 
-    if (needsWalletChange(newOrgId)) {
-      setPendingOrgId(newOrgId);
+    if (needsWalletChange(orgId)) {
+      setPendingOrgId(orgId);
       setPendingOrgName(org?.name ?? null);
       setPendingOrgSlug(newOrgSlug);
       setIsOpen(false);
@@ -133,7 +158,7 @@ export function InlineOrgSelect({
       return;
     }
 
-    await saveOrgChange(newOrgId, undefined);
+    await saveOrgChange(orgId, undefined);
   };
 
   const saveOrgChange = async (
@@ -194,62 +219,87 @@ export function InlineOrgSelect({
 
   return (
     <>
-      <Select.Root
-        value={currentOrgId?.toString() ?? "none"}
-        onValueChange={handleOrgChange}
-        open={isOpen}
-        onOpenChange={setIsOpen}
-      >
-        <Select.Trigger
-          className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs transition-colors focus:outline-none focus:ring-1 focus:ring-accent-8 ${
-            isSaving || disabled
-              ? "opacity-50 border-gray-6 bg-gray-3 text-gray-11 cursor-not-allowed"
-              : currentOrgName
-                ? "border-accent-7 bg-accent-3 text-accent-11 hover:bg-accent-4"
-                : "border-gray-6 bg-gray-3 text-gray-10 hover:bg-gray-4 hover:text-gray-11"
-          }`}
-          disabled={isSaving || disabled}
-          title={disabledReason ?? undefined}
-        >
-          <Select.Value>
-            {isSaving ? "Saving..." : (currentOrgName ?? "Add org")}
-          </Select.Value>
-          <ChevronDownIcon className="h-3 w-3" />
-        </Select.Trigger>
-
-        <Select.Portal>
-          <Select.Content
-            className="overflow-hidden rounded-md border border-gray-6 bg-gray-2 shadow-lg"
-            position="popper"
-            sideOffset={4}
+      <Popover.Root open={isOpen} onOpenChange={setIsOpen}>
+        <Popover.Trigger asChild>
+          <button
+            className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs transition-colors focus:outline-none focus:ring-1 focus:ring-accent-8 ${
+              isSaving || disabled
+                ? "opacity-50 border-gray-6 bg-gray-3 text-gray-11 cursor-not-allowed"
+                : currentOrgName
+                  ? "border-accent-7 bg-accent-3 text-accent-11 hover:bg-accent-4"
+                  : "border-gray-6 bg-gray-3 text-gray-10 hover:bg-gray-4 hover:text-gray-11"
+            }`}
+            disabled={isSaving || disabled}
+            title={disabledReason ?? undefined}
           >
-            <Select.Viewport className="p-1">
-              <Select.Item
-                value="none"
-                className="relative flex cursor-pointer select-none items-center rounded px-8 py-2 text-sm text-gray-11 outline-none hover:bg-gray-4 hover:text-gray-12 data-[highlighted]:bg-gray-4 data-[highlighted]:text-gray-12"
+            {isSaving ? "Saving..." : (currentOrgName ?? "Add org")}
+            <ChevronDownIcon className="h-3 w-3" />
+          </button>
+        </Popover.Trigger>
+        <Popover.Portal>
+          <Popover.Content
+            className="w-72 rounded-lg border border-gray-6 bg-gray-2 p-2 shadow-lg"
+            sideOffset={4}
+            align="start"
+          >
+            <div className="relative mb-2">
+              <MagnifyingGlassIcon className="absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-gray-9" />
+              <input
+                ref={searchRef}
+                type="text"
+                value={search}
+                onChange={(e) => {
+                  setSearch(e.target.value);
+                  setVisibleCount(PAGE_SIZE);
+                }}
+                placeholder="Search organizations..."
+                className="w-full rounded border border-gray-6 bg-gray-3 py-1.5 pl-7 pr-2 text-sm text-gray-12 placeholder:text-gray-9 focus:border-accent-8 focus:outline-none"
+              />
+            </div>
+            <div className="max-h-64 overflow-y-auto">
+              <button
+                onClick={() => handleOrgChange(null)}
+                className={`flex w-full items-center justify-between rounded px-2 py-1.5 text-sm transition-colors ${
+                  currentOrgId === null
+                    ? "bg-accent-3 text-accent-11"
+                    : "text-gray-11 hover:bg-gray-4 hover:text-gray-12"
+                }`}
               >
-                <Select.ItemText>No organization</Select.ItemText>
-                <Select.ItemIndicator className="absolute left-2 inline-flex items-center">
-                  <CheckIcon className="h-4 w-4" />
-                </Select.ItemIndicator>
-              </Select.Item>
-
-              {organizations?.map((org) => (
-                <Select.Item
+                <span>No organization</span>
+                {currentOrgId === null && <CheckIcon className="h-4 w-4" />}
+              </button>
+              {visible.map((org) => (
+                <button
                   key={org.id}
-                  value={org.id.toString()}
-                  className="relative flex cursor-pointer select-none items-center rounded px-8 py-2 text-sm text-gray-11 outline-none hover:bg-gray-4 hover:text-gray-12 data-[highlighted]:bg-gray-4 data-[highlighted]:text-gray-12"
+                  onClick={() => handleOrgChange(org.id)}
+                  className={`flex w-full items-center justify-between rounded px-2 py-1.5 text-sm transition-colors ${
+                    currentOrgId === org.id
+                      ? "bg-accent-3 text-accent-11"
+                      : "text-gray-11 hover:bg-gray-4 hover:text-gray-12"
+                  }`}
                 >
-                  <Select.ItemText>{org.name}</Select.ItemText>
-                  <Select.ItemIndicator className="absolute left-2 inline-flex items-center">
-                    <CheckIcon className="h-4 w-4" />
-                  </Select.ItemIndicator>
-                </Select.Item>
+                  <span>{org.name}</span>
+                  {currentOrgId === org.id && <CheckIcon className="h-4 w-4" />}
+                </button>
               ))}
-            </Select.Viewport>
-          </Select.Content>
-        </Select.Portal>
-      </Select.Root>
+              {hasMore && (
+                <button
+                  onClick={() => setVisibleCount((c) => c + PAGE_SIZE)}
+                  className="w-full rounded px-2 py-1.5 text-center text-xs text-gray-9 hover:bg-gray-4 hover:text-gray-11"
+                >
+                  Show more ({filtered.length - visibleCount} remaining)
+                </button>
+              )}
+              {filtered.length === 0 && organizations && (
+                <p className="py-2 text-center text-xs text-gray-9">
+                  No matches
+                </p>
+              )}
+            </div>
+            <Popover.Arrow className="fill-gray-6" />
+          </Popover.Content>
+        </Popover.Portal>
+      </Popover.Root>
 
       <Dialog.Root open={walletDialogOpen} onOpenChange={setWalletDialogOpen}>
         <Dialog.Portal>
