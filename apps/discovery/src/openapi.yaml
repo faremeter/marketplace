@@ -1,0 +1,361 @@
+openapi: "3.0.3"
+info:
+  title: Corbits Discovery API
+  version: "1.0.0"
+  description: >
+    API for discovering available API proxies and endpoints on the Corbits
+    platform. Supports full-text search, proxy listing with cursor-based
+    pagination, and per-proxy OpenAPI spec retrieval.
+  license:
+    name: LGPL-3.0-only
+    url: https://www.gnu.org/licenses/lgpl-3.0.html
+
+servers:
+  - url: https://api.corbits.dev
+    description: Production
+
+security: []
+
+paths:
+  /health:
+    get:
+      operationId: healthCheck
+      summary: Health check
+      responses:
+        "200":
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status]
+                properties:
+                  status:
+                    type: string
+                    example: ok
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/search:
+    get:
+      operationId: search
+      summary: Search proxies and endpoints
+      description: >
+        Full-text search across proxy names, descriptions, tags, and endpoint
+        path patterns. Returns matching proxies (max 20) and endpoints (max 50).
+      parameters:
+        - name: q
+          in: query
+          description: Search query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Search results
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [proxies, endpoints]
+                properties:
+                  proxies:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Proxy"
+                  endpoints:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/SearchEndpoint"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/proxies:
+    get:
+      operationId: listProxies
+      summary: List proxies
+      description: List all active proxies with cursor-based pagination.
+      parameters:
+        - $ref: "#/components/parameters/cursor"
+        - $ref: "#/components/parameters/limit"
+      responses:
+        "200":
+          description: Paginated list of proxies
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, pagination]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Proxy"
+                  pagination:
+                    $ref: "#/components/schemas/Pagination"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/proxies/{id}:
+    get:
+      operationId: getProxy
+      summary: Get proxy details
+      parameters:
+        - $ref: "#/components/parameters/proxyId"
+      responses:
+        "200":
+          description: Proxy details
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: "#/components/schemas/ProxyDetail"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/proxies/{id}/openapi:
+    get:
+      operationId: getProxyOpenapi
+      summary: Get proxy OpenAPI spec
+      description: >
+        Returns the upstream OpenAPI specification for the given proxy,
+        if one has been imported.
+      parameters:
+        - $ref: "#/components/parameters/proxyId"
+      responses:
+        "200":
+          description: OpenAPI specification
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: object
+                    required: [id, name, spec]
+                    properties:
+                      id:
+                        type: integer
+                      name:
+                        type: string
+                      spec:
+                        type: object
+                        description: Parsed OpenAPI specification object
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/proxies/{id}/endpoints:
+    get:
+      operationId: listProxyEndpoints
+      summary: List endpoints for a proxy
+      parameters:
+        - $ref: "#/components/parameters/proxyId"
+        - $ref: "#/components/parameters/cursor"
+        - $ref: "#/components/parameters/limit"
+      responses:
+        "200":
+          description: Paginated list of endpoints
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, pagination]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Endpoint"
+                  pagination:
+                    $ref: "#/components/schemas/Pagination"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/proxies/{id}/endpoints/{endpointId}:
+    get:
+      operationId: getEndpoint
+      summary: Get endpoint details
+      parameters:
+        - $ref: "#/components/parameters/proxyId"
+        - name: endpointId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Endpoint details
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: "#/components/schemas/EndpointDetail"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+components:
+  parameters:
+    proxyId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: integer
+    cursor:
+      name: cursor
+      in: query
+      description: Pagination cursor (ID of the last item from the previous page)
+      schema:
+        type: string
+    limit:
+      name: limit
+      in: query
+      description: Number of items per page
+      schema:
+        type: integer
+        default: 20
+        minimum: 1
+        maximum: 100
+
+  schemas:
+    Proxy:
+      type: object
+      required: [id, name, default_price_usdc, default_scheme, tags, url]
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        org_slug:
+          type: string
+          nullable: true
+        default_price_usdc:
+          type: integer
+          description: Default price in micro-USDC
+        default_scheme:
+          type: string
+        tags:
+          type: array
+          items:
+            type: string
+        url:
+          type: string
+          description: "Proxy base URL, e.g. https://name.org.api.corbits.dev"
+
+    ProxyDetail:
+      allOf:
+        - $ref: "#/components/schemas/Proxy"
+        - type: object
+          required: [endpoint_count]
+          properties:
+            endpoint_count:
+              type: integer
+
+    Endpoint:
+      type: object
+      required: [id, path_pattern, tags]
+      properties:
+        id:
+          type: integer
+        path_pattern:
+          type: string
+        description:
+          type: string
+          nullable: true
+        price_usdc:
+          type: integer
+          nullable: true
+          description: Price in micro-USDC (null means proxy default applies)
+        scheme:
+          type: string
+          nullable: true
+        tags:
+          type: array
+          items:
+            type: string
+
+    EndpointDetail:
+      allOf:
+        - $ref: "#/components/schemas/Endpoint"
+        - type: object
+          required: [priority, created_at]
+          properties:
+            priority:
+              type: integer
+            created_at:
+              type: string
+              format: date-time
+
+    SearchEndpoint:
+      allOf:
+        - $ref: "#/components/schemas/Endpoint"
+        - type: object
+          required: [proxy_id, proxy_name]
+          properties:
+            proxy_id:
+              type: integer
+            proxy_name:
+              type: string
+            org_slug:
+              type: string
+              nullable: true
+
+    Pagination:
+      type: object
+      required: [nextCursor, hasMore]
+      properties:
+        nextCursor:
+          type: string
+          nullable: true
+        hasMore:
+          type: boolean
+
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string
+
+  responses:
+    BadRequest:
+      description: Invalid request parameters
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    InternalError:
+      description: Internal server error
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"

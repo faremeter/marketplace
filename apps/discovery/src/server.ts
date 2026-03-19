@@ -3,6 +3,7 @@ import { Hono } from "hono";
 import { serve } from "@hono/node-server";
 import { searchRoutes } from "./routes/search.js";
 import { proxiesRoutes } from "./routes/proxies.js";
+import { openapiSpecRoutes } from "./routes/openapi-spec.js";
 import { logger } from "./logger.js";
 import {
   telemetryMiddleware,
@@ -14,6 +15,7 @@ import {
 const app = new Hono();
 
 app.get("/health", (c) => c.json({ status: "ok" }));
+app.route("/openapi.yaml", openapiSpecRoutes);
 app.use("*", telemetryMiddleware);
 app.route("/api/v1/search", searchRoutes);
 app.route("/api/v1/proxies", proxiesRoutes);
