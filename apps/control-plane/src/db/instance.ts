@@ -286,6 +286,26 @@ export async function setupTestSchema(): Promise<void> {
     )
     .execute();
 
+  // Production uses bigint for amount; SQLite integer is 64-bit so functionally equivalent
+  await db.schema
+    .createTable("token_prices")
+    .ifNotExists()
+    .addColumn("id", "integer", (col) => col.primaryKey().autoIncrement())
+    .addColumn("tenant_id", "integer", (col) => col.notNull())
+    .addColumn("endpoint_id", "integer")
+    .addColumn("token_symbol", "text", (col) => col.notNull())
+    .addColumn("mint_address", "text", (col) => col.notNull())
+    .addColumn("network", "text", (col) => col.notNull())
+    .addColumn("amount", "integer", (col) => col.notNull())
+    .addColumn("decimals", "integer", (col) => col.defaultTo(6))
+    .addColumn("created_at", "text", (col) =>
+      col.defaultTo(sql`CURRENT_TIMESTAMP`).notNull(),
+    )
+    .addColumn("updated_at", "text", (col) =>
+      col.defaultTo(sql`CURRENT_TIMESTAMP`).notNull(),
+    )
+    .execute();
+
   await db.schema
     .createTable("discovery_telemetry")
     .ifNotExists()
@@ -321,5 +341,6 @@ export async function clearTestData(): Promise<void> {
   await db.deleteFrom("organizations").execute();
   await db.deleteFrom("admin_settings").execute();
   await db.deleteFrom("waitlist").execute();
+  await db.deleteFrom("token_prices").execute();
   await db.deleteFrom("discovery_telemetry").execute();
 }

@@ -10,7 +10,7 @@ export async function buildNodeConfig(nodeId: number) {
     .executeTakeFirst();
 
   if (!node) {
-    throw new Error(`Node ${nodeId} not found`);
+    return null;
   }
 
   const tenants = await db
@@ -67,6 +67,12 @@ export async function buildNodeConfig(nodeId: number) {
       .orderBy("priority", "asc")
       .execute();
 
+    const tokenPrices = await db
+      .selectFrom("token_prices")
+      .selectAll()
+      .where("tenant_id", "=", tenant.id)
+      .execute();
+
     const domainInfo = toDomainInfo(tenant);
     const domain = buildTenantDomain(domainInfo);
 
@@ -87,6 +93,14 @@ export async function buildNodeConfig(nodeId: number) {
         price_usdc: e.price_usdc,
         scheme: e.scheme,
         priority: e.priority,
+      })),
+      token_prices: tokenPrices.map((tp) => ({
+        token_symbol: tp.token_symbol,
+        mint_address: tp.mint_address,
+        network: tp.network,
+        amount: String(tp.amount),
+        decimals: tp.decimals,
+        endpoint_id: tp.endpoint_id,
       })),
     };
   }
@@ -131,6 +145,7 @@ export async function syncToNode(nodeId: number) {
   }
 
   const config = await buildNodeConfig(nodeId);
+  if (!config) return;
 
   try {
     const response = await fetch(

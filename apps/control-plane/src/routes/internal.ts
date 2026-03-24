@@ -4,82 +4,18 @@ import { enqueueTransactionRecording } from "../lib/queue.js";
 import { logger } from "../logger.js";
 import { arktypeValidator } from "@hono/arktype-validator";
 import { InternalTransactionSchema } from "../lib/schemas.js";
-import { toDomainInfo, buildTenantDomain } from "../lib/domain.js";
+import { buildNodeConfig } from "../lib/sync.js";
 
 export const internalRoutes = new Hono();
 
 internalRoutes.get("/nodes/:id/sync", async (c) => {
   const id = parseInt(c.req.param("id"));
 
-  const node = await db
-    .selectFrom("nodes")
-    .selectAll()
-    .where("id", "=", id)
-    .executeTakeFirst();
-
-  if (!node) {
+  const config = await buildNodeConfig(id);
+  if (!config) {
     return c.json({ error: "Node not found" }, 404);
   }
-
-  const tenants = await db
-    .selectFrom("tenants")
-    .innerJoin("tenant_nodes", "tenant_nodes.tenant_id", "tenants.id")
-    .innerJoin("wallets", "wallets.id", "tenants.wallet_id")
-    .select([
-      "tenants.id",
-      "tenants.name",
-      "tenants.backend_url",
-      "tenants.default_price_usdc",
-      "tenants.default_scheme",
-      "tenants.upstream_auth_header",
-      "tenants.upstream_auth_value",
-      "tenants.org_slug",
-      "wallets.wallet_config",
-    ])
-    .where("tenant_nodes.node_id", "=", id)
-    .where("tenants.is_active", "=", true)
-    .where("tenants.status", "=", "active")
-    .where("wallets.funding_status", "=", "funded")
-    .execute();
-
-  const config: Record<string, unknown> = {};
-  for (const tenant of tenants) {
-    const endpoints = await db
-      .selectFrom("endpoints")
-      .selectAll()
-      .where("tenant_id", "=", tenant.id)
-      .where("is_active", "=", true)
-      .orderBy("priority", "asc")
-      .execute();
-
-    const domain = buildTenantDomain(toDomainInfo(tenant));
-    config[domain] = {
-      name: tenant.name,
-      proxy_name: tenant.name,
-      domain,
-      org_slug: tenant.org_slug ?? null,
-      backend_url: tenant.backend_url,
-      wallet_config: tenant.wallet_config,
-      default_price_usdc: tenant.default_price_usdc,
-      default_scheme: tenant.default_scheme,
-      upstream_auth_header: tenant.upstream_auth_header,
-      upstream_auth_value: tenant.upstream_auth_value,
-      endpoints: endpoints.map((e) => ({
-        id: e.id,
-        path_pattern: e.path_pattern,
-        price_usdc: e.price_usdc,
-        scheme: e.scheme,
-        priority: e.priority,
-      })),
-    };
-  }
-
-  return c.json({
-    node_id: node.id,
-    node_name: node.name,
-    tenant_count: tenants.length,
-    config,
-  });
+  return c.json(config);
 });
 
 internalRoutes.post(

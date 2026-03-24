@@ -230,6 +230,26 @@ export async function setupTestSchema(
     )
     .execute();
 
+  // Token prices table (production uses bigint for amount; SQLite integer is 64-bit so equivalent)
+  await db.schema
+    .createTable("token_prices")
+    .ifNotExists()
+    .addColumn("id", "integer", (col) => col.primaryKey().autoIncrement())
+    .addColumn("tenant_id", "integer", (col) => col.notNull())
+    .addColumn("endpoint_id", "integer")
+    .addColumn("token_symbol", "text", (col) => col.notNull())
+    .addColumn("mint_address", "text", (col) => col.notNull())
+    .addColumn("network", "text", (col) => col.notNull())
+    .addColumn("amount", "integer", (col) => col.notNull())
+    .addColumn("decimals", "integer", (col) => col.defaultTo(6))
+    .addColumn("created_at", "text", (col) =>
+      col.defaultTo(sql`CURRENT_TIMESTAMP`).notNull(),
+    )
+    .addColumn("updated_at", "text", (col) =>
+      col.defaultTo(sql`CURRENT_TIMESTAMP`).notNull(),
+    )
+    .execute();
+
   // Discovery telemetry table
   await db.schema
     .createTable("discovery_telemetry")

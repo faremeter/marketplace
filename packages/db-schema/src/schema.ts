@@ -28,6 +28,7 @@ export interface Database {
   waitlist: WaitlistTable;
   password_reset_tokens: PasswordResetTokensTable;
   discovery_telemetry: DiscoveryTelemetryTable;
+  token_prices: TokenPricesTable;
 }
 
 export interface OrganizationsTable {
@@ -182,6 +183,19 @@ export interface PasswordResetTokensTable {
   expires_at: DateColumn;
   used_at: NullableDateColumn;
   created_at: AutoDateColumn;
+}
+
+export interface TokenPricesTable {
+  id: ColumnType<number, never, never>;
+  tenant_id: number;
+  endpoint_id: number | null;
+  token_symbol: string;
+  mint_address: string;
+  network: string;
+  amount: ColumnType<string, number | string, number | string>;
+  decimals: ColumnType<number, number | undefined, number>;
+  created_at: AutoDateColumn;
+  updated_at: OptionalDateColumn;
 }
 
 export interface DiscoveryTelemetryTable {

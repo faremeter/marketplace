@@ -177,7 +177,7 @@ local matched_endpoint_id = nil
 if tenant_config.endpoints then
     for _, endpoint in ipairs(tenant_config.endpoints) do
         local pattern = endpoint.path_pattern
-        if not pattern then
+        if not pattern or pattern == cjson.null then
             goto continue
         end
         local matched = false
@@ -207,6 +207,8 @@ if tenant_config.endpoints then
     end
 end
 
+-- Free endpoints bypass payment regardless of whether the tenant has token_prices configured.
+-- The resolved scheme/price already accounts for endpoint-level overrides (see endpoint matching above).
 if scheme == "free" or price == 0 then
     ngx.log(ngx.INFO, "Free endpoint: ", proxy_name, " ", ngx.var.uri)
     local free_ngx_request_id = ngx.var.request_id
@@ -264,82 +266,186 @@ local accepts_body = {
     accepts = {}
 }
 
-if wallet.solana and wallet.solana["mainnet-beta"] and wallet.solana["mainnet-beta"].address and wallet.solana["mainnet-beta"].address ~= "" and wallet.solana["mainnet-beta"].address ~= cjson.null then
-    table.insert(accepts_body.accepts, {
-        network = "solana-mainnet-beta",
-        scheme = scheme,
-        asset = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
-        payTo = wallet.solana["mainnet-beta"].address,
-        maxAmountRequired = price,
-        resource = "https://" .. ngx.var.host .. ngx.var.uri,
-        description = "API - " .. ngx.var.uri,
-        mimeType = "application/json",
-        maxTimeoutSeconds = 60
-    })
-    table.insert(accepts_body.accepts, {
-        network = "solana",
-        scheme = scheme,
-        asset = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
-        payTo = wallet.solana["mainnet-beta"].address,
-        maxAmountRequired = price,
-        resource = "https://" .. ngx.var.host .. ngx.var.uri,
-        description = "API - " .. ngx.var.uri,
-        mimeType = "application/json",
-        maxTimeoutSeconds = 60
-    })
+local resource = "https://" .. ngx.var.host .. ngx.var.uri
+local description = "API - " .. ngx.var.uri
+
+-- Build accepts from token_prices if available (per-token pricing)
+local token_prices = tenant_config.token_prices
+local has_token_prices = token_prices and #token_prices > 0
+
+-- Resolve effective token prices for matched endpoint
+local effective_token_prices = {}
+if has_token_prices then
+    -- Collect tenant-level defaults (endpoint_id is null/0)
+    for _, tp in ipairs(token_prices) do
+        if not tp.endpoint_id or tp.endpoint_id == 0 or tp.endpoint_id == cjson.null then
+            local key = tp.network .. ":" .. tp.token_symbol
+            effective_token_prices[key] = tp
+        end
+    end
+    -- Override with endpoint-level prices if we matched an endpoint
+    if matched_endpoint_id then
+        for _, tp in ipairs(token_prices) do
+            if tp.endpoint_id == matched_endpoint_id then
+                local key = tp.network .. ":" .. tp.token_symbol
+                effective_token_prices[key] = tp
+            end
+        end
+    end
 end
 
-if wallet.evm and wallet.evm.base and wallet.evm.base.address and wallet.evm.base.address ~= "" and wallet.evm.base.address ~= cjson.null then
-    table.insert(accepts_body.accepts, {
-        scheme = scheme,
-        network = "base",
-        payTo = wallet.evm.base.address,
-        asset = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
-        maxAmountRequired = price,
-        resource = "https://" .. ngx.var.host .. ngx.var.uri,
-        description = "API - " .. ngx.var.uri,
-        mimeType = "application/json",
-        maxTimeoutSeconds = 300
-    })
-end
+if has_token_prices and next(effective_token_prices) then
+    -- Solana tokens from token_prices
+    local solana_address = nil
+    if wallet.solana and wallet.solana["mainnet-beta"] and wallet.solana["mainnet-beta"].address and wallet.solana["mainnet-beta"].address ~= "" and wallet.solana["mainnet-beta"].address ~= cjson.null then
+        solana_address = wallet.solana["mainnet-beta"].address
+    end
 
-if wallet.evm and wallet.evm.polygon and wallet.evm.polygon.address and wallet.evm.polygon.address ~= "" and wallet.evm.polygon.address ~= cjson.null then
-    table.insert(accepts_body.accepts, {
-        scheme = scheme,
-        network = "polygon",
-        payTo = wallet.evm.polygon.address,
-        asset = "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359",
-        maxAmountRequired = price,
-        resource = "https://" .. ngx.var.host .. ngx.var.uri,
-        description = "API - " .. ngx.var.uri,
-        mimeType = "application/json",
-        maxTimeoutSeconds = 300
-    })
-    table.insert(accepts_body.accepts, {
-        scheme = scheme,
-        network = "eip155:137",
-        payTo = wallet.evm.polygon.address,
-        asset = "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359",
-        maxAmountRequired = price,
-        resource = "https://" .. ngx.var.host .. ngx.var.uri,
-        description = "API - " .. ngx.var.uri,
-        mimeType = "application/json",
-        maxTimeoutSeconds = 300
-    })
-end
+    -- NOTE: Adding a new EVM chain to token_prices requires a corresponding entry here
+    local evm_addresses = {}
+    if wallet.evm then
+        if wallet.evm.base and wallet.evm.base.address and wallet.evm.base.address ~= "" and wallet.evm.base.address ~= cjson.null then
+            evm_addresses["base"] = wallet.evm.base.address
+        end
+        if wallet.evm.polygon and wallet.evm.polygon.address and wallet.evm.polygon.address ~= "" and wallet.evm.polygon.address ~= cjson.null then
+            evm_addresses["polygon"] = wallet.evm.polygon.address
+            evm_addresses["eip155:137"] = wallet.evm.polygon.address
+        end
+        if wallet.evm.monad and wallet.evm.monad.address and wallet.evm.monad.address ~= "" and wallet.evm.monad.address ~= cjson.null then
+            evm_addresses["eip155:143"] = wallet.evm.monad.address
+        end
+    end
 
-if wallet.evm and wallet.evm.monad and wallet.evm.monad.address and wallet.evm.monad.address ~= "" and wallet.evm.monad.address ~= cjson.null then
-    table.insert(accepts_body.accepts, {
-        scheme = scheme,
-        network = "eip155:143",
-        payTo = wallet.evm.monad.address,
-        asset = "0x754704Bc059F8C67012fEd69BC8A327a5aafb603",
-        maxAmountRequired = price,
-        resource = "https://" .. ngx.var.host .. ngx.var.uri,
-        description = "API - " .. ngx.var.uri,
-        mimeType = "application/json",
-        maxTimeoutSeconds = 300
-    })
+    for _, tp in pairs(effective_token_prices) do
+        local pay_to = nil
+        local timeout = 60
+
+        -- Handle both network names: DB seeds "solana-mainnet-beta" but legacy clients may use "solana"
+        if tp.network == "solana-mainnet-beta" or tp.network == "solana" then
+            pay_to = solana_address
+        else
+            pay_to = evm_addresses[tp.network]
+            timeout = 300
+        end
+
+        if pay_to and tonumber(tp.amount) > 0 then
+            table.insert(accepts_body.accepts, {
+                network = tp.network,
+                scheme = scheme,
+                asset = tp.mint_address,
+                payTo = pay_to,
+                maxAmountRequired = tostring(tp.amount),
+                resource = resource,
+                description = description,
+                mimeType = "application/json",
+                maxTimeoutSeconds = timeout,
+                token_symbol = tp.token_symbol
+            })
+            -- Emit "solana" alias so legacy clients using network="solana" still match
+            if tp.network == "solana-mainnet-beta" then
+                table.insert(accepts_body.accepts, {
+                    network = "solana",
+                    scheme = scheme,
+                    asset = tp.mint_address,
+                    payTo = pay_to,
+                    maxAmountRequired = tostring(tp.amount),
+                    resource = resource,
+                    description = description,
+                    mimeType = "application/json",
+                    maxTimeoutSeconds = timeout,
+                    token_symbol = tp.token_symbol
+                })
+            end
+        end
+    end
+else
+    if has_token_prices then
+        ngx.log(ngx.WARN, "token_prices configured but none match endpoint: ", proxy_name, " ", ngx.var.uri, " (falling back to legacy USDC)")
+    end
+    -- Fallback: legacy hardcoded USDC behavior when no token_prices configured or none match
+    if wallet.solana and wallet.solana["mainnet-beta"] and wallet.solana["mainnet-beta"].address and wallet.solana["mainnet-beta"].address ~= "" and wallet.solana["mainnet-beta"].address ~= cjson.null then
+        table.insert(accepts_body.accepts, {
+            network = "solana-mainnet-beta",
+            scheme = scheme,
+            asset = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+            payTo = wallet.solana["mainnet-beta"].address,
+            maxAmountRequired = price,
+            resource = resource,
+            description = description,
+            mimeType = "application/json",
+            maxTimeoutSeconds = 60,
+            token_symbol = "USDC"
+        })
+        table.insert(accepts_body.accepts, {
+            network = "solana",
+            scheme = scheme,
+            asset = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+            payTo = wallet.solana["mainnet-beta"].address,
+            maxAmountRequired = price,
+            resource = resource,
+            description = description,
+            mimeType = "application/json",
+            maxTimeoutSeconds = 60,
+            token_symbol = "USDC"
+        })
+    end
+
+    if wallet.evm and wallet.evm.base and wallet.evm.base.address and wallet.evm.base.address ~= "" and wallet.evm.base.address ~= cjson.null then
+        table.insert(accepts_body.accepts, {
+            scheme = scheme,
+            network = "base",
+            payTo = wallet.evm.base.address,
+            asset = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+            maxAmountRequired = price,
+            resource = resource,
+            description = description,
+            mimeType = "application/json",
+            maxTimeoutSeconds = 300,
+            token_symbol = "USDC"
+        })
+    end
+
+    if wallet.evm and wallet.evm.polygon and wallet.evm.polygon.address and wallet.evm.polygon.address ~= "" and wallet.evm.polygon.address ~= cjson.null then
+        table.insert(accepts_body.accepts, {
+            scheme = scheme,
+            network = "polygon",
+            payTo = wallet.evm.polygon.address,
+            asset = "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359",
+            maxAmountRequired = price,
+            resource = resource,
+            description = description,
+            mimeType = "application/json",
+            maxTimeoutSeconds = 300,
+            token_symbol = "USDC"
+        })
+        table.insert(accepts_body.accepts, {
+            scheme = scheme,
+            network = "eip155:137",
+            payTo = wallet.evm.polygon.address,
+            asset = "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359",
+            maxAmountRequired = price,
+            resource = resource,
+            description = description,
+            mimeType = "application/json",
+            maxTimeoutSeconds = 300,
+            token_symbol = "USDC"
+        })
+    end
+
+    if wallet.evm and wallet.evm.monad and wallet.evm.monad.address and wallet.evm.monad.address ~= "" and wallet.evm.monad.address ~= cjson.null then
+        table.insert(accepts_body.accepts, {
+            scheme = scheme,
+            network = "eip155:143",
+            payTo = wallet.evm.monad.address,
+            asset = "0x754704Bc059F8C67012fEd69BC8A327a5aafb603",
+            maxAmountRequired = price,
+            resource = resource,
+            description = description,
+            mimeType = "application/json",
+            maxTimeoutSeconds = 300,
+            token_symbol = "USDC"
+        })
+    end
 end
 
 local res, err = httpc:request_uri(FACILITATOR_URL .. "/accepts", {
@@ -410,9 +516,23 @@ end
 
 local matching_req = nil
 for _, req in ipairs(payment_requirements.accepts) do
-    if req.network == payment_json.network and req.scheme == payment_json.scheme then
+    local network_match = req.network == payment_json.network
+    local scheme_match = req.scheme == payment_json.scheme
+    local asset_match = not payment_json.asset or string.lower(req.asset) == string.lower(payment_json.asset)
+    if network_match and scheme_match and asset_match then
         matching_req = req
         break
+    end
+end
+
+-- Look up token_symbol from our local accepts (facilitator may not preserve custom fields)
+local resolved_token_symbol = nil
+if matching_req then
+    for _, acc in ipairs(accepts_body.accepts) do
+        if acc.network == matching_req.network and string.lower(acc.asset) == string.lower(matching_req.asset) then
+            resolved_token_symbol = acc.token_symbol
+            break
+        end
     end
 end
 
@@ -471,7 +591,7 @@ local tx_hash = settle_response.transaction or settle_response.txHash
 if tx_hash then
     local tx_ngx_request_id = ngx.var.request_id
     local tx_network = matching_req.network
-    local tx_amount = tonumber(price) or 0
+    local tx_amount = tonumber(matching_req.maxAmountRequired) or tonumber(price) or 0
     local tx_request_path = ngx.var.uri
     local tx_tenant_name = proxy_name
     local tx_org_slug = tenant_org_slug
@@ -486,6 +606,7 @@ if tx_hash then
         payment = {
             pay_to = matching_req.payTo,
             asset = matching_req.asset,
+            token_symbol = resolved_token_symbol or cjson.null,
             scheme = matching_req.scheme,
             payload = payment_json.payload or cjson.null
         }
