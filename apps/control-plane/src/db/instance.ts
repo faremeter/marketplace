@@ -181,7 +181,7 @@ export async function setupTestSchema(): Promise<void> {
       col.references("wallets.id").onDelete("set null"),
     )
     .addColumn("status", "text", (col) => col.defaultTo("pending"))
-    .addColumn("default_price_usdc", "real", (col) => col.notNull())
+    .addColumn("default_price", "real", (col) => col.notNull())
     .addColumn("default_scheme", "text", (col) => col.notNull())
     .addColumn("upstream_auth_header", "text")
     .addColumn("upstream_auth_value", "text")
@@ -215,7 +215,7 @@ export async function setupTestSchema(): Promise<void> {
     .addColumn("tenant_id", "integer", (col) => col.notNull())
     .addColumn("path", "text")
     .addColumn("path_pattern", "text", (col) => col.notNull())
-    .addColumn("price_usdc", "real")
+    .addColumn("price", "real")
     .addColumn("scheme", "text")
     .addColumn("description", "text")
     .addColumn("priority", "integer", (col) => col.defaultTo(0))
@@ -235,10 +235,12 @@ export async function setupTestSchema(): Promise<void> {
     .addColumn("endpoint_id", "integer")
     .addColumn("tenant_id", "integer", (col) => col.notNull())
     .addColumn("organization_id", "integer")
-    .addColumn("amount_usdc", "real", (col) => col.notNull())
+    .addColumn("amount", "real", (col) => col.notNull())
     .addColumn("ngx_request_id", "text", (col) => col.notNull())
     .addColumn("tx_hash", "text")
     .addColumn("network", "text")
+    .addColumn("token_symbol", "text")
+    .addColumn("mint_address", "text")
     .addColumn("request_path", "text", (col) => col.notNull())
     .addColumn("created_at", "text", (col) =>
       col.defaultTo(sql`CURRENT_TIMESTAMP`).notNull(),

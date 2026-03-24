@@ -1,17 +1,32 @@
 import { logger } from "../logger.js";
 import { evm, solana } from "@faremeter/info";
 
-// USDC addresses for filtering transactions
-const USDC_ADDRESSES = new Set<string>(
+// Known stablecoin addresses for filtering transactions.
+// Includes EURC for transaction display even though it's excluded from migration seeding
+// (EURC needs separate pricing, but we still want to show EURC transactions if they occur).
+const KNOWN_STABLECOIN_ADDRESSES = new Set<string>(
   [
+    // Solana stablecoins
     solana.lookupKnownSPLToken("mainnet-beta", "USDC")?.address,
+    solana.lookupKnownSPLToken("mainnet-beta", "USDT")?.address,
+    solana.lookupKnownSPLToken("mainnet-beta", "PYUSD")?.address,
+    solana.lookupKnownSPLToken("mainnet-beta", "USDG")?.address,
+    solana.lookupKnownSPLToken("mainnet-beta", "USD1")?.address,
+    solana.lookupKnownSPLToken("mainnet-beta", "USX")?.address,
+    solana.lookupKnownSPLToken("mainnet-beta", "CASH")?.address,
+    solana.lookupKnownSPLToken("mainnet-beta", "EURC")?.address,
+    solana.lookupKnownSPLToken("mainnet-beta", "JupUSD")?.address,
+    solana.lookupKnownSPLToken("mainnet-beta", "USDS")?.address,
+    solana.lookupKnownSPLToken("mainnet-beta", "USDtb")?.address,
+    solana.lookupKnownSPLToken("mainnet-beta", "USDu")?.address,
+    solana.lookupKnownSPLToken("mainnet-beta", "USDGO")?.address,
+    solana.lookupKnownSPLToken("mainnet-beta", "FDUSD")?.address,
+    // EVM USDC
     evm.lookupKnownAsset("base", "USDC")?.address?.toLowerCase(),
     evm.lookupKnownAsset("eip155:137", "USDC")?.address?.toLowerCase(),
     evm.lookupKnownAsset("eip155:143", "USDC")?.address?.toLowerCase(),
   ].filter((addr): addr is string => addr !== undefined),
 );
-
-const USDC_DECIMALS = 6;
 
 const CORBITS_DASH_API_URL =
   process.env.CORBITS_DASH_API_URL || "https://dashboard.corbits.dev/api/v1";
@@ -153,14 +168,20 @@ export async function getTrackedAddressesForAccount(
   return response.data;
 }
 
-function isUsdcTransaction(tx: CorbitsTransaction): boolean {
+function isStablecoinTransaction(tx: CorbitsTransaction): boolean {
   if (!tx.mint_address) return false;
   const mintLower = tx.mint_address.toLowerCase();
-  return USDC_ADDRESSES.has(tx.mint_address) || USDC_ADDRESSES.has(mintLower);
+  return (
+    KNOWN_STABLECOIN_ADDRESSES.has(tx.mint_address) ||
+    KNOWN_STABLECOIN_ADDRESSES.has(mintLower)
+  );
 }
 
-function formatUsdcAmount(rawAmount: string): string {
-  const num = parseFloat(rawAmount) / 10 ** USDC_DECIMALS;
+// All supported stablecoins use 6 decimals. Update if tokens with different decimals are added.
+const TOKEN_DECIMALS = 6;
+
+function formatTokenAmount(rawAmount: string): string {
+  const num = parseFloat(rawAmount) / 10 ** TOKEN_DECIMALS;
   return num.toFixed(2);
 }
 
@@ -194,17 +215,17 @@ export async function getTransactionsForAccount(
     `/transactions?${params}`,
   );
 
-  const usdcTransactions = response.data
-    .filter(isUsdcTransaction)
+  const stablecoinTransactions = response.data
+    .filter(isStablecoinTransaction)
     .map((tx) => ({
       ...tx,
-      amount: formatUsdcAmount(tx.amount),
+      amount: formatTokenAmount(tx.amount),
     }));
 
   return {
-    data: usdcTransactions,
+    data: stablecoinTransactions,
     meta: {
-      total: usdcTransactions.length,
+      total: stablecoinTransactions.length,
       limit: options?.limit ?? 50,
       offset: options?.offset ?? 0,
       has_more: false,

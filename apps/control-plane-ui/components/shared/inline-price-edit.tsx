@@ -14,8 +14,8 @@ import { useToast } from "@/components/ui/toast";
 import { MIN_PRICE_USD, MAX_PRICE_USD } from "@/lib/types/api";
 
 interface InlinePriceEditProps {
-  priceUsdc: number;
-  defaultPriceUsdc?: number;
+  priceMicro: number;
+  defaultPriceMicro?: number;
   onUpdate: () => void;
   apiEndpoint: string;
   fieldName?: string;
@@ -23,27 +23,27 @@ interface InlinePriceEditProps {
 }
 
 export function InlinePriceEdit({
-  priceUsdc,
-  defaultPriceUsdc,
+  priceMicro,
+  defaultPriceMicro,
   onUpdate,
   apiEndpoint,
-  fieldName = "default_price_usdc",
+  fieldName = "default_price",
   label = "Default Price",
 }: InlinePriceEditProps) {
   const { toast } = useToast();
   const [isOpen, setIsOpen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
-  const [price, setPrice] = useState((priceUsdc / 1_000_000).toString());
+  const [price, setPrice] = useState((priceMicro / 1_000_000).toString());
 
   const handleSave = async () => {
     setIsSaving(true);
     try {
-      const newPriceUsdc = Math.round((parseFloat(price) || 0) * 1_000_000);
-      // If defaultPriceUsdc is provided and value matches, send null to use default
+      const newPrice = Math.round((parseFloat(price) || 0) * 1_000_000);
+      // If defaultPriceMicro is provided and value matches, send null to use default
       const valueToSend =
-        defaultPriceUsdc !== undefined && newPriceUsdc === defaultPriceUsdc
+        defaultPriceMicro !== undefined && newPrice === defaultPriceMicro
           ? null
-          : newPriceUsdc;
+          : newPrice;
       await api.put(apiEndpoint, {
         [fieldName]: valueToSend,
       });
@@ -66,12 +66,12 @@ export function InlinePriceEdit({
 
   const handleOpen = (open: boolean) => {
     if (open) {
-      setPrice((priceUsdc / 1_000_000).toString());
+      setPrice((priceMicro / 1_000_000).toString());
     }
     setIsOpen(open);
   };
 
-  const displayPrice = `$${(priceUsdc / 1_000_000).toFixed(3)}`;
+  const displayPrice = `$${(priceMicro / 1_000_000).toFixed(3)}`;
 
   return (
     <Popover.Root open={isOpen} onOpenChange={handleOpen}>

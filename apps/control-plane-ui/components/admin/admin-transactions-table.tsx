@@ -17,7 +17,7 @@ interface Transaction {
   endpoint_id: number | null;
   tenant_id: number;
   organization_id: number | null;
-  amount_usdc: number;
+  amount: number;
   tx_hash: string | null;
   network: string | null;
   request_path: string;
@@ -161,7 +161,7 @@ export function AdminTransactionsTable({
                 </td>
                 <td className="px-4 py-3">
                   <span className="text-sm font-medium text-green-400">
-                    {formatUSDC(tx.amount_usdc)}
+                    {formatUSDC(tx.amount)}
                   </span>
                 </td>
                 <td className="px-4 py-3">

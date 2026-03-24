@@ -19,7 +19,7 @@ interface Endpoint {
   tenant_id: number;
   path: string | null;
   path_pattern: string;
-  price_usdc: number | null;
+  price: number | null;
   scheme: string | null;
   description: string | null;
   priority: number;
@@ -32,7 +32,7 @@ interface Tenant {
   id: number;
   name: string;
   backend_url: string;
-  default_price_usdc: number;
+  default_price: number;
   default_scheme: string;
   is_active: boolean;
   status: string;
@@ -196,16 +196,16 @@ export function OrgEndpointsTable({
                 <td className="whitespace-nowrap px-4 py-3">
                   <div className="flex items-center gap-2">
                     <InlinePriceEdit
-                      priceUsdc={tenant.default_price_usdc}
+                      priceMicro={tenant.default_price}
                       onUpdate={() => {
                         mutateForTenant();
                         onUpdate?.();
                       }}
                       apiEndpoint={`/api/admin/tenants/${tenant.id}`}
-                      fieldName="default_price_usdc"
+                      fieldName="default_price"
                       label="Default Price"
                     />
-                    {tenant.default_price_usdc === 0 && (
+                    {tenant.default_price === 0 && (
                       <span className="rounded bg-green-900/50 px-1.5 py-0.5 text-[10px] font-medium text-green-400 border border-green-800">
                         Free
                       </span>
@@ -257,18 +257,17 @@ export function OrgEndpointsTable({
                   <td className="whitespace-nowrap px-4 py-3">
                     <div className="flex items-center gap-2">
                       <InlinePriceEdit
-                        priceUsdc={
-                          endpoint.price_usdc ??
-                          endpoint.tenant.default_price_usdc
+                        priceMicro={
+                          endpoint.price ?? endpoint.tenant.default_price
                         }
-                        defaultPriceUsdc={endpoint.tenant.default_price_usdc}
+                        defaultPriceMicro={endpoint.tenant.default_price}
                         onUpdate={() => mutateForTenant()}
                         apiEndpoint={`/api/admin/tenants/${endpoint.tenant_id}/endpoints/${endpoint.id}`}
-                        fieldName="price_usdc"
+                        fieldName="price"
                         label="Price"
                       />
-                      {(endpoint.price_usdc ??
-                        endpoint.tenant.default_price_usdc) === 0 && (
+                      {(endpoint.price ?? endpoint.tenant.default_price) ===
+                        0 && (
                         <span className="rounded bg-green-900/50 px-1.5 py-0.5 text-[10px] font-medium text-green-400 border border-green-800">
                           Free
                         </span>

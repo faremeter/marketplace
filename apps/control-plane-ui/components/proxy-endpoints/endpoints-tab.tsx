@@ -27,7 +27,7 @@ interface Endpoint {
   tenant_id: number;
   path: string | null;
   path_pattern: string;
-  price_usdc: number | null;
+  price: number | null;
   scheme: string | null;
   description: string | null;
   priority: number;
@@ -40,7 +40,7 @@ interface Endpoint {
 interface EndpointsTabProps {
   tenantId: number;
   orgId: number;
-  defaultPriceUsdc: number;
+  defaultPrice: number;
   defaultScheme: string;
   hasOpenApiSpec: boolean;
   onSpecChange: () => void;
@@ -50,7 +50,7 @@ interface EndpointsTabProps {
 export function EndpointsTab({
   tenantId,
   orgId,
-  defaultPriceUsdc,
+  defaultPrice,
   defaultScheme,
   hasOpenApiSpec,
   onSpecChange,
@@ -211,14 +211,14 @@ export function EndpointsTab({
                     <td className="whitespace-nowrap px-4 py-3">
                       <div className="flex items-center gap-2">
                         <InlinePriceEdit
-                          priceUsdc={endpoint.price_usdc ?? defaultPriceUsdc}
-                          defaultPriceUsdc={defaultPriceUsdc}
+                          priceMicro={endpoint.price ?? defaultPrice}
+                          defaultPriceMicro={defaultPrice}
                           onUpdate={() => mutate()}
                           apiEndpoint={`/api/tenants/${tenantId}/endpoints/${endpoint.id}`}
-                          fieldName="price_usdc"
+                          fieldName="price"
                           label="Price"
                         />
-                        {(endpoint.price_usdc ?? defaultPriceUsdc) === 0 && (
+                        {(endpoint.price ?? defaultPrice) === 0 && (
                           <span className="rounded bg-green-900/50 px-1.5 py-0.5 text-[10px] font-medium text-green-400 border border-green-800">
                             Free
                           </span>
@@ -333,13 +333,13 @@ export function EndpointsTab({
                 <td className="whitespace-nowrap px-4 py-3">
                   <div className="flex items-center gap-2">
                     <InlinePriceEdit
-                      priceUsdc={defaultPriceUsdc}
+                      priceMicro={defaultPrice}
                       onUpdate={onDefaultsChange}
                       apiEndpoint={`/api/organizations/${orgId}/tenants/${tenantId}`}
-                      fieldName="default_price_usdc"
+                      fieldName="default_price"
                       label="Default Price"
                     />
-                    {defaultPriceUsdc === 0 && (
+                    {defaultPrice === 0 && (
                       <span className="rounded bg-green-900/50 px-1.5 py-0.5 text-[10px] font-medium text-green-400 border border-green-800">
                         Free
                       </span>
@@ -391,7 +391,7 @@ export function EndpointsTab({
         tenantId={tenantId}
         hasOpenApiSpec={hasOpenApiSpec}
         onSuccess={() => mutate()}
-        defaultPriceUsdc={defaultPriceUsdc}
+        defaultPrice={defaultPrice}
         defaultScheme={defaultScheme}
       />
 

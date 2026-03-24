@@ -243,7 +243,7 @@ components:
   schemas:
     Proxy:
       type: object
-      required: [id, name, default_price_usdc, default_scheme, tags, url]
+      required: [id, name, default_price, default_scheme, tags, url]
       properties:
         id:
           type: integer
@@ -252,9 +252,9 @@ components:
         org_slug:
           type: string
           nullable: true
-        default_price_usdc:
+        default_price:
           type: integer
-          description: Default price in micro-USDC
+          description: Default price in micro-units
         default_scheme:
           type: string
         tags:
@@ -285,10 +285,10 @@ components:
         description:
           type: string
           nullable: true
-        price_usdc:
+        price:
           type: integer
           nullable: true
-          description: Price in micro-USDC (null means proxy default applies)
+          description: Price in micro-units (null means proxy default applies)
         scheme:
           type: string
           nullable: true

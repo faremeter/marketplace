@@ -25,7 +25,7 @@ internalRoutes.post(
     const body = c.req.valid("json");
 
     // Business logic: paid transactions require tx_hash and network
-    if (body.amount_usdc > 0 && (!body.tx_hash || !body.network)) {
+    if (body.amount > 0 && (!body.tx_hash || !body.network)) {
       return c.json(
         { error: "Paid transactions require tx_hash and network" },
         400,
@@ -81,12 +81,14 @@ internalRoutes.post(
         tenant_id: tenant.id,
         organization_id: tenant.organization_id,
         endpoint_id: body.endpoint_id ?? null,
-        amount_usdc: body.amount_usdc,
+        amount: body.amount,
         network: body.network ?? null,
         request_path: body.request_path,
         client_ip: body.client_ip ?? null,
         request_method: body.request_method ?? null,
         metadata: (body.metadata as Record<string, unknown>) ?? null,
+        token_symbol: body.token_symbol ?? null,
+        mint_address: body.mint_address ?? null,
       });
 
       return c.json({ success: true });

@@ -195,14 +195,14 @@ function TenantRow({ tenant }: { tenant: Tenant }) {
         )}
       </td>
       <td
-        className={`px-4 py-3 text-right text-sm ${isLoading ? "text-gray-9" : getValueColor(analytics?.total_earned_usdc)}`}
+        className={`px-4 py-3 text-right text-sm ${isLoading ? "text-gray-9" : getValueColor(analytics?.total_earned)}`}
       >
-        {isLoading ? "..." : formatUSDC(analytics?.total_earned_usdc)}
+        {isLoading ? "..." : formatUSDC(analytics?.total_earned)}
       </td>
       <td
-        className={`px-4 py-3 text-right text-sm ${isLoading ? "text-gray-9" : getValueColor(analytics?.current_month_earned_usdc)}`}
+        className={`px-4 py-3 text-right text-sm ${isLoading ? "text-gray-9" : getValueColor(analytics?.current_month_earned)}`}
       >
-        {isLoading ? "..." : formatUSDC(analytics?.current_month_earned_usdc)}
+        {isLoading ? "..." : formatUSDC(analytics?.current_month_earned)}
       </td>
       <td
         className={`px-4 py-3 text-right text-sm ${isLoading ? "text-gray-9" : getChangeColor(analytics?.percent_change)}`}
@@ -314,14 +314,14 @@ function EndpointEarningsRow({
         </code>
       </td>
       <td
-        className={`py-3 ${isLoading ? "text-gray-9" : getValueColor(analytics?.total_earned_usdc)}`}
+        className={`py-3 ${isLoading ? "text-gray-9" : getValueColor(analytics?.total_earned)}`}
       >
-        {isLoading ? "..." : formatUSDC(analytics?.total_earned_usdc)}
+        {isLoading ? "..." : formatUSDC(analytics?.total_earned)}
       </td>
       <td
-        className={`py-3 ${isLoading ? "text-gray-9" : getValueColor(analytics?.current_month_earned_usdc)}`}
+        className={`py-3 ${isLoading ? "text-gray-9" : getValueColor(analytics?.current_month_earned)}`}
       >
-        {isLoading ? "..." : formatUSDC(analytics?.current_month_earned_usdc)}
+        {isLoading ? "..." : formatUSDC(analytics?.current_month_earned)}
       </td>
       <td
         className={`py-3 ${isLoading ? "text-gray-9" : getChangeColor(analytics?.percent_change)}`}
@@ -352,14 +352,14 @@ function CatchAllEarningsRow({ tenantId }: { tenantId: number }) {
         <span className="ml-2 text-xs text-gray-11">(catch-all)</span>
       </td>
       <td
-        className={`py-3 ${isLoading ? "text-gray-9" : getValueColor(analytics?.total_earned_usdc)}`}
+        className={`py-3 ${isLoading ? "text-gray-9" : getValueColor(analytics?.total_earned)}`}
       >
-        {isLoading ? "..." : formatUSDC(analytics?.total_earned_usdc)}
+        {isLoading ? "..." : formatUSDC(analytics?.total_earned)}
       </td>
       <td
-        className={`py-3 ${isLoading ? "text-gray-9" : getValueColor(analytics?.current_month_earned_usdc)}`}
+        className={`py-3 ${isLoading ? "text-gray-9" : getValueColor(analytics?.current_month_earned)}`}
       >
-        {isLoading ? "..." : formatUSDC(analytics?.current_month_earned_usdc)}
+        {isLoading ? "..." : formatUSDC(analytics?.current_month_earned)}
       </td>
       <td
         className={`py-3 ${isLoading ? "text-gray-9" : getChangeColor(analytics?.percent_change)}`}

@@ -311,9 +311,7 @@ export function CreateTenantDialog({
             ? parseInt(organizationId)
             : null,
         wallet_id: walletId,
-        default_price_usdc: Math.round(
-          (parseFloat(defaultPrice) || 0) * 1_000_000,
-        ),
+        default_price: Math.round((parseFloat(defaultPrice) || 0) * 1_000_000),
         default_scheme: defaultScheme,
         register_only: registerOnly,
         tags: tags.length > 0 ? tags : undefined,

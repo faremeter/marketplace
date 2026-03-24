@@ -65,7 +65,7 @@ async function createOrgMemberWithTenant(role: string) {
     .values({
       name: "org-tenant",
       backend_url: "http://backend.com",
-      default_price_usdc: 0.01,
+      default_price: 0.01,
       default_scheme: "exact",
       organization_id: org.id,
       org_slug: "test-org",
@@ -120,7 +120,7 @@ await t.test("GET /api/tenants", async (t) => {
       .values({
         name: "tenant1",
         backend_url: "http://backend1.com",
-        default_price_usdc: 0.01,
+        default_price: 0.01,
         default_scheme: "exact",
       })
       .execute();
@@ -130,7 +130,7 @@ await t.test("GET /api/tenants", async (t) => {
       .values({
         name: "tenant2",
         backend_url: "http://backend2.com",
-        default_price_usdc: 0.02,
+        default_price: 0.02,
         default_scheme: "prefix",
       })
       .execute();
@@ -162,7 +162,7 @@ await t.test("GET /api/tenants/:id", async (t) => {
       .values({
         name: "my-tenant",
         backend_url: "http://backend.com",
-        default_price_usdc: 0.05,
+        default_price: 0.05,
         default_scheme: "exact",
       })
       .returning("id")
@@ -200,7 +200,7 @@ await t.test("POST /api/tenants", async (t) => {
     const data = (await res.json()) as any;
     t.equal(data.name, "new-tenant");
     t.equal(data.backend_url, "http://new-backend.com");
-    t.equal(data.default_price_usdc, 0);
+    t.equal(data.default_price, 0);
     t.equal(data.default_scheme, "exact");
   });
 
@@ -216,7 +216,7 @@ await t.test("POST /api/tenants", async (t) => {
       body: JSON.stringify({
         name: "full-tenant",
         backend_url: "http://full-backend.com",
-        default_price_usdc: 0.1,
+        default_price: 0.1,
         default_scheme: "exact",
         upstream_auth_header: "X-API-Key",
         upstream_auth_value: "secret123",
@@ -226,7 +226,7 @@ await t.test("POST /api/tenants", async (t) => {
     t.equal(res.status, 201);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const data = (await res.json()) as any;
-    t.equal(data.default_price_usdc, 0.1);
+    t.equal(data.default_price, 0.1);
     t.equal(data.default_scheme, "exact");
     t.equal(data.upstream_auth_header, "X-API-Key");
   });
@@ -435,7 +435,7 @@ await t.test("PUT /api/tenants/:id", async (t) => {
       .values({
         name: "old-name",
         backend_url: "http://old.com",
-        default_price_usdc: 0.01,
+        default_price: 0.01,
         default_scheme: "exact",
         status: "active",
       })
@@ -451,7 +451,7 @@ await t.test("PUT /api/tenants/:id", async (t) => {
       body: JSON.stringify({
         name: "new-name",
         backend_url: "http://new.com",
-        default_price_usdc: 0.05,
+        default_price: 0.05,
       }),
     });
 
@@ -460,7 +460,7 @@ await t.test("PUT /api/tenants/:id", async (t) => {
     const data = (await res.json()) as any;
     t.equal(data.name, "new-name");
     t.equal(data.backend_url, "http://new.com");
-    t.equal(data.default_price_usdc, 0.05);
+    t.equal(data.default_price, 0.05);
   });
 
   await t.test("rejects update when status is not active", async (t) => {
@@ -471,7 +471,7 @@ await t.test("PUT /api/tenants/:id", async (t) => {
       .values({
         name: "pending-tenant",
         backend_url: "http://backend.com",
-        default_price_usdc: 0.01,
+        default_price: 0.01,
         default_scheme: "exact",
         status: "pending",
       })
@@ -501,7 +501,7 @@ await t.test("PUT /api/tenants/:id", async (t) => {
       .values({
         name: "registered-tenant",
         backend_url: "http://backend.com",
-        default_price_usdc: 0.01,
+        default_price: 0.01,
         default_scheme: "exact",
         status: "registered",
       })
@@ -544,7 +544,7 @@ await t.test("DELETE /api/tenants/:id", async (t) => {
       .values({
         name: "to-delete",
         backend_url: "http://delete.com",
-        default_price_usdc: 0.01,
+        default_price: 0.01,
         default_scheme: "exact",
       })
       .returning("id")
@@ -576,7 +576,7 @@ await t.test("DELETE /api/tenants/:id", async (t) => {
       .values({
         name: "tenant-with-txns",
         backend_url: "http://backend.com",
-        default_price_usdc: 0.01,
+        default_price: 0.01,
         default_scheme: "exact",
       })
       .returning("id")
@@ -587,13 +587,13 @@ await t.test("DELETE /api/tenants/:id", async (t) => {
       .values([
         {
           tenant_id: tenant.id,
-          amount_usdc: 0.01,
+          amount: 0.01,
           ngx_request_id: "req-1",
           request_path: "/test",
         },
         {
           tenant_id: tenant.id,
-          amount_usdc: 0.02,
+          amount: 0.02,
           ngx_request_id: "req-2",
           request_path: "/test2",
         },
@@ -630,7 +630,7 @@ await t.test("DELETE /api/tenants/:id", async (t) => {
       .values({
         name: "tenant-with-endpoints",
         backend_url: "http://backend.com",
-        default_price_usdc: 0.01,
+        default_price: 0.01,
         default_scheme: "exact",
       })
       .returning("id")
@@ -642,12 +642,12 @@ await t.test("DELETE /api/tenants/:id", async (t) => {
         {
           tenant_id: tenant.id,
           path_pattern: "/api/v1/*",
-          price_usdc: 0.01,
+          price: 0.01,
         },
         {
           tenant_id: tenant.id,
           path_pattern: "/api/v2/*",
-          price_usdc: 0.02,
+          price: 0.02,
         },
       ])
       .execute();
@@ -682,7 +682,7 @@ await t.test("DELETE /api/tenants/:id", async (t) => {
       .values({
         name: "tenant-to-delete",
         backend_url: "http://backend1.com",
-        default_price_usdc: 0.01,
+        default_price: 0.01,
         default_scheme: "exact",
       })
       .returning("id")
@@ -693,7 +693,7 @@ await t.test("DELETE /api/tenants/:id", async (t) => {
       .values({
         name: "tenant-to-keep",
         backend_url: "http://backend2.com",
-        default_price_usdc: 0.01,
+        default_price: 0.01,
         default_scheme: "exact",
       })
       .returning("id")
@@ -704,13 +704,13 @@ await t.test("DELETE /api/tenants/:id", async (t) => {
       .values([
         {
           tenant_id: tenant1.id,
-          amount_usdc: 0.01,
+          amount: 0.01,
           ngx_request_id: "req-delete",
           request_path: "/delete",
         },
         {
           tenant_id: tenant2.id,
-          amount_usdc: 0.02,
+          amount: 0.02,
           ngx_request_id: "req-keep",
           request_path: "/keep",
         },
@@ -723,12 +723,12 @@ await t.test("DELETE /api/tenants/:id", async (t) => {
         {
           tenant_id: tenant1.id,
           path_pattern: "/delete/*",
-          price_usdc: 0.01,
+          price: 0.01,
         },
         {
           tenant_id: tenant2.id,
           path_pattern: "/keep/*",
-          price_usdc: 0.02,
+          price: 0.02,
         },
       ])
       .execute();
@@ -770,7 +770,7 @@ await t.test("DELETE /api/tenants/:id", async (t) => {
       .values({
         name: "empty-tenant",
         backend_url: "http://backend.com",
-        default_price_usdc: 0.01,
+        default_price: 0.01,
         default_scheme: "exact",
       })
       .returning("id")
@@ -795,7 +795,7 @@ await t.test("DELETE /api/tenants/:id", async (t) => {
       .values({
         name: "tenant-many-records",
         backend_url: "http://backend.com",
-        default_price_usdc: 0.01,
+        default_price: 0.01,
         default_scheme: "exact",
       })
       .returning("id")
@@ -803,7 +803,7 @@ await t.test("DELETE /api/tenants/:id", async (t) => {
 
     const txnValues = Array.from({ length: 50 }, (_, i) => ({
       tenant_id: tenant.id,
-      amount_usdc: 0.01,
+      amount: 0.01,
       ngx_request_id: `req-${i}`,
       request_path: `/path-${i}`,
     }));
@@ -812,7 +812,7 @@ await t.test("DELETE /api/tenants/:id", async (t) => {
     const endpointValues = Array.from({ length: 20 }, (_, i) => ({
       tenant_id: tenant.id,
       path_pattern: `/api/v${i}/*`,
-      price_usdc: 0.01,
+      price: 0.01,
     }));
     await db.insertInto("endpoints").values(endpointValues).execute();
 
@@ -858,7 +858,7 @@ await t.test("GET /api/tenants/:id/nodes", async (t) => {
       .values({
         name: "no-nodes",
         backend_url: "http://backend.com",
-        default_price_usdc: 0.01,
+        default_price: 0.01,
         default_scheme: "exact",
       })
       .returning("id")
@@ -882,7 +882,7 @@ await t.test("GET /api/tenants/:id/nodes", async (t) => {
       .values({
         name: "has-nodes",
         backend_url: "http://backend.com",
-        default_price_usdc: 0.01,
+        default_price: 0.01,
         default_scheme: "exact",
       })
       .returning("id")
@@ -959,7 +959,7 @@ await t.test("POST /api/tenants/:id/nodes", async (t) => {
       .values({
         name: "test-tenant",
         backend_url: "http://backend.com",
-        default_price_usdc: 0.01,
+        default_price: 0.01,
         default_scheme: "exact",
       })
       .returning("id")
@@ -988,7 +988,7 @@ await t.test("POST /api/tenants/:id/nodes", async (t) => {
       .values({
         name: "test-tenant",
         backend_url: "http://backend.com",
-        default_price_usdc: 0.01,
+        default_price: 0.01,
         default_scheme: "exact",
       })
       .returning("id")
@@ -1027,7 +1027,7 @@ await t.test("POST /api/tenants/:id/nodes", async (t) => {
       .values({
         name: "test-tenant",
         backend_url: "http://backend.com",
-        default_price_usdc: 0.01,
+        default_price: 0.01,
         default_scheme: "exact",
       })
       .returning("id")
@@ -1078,7 +1078,7 @@ await t.test("POST /api/tenants/:id/nodes", async (t) => {
         .values({
           name: "test-tenant",
           backend_url: "http://backend.com",
-          default_price_usdc: 0.01,
+          default_price: 0.01,
           default_scheme: "exact",
         })
         .returning("id")
@@ -1121,7 +1121,7 @@ await t.test("POST /api/tenants/:id/nodes", async (t) => {
       .values({
         name: "test-tenant",
         backend_url: "http://backend.com",
-        default_price_usdc: 0.01,
+        default_price: 0.01,
         default_scheme: "exact",
       })
       .returning("id")
@@ -1163,7 +1163,7 @@ await t.test("POST /api/tenants/:id/nodes", async (t) => {
         .values({
           name: "test-tenant",
           backend_url: "http://backend.com",
-          default_price_usdc: 0.01,
+          default_price: 0.01,
           default_scheme: "exact",
         })
         .returning("id")
@@ -1340,7 +1340,7 @@ await t.test("handles invalid/NaN IDs", async (t) => {
         .values({
           name: "test-tenant",
           backend_url: "http://backend.com",
-          default_price_usdc: 0.01,
+          default_price: 0.01,
           default_scheme: "exact",
         })
         .returning("id")
@@ -1383,7 +1383,7 @@ await t.test("DELETE /api/tenants/:id/nodes/:nodeId", async (t) => {
       .values({
         name: "tenant-x",
         backend_url: "http://backend.com",
-        default_price_usdc: 0.01,
+        default_price: 0.01,
         default_scheme: "exact",
       })
       .returning("id")
@@ -1405,7 +1405,7 @@ await t.test("DELETE /api/tenants/:id/nodes/:nodeId", async (t) => {
       .values({
         name: "remove-node",
         backend_url: "http://backend.com",
-        default_price_usdc: 0.01,
+        default_price: 0.01,
         default_scheme: "exact",
       })
       .returning("id")
@@ -1461,7 +1461,7 @@ await t.test("DELETE /api/tenants/:id/nodes/:nodeId", async (t) => {
       .values({
         name: "single-node-tenant",
         backend_url: "http://backend.com",
-        default_price_usdc: 0.01,
+        default_price: 0.01,
         default_scheme: "exact",
       })
       .returning("id")
@@ -1518,7 +1518,7 @@ await t.test("DELETE /api/tenants/:id/nodes/:nodeId", async (t) => {
         .values({
           name: "multi-node-tenant",
           backend_url: "http://backend.com",
-          default_price_usdc: 0.01,
+          default_price: 0.01,
           default_scheme: "exact",
         })
         .returning("id")

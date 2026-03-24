@@ -965,7 +965,7 @@ await t.test("DELETE /api/wallets/:id", async (t) => {
         backend_url: "http://backend.com",
         organization_id: org.id,
         wallet_id: wallet.id,
-        default_price_usdc: 0.01,
+        default_price: 0.01,
         default_scheme: "exact",
       })
       .execute();

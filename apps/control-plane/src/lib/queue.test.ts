@@ -91,7 +91,7 @@ await t.test("enqueueBalanceCheck", async (t) => {
           backend_url: "http://backend.com",
           organization_id: org.id,
           wallet_id: wallet.id,
-          default_price_usdc: 0.01,
+          default_price: 0.01,
           default_scheme: "exact",
           status: "pending",
         })
@@ -182,7 +182,7 @@ await t.test("enqueueBalanceCheck", async (t) => {
         backend_url: "http://backend1.com",
         organization_id: org.id,
         wallet_id: wallet.id,
-        default_price_usdc: 0.01,
+        default_price: 0.01,
         default_scheme: "exact",
         status: "pending",
       })
@@ -196,7 +196,7 @@ await t.test("enqueueBalanceCheck", async (t) => {
         backend_url: "http://backend2.com",
         organization_id: org.id,
         wallet_id: wallet.id,
-        default_price_usdc: 0.02,
+        default_price: 0.02,
         default_scheme: "exact",
         status: "pending",
       })
@@ -247,7 +247,7 @@ await t.test("checkAndUpdateTenantStatus", async (t) => {
           backend_url: "http://backend.com",
           organization_id: org.id,
           wallet_id: wallet.id,
-          default_price_usdc: 0.01,
+          default_price: 0.01,
           default_scheme: "exact",
           status: "pending",
         })
@@ -288,7 +288,7 @@ await t.test("checkAndUpdateTenantStatus", async (t) => {
         backend_url: "http://backend.com",
         organization_id: org.id,
         wallet_id: wallet.id,
-        default_price_usdc: 0.01,
+        default_price: 0.01,
         default_scheme: "exact",
         status: "pending",
       })
@@ -327,7 +327,7 @@ await t.test("checkAndUpdateTenantStatus", async (t) => {
         backend_url: "http://backend.com",
         organization_id: org.id,
         wallet_id: wallet.id,
-        default_price_usdc: 0.01,
+        default_price: 0.01,
         default_scheme: "exact",
         status: "pending",
       })
@@ -366,7 +366,7 @@ await t.test("checkAndUpdateTenantStatus", async (t) => {
         backend_url: "http://backend.com",
         organization_id: org.id,
         wallet_id: wallet.id,
-        default_price_usdc: 0.01,
+        default_price: 0.01,
         default_scheme: "exact",
         status: "active",
         is_active: true,
@@ -396,7 +396,7 @@ await t.test("checkAndUpdateTenantStatus", async (t) => {
         backend_url: "http://backend.com",
         organization_id: org.id,
         wallet_id: null,
-        default_price_usdc: 0.01,
+        default_price: 0.01,
         default_scheme: "exact",
         status: "pending",
       })
@@ -436,7 +436,7 @@ await t.test("checkAndUpdateTenantStatus", async (t) => {
         backend_url: "http://backend.com",
         organization_id: org.id,
         wallet_id: wallet.id,
-        default_price_usdc: 0.01,
+        default_price: 0.01,
         default_scheme: "exact",
         status: "registered",
       })
@@ -477,7 +477,7 @@ await t.test("checkAndUpdateTenantStatus", async (t) => {
         backend_url: "http://backend.com",
         organization_id: org.id,
         wallet_id: wallet.id,
-        default_price_usdc: 0.01,
+        default_price: 0.01,
         default_scheme: "exact",
         status: "pending",
       })

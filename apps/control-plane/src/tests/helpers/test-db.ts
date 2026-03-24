@@ -105,7 +105,7 @@ export async function createTestTenant(
     name: string;
     backend_url: string;
     status: string;
-    default_price_usdc: number;
+    default_price: number;
     default_scheme: string;
   }> = {},
 ) {
@@ -117,7 +117,7 @@ export async function createTestTenant(
       organization_id: orgId,
       wallet_id: walletId,
       status: overrides.status ?? "active",
-      default_price_usdc: overrides.default_price_usdc ?? 0.01,
+      default_price: overrides.default_price ?? 0.01,
       default_scheme: overrides.default_scheme ?? "exact",
     })
     .returning("id")

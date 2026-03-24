@@ -9,8 +9,8 @@ export const MAX_AUTH_VALUE_LENGTH = 2048;
 export const MAX_PATH_LENGTH = 2048;
 export const MAX_IP_LENGTH = 45;
 export const MAX_PUBKEY_LENGTH = 256;
-export const MIN_PRICE_USDC = 1; // $0.000001 in micro-USDC (minimum non-free price)
-export const MAX_PRICE_USDC = 100000000; // $100 in micro-USDC
+export const MIN_PRICE = 1; // $0.000001 in micro-units (minimum non-free price)
+export const MAX_PRICE = 100000000; // $100 in micro-units
 export const MAX_PRIORITY = 10000;
 export const MAX_TAGS = 5;
 export const MAX_TAG_LENGTH = 50;
@@ -58,7 +58,7 @@ const backendUrlType = type(
 export const CreateEndpointSchema = type({
   path: "string > 0",
   "path_pattern?": "string",
-  "price_usdc?": `0 <= number <= ${MAX_PRICE_USDC} | null`,
+  "price?": `0 <= number <= ${MAX_PRICE} | null`,
   "scheme?": "'exact' | 'flex' | null",
   "description?": `string <= ${MAX_DESCRIPTION_LENGTH} | null`,
   "priority?": `0 <= number <= ${MAX_PRIORITY}`,
@@ -68,7 +68,7 @@ export const CreateEndpointSchema = type({
 
 export const UpdateEndpointSchema = type({
   "path?": "string > 0",
-  "price_usdc?": `0 <= number <= ${MAX_PRICE_USDC} | null`,
+  "price?": `0 <= number <= ${MAX_PRICE} | null`,
   "scheme?": "'exact' | 'flex' | null",
   "description?": `string <= ${MAX_DESCRIPTION_LENGTH} | null`,
   "priority?": `0 <= number <= ${MAX_PRIORITY}`,
@@ -81,7 +81,7 @@ export const CreateTenantSchema = type({
   name: "string > 0",
   backend_url: backendUrlType,
   "wallet_id?": "number | null",
-  "default_price_usdc?": `0 <= number <= ${MAX_PRICE_USDC}`,
+  "default_price?": `0 <= number <= ${MAX_PRICE}`,
   "default_scheme?": "'exact' | 'flex' | null",
   "upstream_auth_header?": `string <= ${MAX_AUTH_HEADER_LENGTH} | null`,
   "upstream_auth_value?": `string <= ${MAX_AUTH_VALUE_LENGTH} | null`,
@@ -96,7 +96,7 @@ export const UpdateTenantSchema = type({
   "backend_url?": backendUrlType.or(type("null")),
   "organization_id?": "number | null",
   "wallet_id?": "number | null",
-  "default_price_usdc?": `0 <= number <= ${MAX_PRICE_USDC}`,
+  "default_price?": `0 <= number <= ${MAX_PRICE}`,
   "default_scheme?": "'exact' | 'flex' | null",
   "upstream_auth_header?": `string <= ${MAX_AUTH_HEADER_LENGTH} | null`,
   "upstream_auth_value?": `string <= ${MAX_AUTH_VALUE_LENGTH} | null`,
@@ -136,7 +136,7 @@ export const OrgCreateTenantSchema = type({
   name: "string > 0",
   backend_url: backendUrlType,
   "wallet_id?": "number | null",
-  "default_price_usdc?": `0 <= number <= ${MAX_PRICE_USDC}`,
+  "default_price?": `0 <= number <= ${MAX_PRICE}`,
   "default_scheme?": "'exact' | 'flex' | null",
   "upstream_auth_header?": `string <= ${MAX_AUTH_HEADER_LENGTH} | null`,
   "upstream_auth_value?": `string <= ${MAX_AUTH_VALUE_LENGTH} | null`,
@@ -147,7 +147,7 @@ export const OrgUpdateTenantSchema = type({
   "name?": "string > 0",
   "backend_url?": backendUrlType.or(type("null")),
   "wallet_id?": "number | null",
-  "default_price_usdc?": `0 <= number <= ${MAX_PRICE_USDC}`,
+  "default_price?": `0 <= number <= ${MAX_PRICE}`,
   "default_scheme?": "'exact' | 'flex' | null",
   "upstream_auth_header?": `string <= ${MAX_AUTH_HEADER_LENGTH} | null`,
   "upstream_auth_value?": `string <= ${MAX_AUTH_VALUE_LENGTH} | null`,
@@ -170,7 +170,7 @@ export const AdminCreateTenantSchema = type({
   "organization_id?": "number | null",
   "node_id?": "number | null",
   "node_ids?": "number[]",
-  "default_price_usdc?": `0 <= number <= ${MAX_PRICE_USDC}`,
+  "default_price?": `0 <= number <= ${MAX_PRICE}`,
   "default_scheme?": "'exact' | 'flex' | null",
   "upstream_auth_header?": `string <= ${MAX_AUTH_HEADER_LENGTH} | null`,
   "upstream_auth_value?": `string <= ${MAX_AUTH_VALUE_LENGTH} | null`,
@@ -205,7 +205,7 @@ export const AdminUpdateTenantSchema = type({
 
 export const AdminUpdateEndpointSchema = type({
   "path?": `string <= ${MAX_PATH_LENGTH}`,
-  "price_usdc?": `0 <= number <= ${MAX_PRICE_USDC} | null`,
+  "price?": `0 <= number <= ${MAX_PRICE} | null`,
   "scheme?": "'exact' | 'flex' | null",
   "description?": `string <= ${MAX_DESCRIPTION_LENGTH} | null`,
   "priority?": `0 <= number <= ${MAX_PRIORITY}`,
@@ -306,9 +306,11 @@ export const InternalTransactionSchema = type({
   tenant_name: `string > 0 & string <= ${MAX_SLUG_LENGTH}`,
   "org_slug?": `string <= ${MAX_SLUG_LENGTH} | null`,
   "endpoint_id?": "number | null",
-  amount_usdc: "number >= 0",
+  amount: "number >= 0",
   "tx_hash?": `string <= ${MAX_NAME_LENGTH} | null`,
   "network?": "string <= 50 | null",
+  "token_symbol?": "string <= 20 | null",
+  "mint_address?": "string <= 100 | null",
   request_path: `string > 0 & string <= ${MAX_PATH_LENGTH}`,
   "client_ip?": `string <= ${MAX_IP_LENGTH} | null`,
   "request_method?": "string <= 10 | null",
@@ -324,7 +326,7 @@ export const OpenApiImportSchema = type({
 });
 
 export const OpenApiExtensionsSchema = type({
-  "price_usdc?": `0 <= number <= ${MAX_PRICE_USDC} | null`,
+  "price?": `0 <= number <= ${MAX_PRICE} | null`,
   "scheme?": "'exact' | 'flex' | null",
   "tags?": tagsArrayType,
 });

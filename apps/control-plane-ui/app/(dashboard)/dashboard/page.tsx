@@ -36,7 +36,7 @@ import { GoLiveButton } from "@/components/shared/go-live-button";
 
 interface DailyCallData {
   period: string;
-  total_usdc: number;
+  total: number;
   call_count: number;
 }
 
@@ -130,7 +130,7 @@ export default function DashboardPage() {
   const revenueChartData = useMemo(() => {
     const dataMap = new Map<string, number>();
     if (dailyData && Array.isArray(dailyData)) {
-      dailyData.forEach((d) => dataMap.set(d.period, d.total_usdc));
+      dailyData.forEach((d) => dataMap.set(d.period, d.total));
     }
     const result = [];
     const today = new Date();
@@ -168,13 +168,13 @@ export default function DashboardPage() {
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <StatCard
               title="Total Earned"
-              value={formatUSDC(analytics?.total_earned_usdc)}
+              value={formatUSDC(analytics?.total_earned)}
               isText
-              valueColor={getValueColor(analytics?.total_earned_usdc)}
+              valueColor={getValueColor(analytics?.total_earned)}
             />
             <EarningsCard
               title="This Month"
-              value={analytics?.current_month_earned_usdc}
+              value={analytics?.current_month_earned}
               percentChange={analytics?.percent_change}
             />
             <StatCard title="Total Proxies" value={tenantStats.total} />
@@ -473,13 +473,12 @@ function TenantEarningsTable({
           comparison = a.name.localeCompare(b.name);
           break;
         case "total_earned":
-          comparison =
-            (aData?.total_earned_usdc ?? 0) - (bData?.total_earned_usdc ?? 0);
+          comparison = (aData?.total_earned ?? 0) - (bData?.total_earned ?? 0);
           break;
         case "this_month":
           comparison =
-            (aData?.current_month_earned_usdc ?? 0) -
-            (bData?.current_month_earned_usdc ?? 0);
+            (aData?.current_month_earned ?? 0) -
+            (bData?.current_month_earned ?? 0);
           break;
         case "change":
           comparison =
@@ -596,14 +595,14 @@ function TenantEarningsRow({
         </Link>
       </td>
       <td
-        className={`py-3 ${isLoading ? "text-gray-9" : getValueColor(analytics?.total_earned_usdc)}`}
+        className={`py-3 ${isLoading ? "text-gray-9" : getValueColor(analytics?.total_earned)}`}
       >
-        {isLoading ? "..." : formatUSDC(analytics?.total_earned_usdc)}
+        {isLoading ? "..." : formatUSDC(analytics?.total_earned)}
       </td>
       <td
-        className={`py-3 ${isLoading ? "text-gray-9" : getValueColor(analytics?.current_month_earned_usdc)}`}
+        className={`py-3 ${isLoading ? "text-gray-9" : getValueColor(analytics?.current_month_earned)}`}
       >
-        {isLoading ? "..." : formatUSDC(analytics?.current_month_earned_usdc)}
+        {isLoading ? "..." : formatUSDC(analytics?.current_month_earned)}
       </td>
       <td
         className={`py-3 ${isLoading ? "text-gray-9" : getChangeColor(analytics?.percent_change)}`}
@@ -730,14 +729,14 @@ function EndpointEarningsRow({
         </code>
       </td>
       <td
-        className={`py-3 ${isLoading ? "text-gray-9" : getValueColor(analytics?.total_earned_usdc)}`}
+        className={`py-3 ${isLoading ? "text-gray-9" : getValueColor(analytics?.total_earned)}`}
       >
-        {isLoading ? "..." : formatUSDC(analytics?.total_earned_usdc)}
+        {isLoading ? "..." : formatUSDC(analytics?.total_earned)}
       </td>
       <td
-        className={`py-3 ${isLoading ? "text-gray-9" : getValueColor(analytics?.current_month_earned_usdc)}`}
+        className={`py-3 ${isLoading ? "text-gray-9" : getValueColor(analytics?.current_month_earned)}`}
       >
-        {isLoading ? "..." : formatUSDC(analytics?.current_month_earned_usdc)}
+        {isLoading ? "..." : formatUSDC(analytics?.current_month_earned)}
       </td>
       <td
         className={`py-3 ${isLoading ? "text-gray-9" : getChangeColor(analytics?.percent_change)}`}
@@ -774,14 +773,14 @@ function CatchAllEarningsRow({
         <span className="ml-2 text-xs text-gray-11">(catch-all)</span>
       </td>
       <td
-        className={`py-3 ${isLoading ? "text-gray-9" : getValueColor(analytics?.total_earned_usdc)}`}
+        className={`py-3 ${isLoading ? "text-gray-9" : getValueColor(analytics?.total_earned)}`}
       >
-        {isLoading ? "..." : formatUSDC(analytics?.total_earned_usdc)}
+        {isLoading ? "..." : formatUSDC(analytics?.total_earned)}
       </td>
       <td
-        className={`py-3 ${isLoading ? "text-gray-9" : getValueColor(analytics?.current_month_earned_usdc)}`}
+        className={`py-3 ${isLoading ? "text-gray-9" : getValueColor(analytics?.current_month_earned)}`}
       >
-        {isLoading ? "..." : formatUSDC(analytics?.current_month_earned_usdc)}
+        {isLoading ? "..." : formatUSDC(analytics?.current_month_earned)}
       </td>
       <td
         className={`py-3 ${isLoading ? "text-gray-9" : getChangeColor(analytics?.percent_change)}`}

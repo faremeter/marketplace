@@ -1,9 +1,9 @@
 import { type } from "arktype";
 
-export const MIN_PRICE_USDC = 1; // $0.000001 in micro-USDC
-export const MAX_PRICE_USDC = 100_000_000; // $100 in micro-USDC
-export const MIN_PRICE_USD = MIN_PRICE_USDC / 1_000_000; // $0.000001
-export const MAX_PRICE_USD = MAX_PRICE_USDC / 1_000_000; // $100
+export const MIN_PRICE = 1; // $0.000001 in micro-units
+export const MAX_PRICE = 100_000_000; // $100 in micro-units
+export const MIN_PRICE_USD = MIN_PRICE / 1_000_000; // $0.000001
+export const MAX_PRICE_USD = MAX_PRICE / 1_000_000; // $100
 
 export const MAX_TAGS = 5;
 export const MAX_TAG_LENGTH = 50;
@@ -25,7 +25,7 @@ export const TenantSchema = type({
   name: "string",
   backend_url: "string",
   "wallet_id?": "number | null",
-  default_price_usdc: "number",
+  default_price: "number",
   default_scheme: "string",
   "upstream_auth_header?": "string | null",
   "upstream_auth_value?": "string | null",
@@ -53,7 +53,7 @@ export const EndpointSchema = type({
   id: "number",
   tenant_id: "number",
   path_pattern: "string",
-  "price_usdc?": "number | null",
+  "price?": "number | null",
   "scheme?": "string | null",
   "description?": "string | null",
   priority: "number",
@@ -69,7 +69,7 @@ export const TransactionSchema = type({
   id: "number",
   "endpoint_id?": "number | null",
   tenant_id: "number",
-  amount_usdc: "number",
+  amount: "number",
   tx_hash: "string",
   network: "string",
   request_path: "string",

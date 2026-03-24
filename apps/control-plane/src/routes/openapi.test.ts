@@ -53,7 +53,7 @@ async function createTenant(orgId: number, name: string) {
       name,
       organization_id: orgId,
       backend_url: "http://backend.example.com",
-      default_price_usdc: 0.01,
+      default_price: 0.01,
       default_scheme: "exact",
     })
     .returning(["id"])
@@ -1126,24 +1126,21 @@ await t.test("x-402 export extensions", async (t) => {
 
       await db
         .updateTable("endpoints")
-        .set({ price_usdc: 500, scheme: "exact" })
+        .set({ price: 500, scheme: "exact" })
         .where("tenant_id", "=", tenant.id)
         .where("path", "=", "/api/users")
         .execute();
 
       await db
         .updateTable("endpoints")
-        .set({ price_usdc: 0, scheme: "exact" })
+        .set({ price: 0, scheme: "exact" })
         .where("tenant_id", "=", tenant.id)
         .where("path", "=", "/api/posts")
         .execute();
 
       const { data } = await exportSpec(tenant.id, user.token);
 
-      t.equal(
-        data.spec.paths["/api/users"]["x-corbits-pricing"].price_usdc,
-        500,
-      );
+      t.equal(data.spec.paths["/api/users"]["x-corbits-pricing"].price, 500);
       t.equal(
         data.spec.paths["/api/users"]["x-corbits-pricing"].scheme,
         "exact",
@@ -1153,7 +1150,7 @@ await t.test("x-402 export extensions", async (t) => {
         "endpoint_id should not be exported",
       );
 
-      t.equal(data.spec.paths["/api/posts"]["x-corbits-pricing"].price_usdc, 0);
+      t.equal(data.spec.paths["/api/posts"]["x-corbits-pricing"].price, 0);
       t.equal(
         data.spec.paths["/api/posts"]["x-corbits-pricing"].scheme,
         "exact",
@@ -1221,10 +1218,7 @@ await t.test("x-402 export extensions", async (t) => {
 
       const { data } = await exportSpec(tenant.id, user.token);
 
-      t.equal(
-        data.spec.paths["/api/users"]["x-corbits-pricing"].price_usdc,
-        0.01,
-      );
+      t.equal(data.spec.paths["/api/users"]["x-corbits-pricing"].price, 0.01);
       t.equal(
         data.spec.paths["/api/users"]["x-corbits-pricing"].scheme,
         "exact",
@@ -1245,7 +1239,7 @@ await t.test("x-402 export extensions", async (t) => {
           path_pattern: "^/manual/endpoint$",
           priority: 1,
           is_active: true,
-          price_usdc: 250,
+          price: 250,
           scheme: "exact",
           tags: ["internal"],
         })
@@ -1256,7 +1250,7 @@ await t.test("x-402 export extensions", async (t) => {
       const orphanPath = data.spec.paths["/manual/endpoint"];
       t.ok(orphanPath, "orphan path should exist");
       t.equal(orphanPath["x-corbits-orphan"], true);
-      t.equal(orphanPath["x-corbits-pricing"].price_usdc, 250);
+      t.equal(orphanPath["x-corbits-pricing"].price, 250);
       t.equal(orphanPath["x-corbits-pricing"].scheme, "exact");
       t.same(orphanPath["x-corbits-tags"], ["internal"]);
     },
@@ -1272,7 +1266,7 @@ await t.test("x-402 import extensions", async (t) => {
       const spec = makeSpec({
         "/api/users": {
           get: { summary: "List users" },
-          "x-corbits-pricing": { price_usdc: 500, scheme: "exact" },
+          "x-corbits-pricing": { price: 500, scheme: "exact" },
         },
       });
 
@@ -1286,7 +1280,7 @@ await t.test("x-402 import extensions", async (t) => {
         .where("path", "=", "/api/users")
         .executeTakeFirstOrThrow();
 
-      t.equal(endpoint.price_usdc, 500);
+      t.equal(endpoint.price, 500);
       t.equal(endpoint.scheme, "exact");
     },
   );
@@ -1318,14 +1312,14 @@ await t.test("x-402 import extensions", async (t) => {
   );
 
   await t.test(
-    "ignores x-corbits-pricing with out-of-range price_usdc",
+    "ignores x-corbits-pricing with out-of-range price",
     async (t) => {
       const { user, tenant } = await setupTenant();
 
       const spec = makeSpec({
         "/api/users": {
           get: {},
-          "x-corbits-pricing": { price_usdc: 999999999 },
+          "x-corbits-pricing": { price: 999999999 },
         },
       });
 
@@ -1340,7 +1334,7 @@ await t.test("x-402 import extensions", async (t) => {
         .executeTakeFirstOrThrow();
 
       t.equal(
-        endpoint.price_usdc,
+        endpoint.price,
         null,
         "out-of-range price should fall back to null",
       );
@@ -1353,7 +1347,7 @@ await t.test("x-402 import extensions", async (t) => {
     const spec = makeSpec({
       "/api/users": {
         get: {},
-        "x-corbits-pricing": { price_usdc: 100, scheme: "bogus" },
+        "x-corbits-pricing": { price: 100, scheme: "bogus" },
       },
     });
 
@@ -1368,7 +1362,7 @@ await t.test("x-402 import extensions", async (t) => {
       .executeTakeFirstOrThrow();
 
     t.equal(
-      endpoint.price_usdc,
+      endpoint.price,
       null,
       "invalid scheme should invalidate all extensions",
     );
@@ -1404,7 +1398,7 @@ await t.test("x-402 import extensions", async (t) => {
     const spec = makeSpec({
       "/api/users": {
         get: {},
-        "x-corbits-pricing": { price_usdc: -5 },
+        "x-corbits-pricing": { price: -5 },
       },
     });
 
@@ -1418,11 +1412,7 @@ await t.test("x-402 import extensions", async (t) => {
       .where("path", "=", "/api/users")
       .executeTakeFirstOrThrow();
 
-    t.equal(
-      endpoint.price_usdc,
-      null,
-      "negative price should fall back to null",
-    );
+    t.equal(endpoint.price, null, "negative price should fall back to null");
   });
 });
 
@@ -1446,7 +1436,7 @@ await t.test("x-402 round-trip and deduplication", async (t) => {
       await db
         .updateTable("endpoints")
         .set({
-          price_usdc: 750,
+          price: 750,
           scheme: "exact",
           tags: ["premium"],
         })
@@ -1457,7 +1447,7 @@ await t.test("x-402 round-trip and deduplication", async (t) => {
       await db
         .updateTable("endpoints")
         .set({
-          price_usdc: 0,
+          price: 0,
           scheme: "exact",
           tags: ["free", "public"],
         })
@@ -1493,12 +1483,12 @@ await t.test("x-402 round-trip and deduplication", async (t) => {
       const postsEp = endpoints.find((e) => e.path === "/api/posts") as any;
 
       t.ok(usersEp);
-      t.equal(usersEp.price_usdc, 750);
+      t.equal(usersEp.price, 750);
       t.equal(usersEp.scheme, "exact");
       t.same(usersEp.tags, ["premium"]);
 
       t.ok(postsEp);
-      t.equal(postsEp.price_usdc, 0);
+      t.equal(postsEp.price, 0);
       t.equal(postsEp.scheme, "exact");
       t.same(postsEp.tags, ["free", "public"]);
     },
@@ -1530,12 +1520,12 @@ await t.test("x-402 round-trip and deduplication", async (t) => {
       const specWithExtensions = makeSpec({
         "/api/users": {
           get: { summary: "List users" },
-          "x-corbits-pricing": { price_usdc: 1000, scheme: "exact" },
+          "x-corbits-pricing": { price: 1000, scheme: "exact" },
           "x-corbits-tags": ["updated"],
         },
         "/api/posts": {
           get: { summary: "List posts" },
-          "x-corbits-pricing": { price_usdc: 0, scheme: "exact" },
+          "x-corbits-pricing": { price: 0, scheme: "exact" },
         },
       });
 
@@ -1570,7 +1560,7 @@ await t.test("x-402 round-trip and deduplication", async (t) => {
         .where("path", "=", "/api/users")
         .executeTakeFirstOrThrow();
 
-      t.equal(usersEp.price_usdc, 1000);
+      t.equal(usersEp.price, 1000);
       t.equal(usersEp.scheme, "exact");
       t.same(usersEp.tags, ["updated"]);
     },
@@ -1589,7 +1579,7 @@ await t.test("x-402 round-trip and deduplication", async (t) => {
       makeSpec({
         "/api/alpha": {
           get: {},
-          "x-corbits-pricing": { price_usdc: 100 },
+          "x-corbits-pricing": { price: 100 },
         },
       }),
     );
@@ -1600,7 +1590,7 @@ await t.test("x-402 round-trip and deduplication", async (t) => {
       makeSpec({
         "/api/beta": {
           get: {},
-          "x-corbits-pricing": { price_usdc: 200 },
+          "x-corbits-pricing": { price: 200 },
         },
       }),
     );
@@ -1620,14 +1610,8 @@ await t.test("x-402 round-trip and deduplication", async (t) => {
       "tenant B does not have tenant A's path",
     );
 
-    t.equal(
-      exportA.spec.paths["/api/alpha"]["x-corbits-pricing"].price_usdc,
-      100,
-    );
-    t.equal(
-      exportB.spec.paths["/api/beta"]["x-corbits-pricing"].price_usdc,
-      200,
-    );
+    t.equal(exportA.spec.paths["/api/alpha"]["x-corbits-pricing"].price, 100);
+    t.equal(exportB.spec.paths["/api/beta"]["x-corbits-pricing"].price, 200);
   });
 
   await t.test(
@@ -1653,7 +1637,7 @@ await t.test("x-402 round-trip and deduplication", async (t) => {
           path_pattern: "^/custom/[^/]+/data$",
           priority: 100,
           is_active: true,
-          price_usdc: 300,
+          price: 300,
           scheme: "exact",
           tags: ["orphan-tag"],
         })
@@ -1712,7 +1696,7 @@ await t.test("x-402 import edge cases", async (t) => {
       const specWithExt = makeSpec({
         "/api/users": {
           get: {},
-          "x-corbits-pricing": { price_usdc: 999, scheme: "exact" },
+          "x-corbits-pricing": { price: 999, scheme: "exact" },
           "x-corbits-tags": ["premium"],
         },
       });
@@ -1725,7 +1709,7 @@ await t.test("x-402 import edge cases", async (t) => {
         .where("tenant_id", "=", tenant.id)
         .where("path", "=", "/api/users")
         .executeTakeFirstOrThrow();
-      t.equal(endpoint.price_usdc, 999);
+      t.equal(endpoint.price, 999);
       t.equal(endpoint.scheme, "exact");
       t.same(endpoint.tags, ["premium"]);
 
@@ -1746,21 +1730,21 @@ await t.test("x-402 import edge cases", async (t) => {
         .where("tenant_id", "=", tenant.id)
         .where("path", "=", "/api/users")
         .executeTakeFirstOrThrow();
-      t.equal(endpoint.price_usdc, 999, "price should be preserved");
+      t.equal(endpoint.price, 999, "price should be preserved");
       t.equal(endpoint.scheme, "exact", "scheme should be preserved");
       t.same(endpoint.tags, ["premium"], "tags should be preserved");
     },
   );
 
   await t.test(
-    "partial x-corbits-pricing: only price_usdc, no scheme",
+    "partial x-corbits-pricing: only price, no scheme",
     async (t) => {
       const { user, tenant } = await setupTenant();
 
       const spec = makeSpec({
         "/api/users": {
           get: {},
-          "x-corbits-pricing": { price_usdc: 42 },
+          "x-corbits-pricing": { price: 42 },
         },
       });
       await importSpec(tenant.id, user.token, spec);
@@ -1771,7 +1755,7 @@ await t.test("x-402 import edge cases", async (t) => {
         .where("tenant_id", "=", tenant.id)
         .where("path", "=", "/api/users")
         .executeTakeFirstOrThrow();
-      t.equal(endpoint.price_usdc, 42);
+      t.equal(endpoint.price, 42);
       t.equal(
         endpoint.scheme,
         null,
@@ -1781,7 +1765,7 @@ await t.test("x-402 import edge cases", async (t) => {
   );
 
   await t.test(
-    "partial x-corbits-pricing: only scheme, no price_usdc",
+    "partial x-corbits-pricing: only scheme, no price",
     async (t) => {
       const { user, tenant } = await setupTenant();
 
@@ -1800,7 +1784,7 @@ await t.test("x-402 import edge cases", async (t) => {
         .where("path", "=", "/api/users")
         .executeTakeFirstOrThrow();
       t.equal(
-        endpoint.price_usdc,
+        endpoint.price,
         null,
         "price should remain null when not provided",
       );
@@ -1808,13 +1792,13 @@ await t.test("x-402 import edge cases", async (t) => {
     },
   );
 
-  await t.test("boundary: price_usdc = 0 (free)", async (t) => {
+  await t.test("boundary: price = 0 (free)", async (t) => {
     const { user, tenant } = await setupTenant();
 
     const spec = makeSpec({
       "/api/free": {
         get: {},
-        "x-corbits-pricing": { price_usdc: 0 },
+        "x-corbits-pricing": { price: 0 },
       },
     });
     await importSpec(tenant.id, user.token, spec);
@@ -1825,16 +1809,16 @@ await t.test("x-402 import edge cases", async (t) => {
       .where("tenant_id", "=", tenant.id)
       .where("path", "=", "/api/free")
       .executeTakeFirstOrThrow();
-    t.equal(endpoint.price_usdc, 0);
+    t.equal(endpoint.price, 0);
   });
 
-  await t.test("boundary: price_usdc = 100000000 (max)", async (t) => {
+  await t.test("boundary: price = 100000000 (max)", async (t) => {
     const { user, tenant } = await setupTenant();
 
     const spec = makeSpec({
       "/api/max": {
         get: {},
-        "x-corbits-pricing": { price_usdc: 100000000 },
+        "x-corbits-pricing": { price: 100000000 },
       },
     });
     await importSpec(tenant.id, user.token, spec);
@@ -1845,7 +1829,7 @@ await t.test("x-402 import edge cases", async (t) => {
       .where("tenant_id", "=", tenant.id)
       .where("path", "=", "/api/max")
       .executeTakeFirstOrThrow();
-    t.equal(endpoint.price_usdc, 100000000);
+    t.equal(endpoint.price, 100000000);
   });
 
   await t.test("boundary: exactly 5 tags (max allowed)", async (t) => {
@@ -1930,13 +1914,13 @@ await t.test("x-402 import edge cases", async (t) => {
     t.same(endpoint.tags, [], "over-length tag should fall back to empty");
   });
 
-  await t.test("type mismatch: price_usdc as string", async (t) => {
+  await t.test("type mismatch: price as string", async (t) => {
     const { user, tenant } = await setupTenant();
 
     const spec = makeSpec({
       "/api/users": {
         get: {},
-        "x-corbits-pricing": { price_usdc: "500" },
+        "x-corbits-pricing": { price: "500" },
       },
     });
     await importSpec(tenant.id, user.token, spec);
@@ -1947,7 +1931,7 @@ await t.test("x-402 import edge cases", async (t) => {
       .where("tenant_id", "=", tenant.id)
       .where("path", "=", "/api/users")
       .executeTakeFirstOrThrow();
-    t.equal(endpoint.price_usdc, null, "string price should be rejected");
+    t.equal(endpoint.price, null, "string price should be rejected");
   });
 
   await t.test(
@@ -1990,17 +1974,17 @@ await t.test("x-402 import edge cases", async (t) => {
       .where("tenant_id", "=", tenant.id)
       .where("path", "=", "/api/users")
       .executeTakeFirstOrThrow();
-    t.equal(endpoint.price_usdc, null, "non-object pricing should be ignored");
+    t.equal(endpoint.price, null, "non-object pricing should be ignored");
     t.equal(endpoint.scheme, null);
   });
 
-  await t.test("junk values: price_usdc as boolean", async (t) => {
+  await t.test("junk values: price as boolean", async (t) => {
     const { user, tenant } = await setupTenant();
 
     const spec = makeSpec({
       "/api/users": {
         get: {},
-        "x-corbits-pricing": { price_usdc: true, scheme: 123 },
+        "x-corbits-pricing": { price: true, scheme: 123 },
       },
     });
     await importSpec(tenant.id, user.token, spec);
@@ -2011,7 +1995,7 @@ await t.test("x-402 import edge cases", async (t) => {
       .where("tenant_id", "=", tenant.id)
       .where("path", "=", "/api/users")
       .executeTakeFirstOrThrow();
-    t.equal(endpoint.price_usdc, null);
+    t.equal(endpoint.price, null);
     t.equal(endpoint.scheme, null);
   });
 
@@ -2046,7 +2030,7 @@ await t.test("x-402 import edge cases", async (t) => {
       const spec = makeSpec({
         "/api/valid": {
           get: {},
-          "x-corbits-pricing": { price_usdc: 100, scheme: "exact" },
+          "x-corbits-pricing": { price: 100, scheme: "exact" },
           "x-corbits-tags": ["production"],
         },
         "/api/none": {
@@ -2054,7 +2038,7 @@ await t.test("x-402 import edge cases", async (t) => {
         },
         "/api/invalid": {
           get: {},
-          "x-corbits-pricing": { price_usdc: -1, scheme: "fake" },
+          "x-corbits-pricing": { price: -1, scheme: "fake" },
           "x-corbits-tags": ["UPPERCASE!"],
         },
       });
@@ -2077,26 +2061,26 @@ await t.test("x-402 import edge cases", async (t) => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const invalid = endpoints.find((e) => e.path === "/api/invalid") as any;
 
-      t.equal(valid.price_usdc, 100);
+      t.equal(valid.price, 100);
       t.equal(valid.scheme, "exact");
       t.same(valid.tags, ["production"]);
 
-      t.equal(none.price_usdc, null, "no-extension path gets null");
+      t.equal(none.price, null, "no-extension path gets null");
       t.equal(none.scheme, null);
 
-      t.equal(invalid.price_usdc, null, "invalid extensions get null");
+      t.equal(invalid.price, null, "invalid extensions get null");
       t.equal(invalid.scheme, null);
       t.same(invalid.tags, []);
     },
   );
 
-  await t.test("price_usdc as null in x-corbits-pricing", async (t) => {
+  await t.test("price as null in x-corbits-pricing", async (t) => {
     const { user, tenant } = await setupTenant();
 
     const spec = makeSpec({
       "/api/users": {
         get: {},
-        "x-corbits-pricing": { price_usdc: null, scheme: "exact" },
+        "x-corbits-pricing": { price: null, scheme: "exact" },
       },
     });
     await importSpec(tenant.id, user.token, spec);
@@ -2107,7 +2091,7 @@ await t.test("x-402 import edge cases", async (t) => {
       .where("tenant_id", "=", tenant.id)
       .where("path", "=", "/api/users")
       .executeTakeFirstOrThrow();
-    t.equal(endpoint.price_usdc, null);
+    t.equal(endpoint.price, null);
     t.equal(endpoint.scheme, "exact");
   });
 });

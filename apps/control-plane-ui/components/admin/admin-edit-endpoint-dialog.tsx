@@ -13,7 +13,7 @@ interface Endpoint {
   tenant_id: number;
   path: string | null;
   path_pattern: string;
-  price_usdc: number | null;
+  price: number | null;
   scheme: string | null;
   description: string | null;
   priority: number;
@@ -26,7 +26,7 @@ interface Endpoint {
 interface AdminEditEndpointDialogProps {
   endpoint: Endpoint;
   tenantId: number;
-  defaultPriceUsdc: number;
+  defaultPrice: number;
   defaultScheme: string;
   onClose: () => void;
   onSuccess: () => void;
@@ -35,16 +35,16 @@ interface AdminEditEndpointDialogProps {
 export function AdminEditEndpointDialog({
   endpoint,
   tenantId,
-  defaultPriceUsdc,
+  defaultPrice,
   defaultScheme,
   onClose,
   onSuccess,
 }: AdminEditEndpointDialogProps) {
   const [path, setPath] = useState(endpoint.path ?? endpoint.path_pattern);
-  const [priceUsdc, setPriceUsdc] = useState(
-    endpoint.price_usdc !== null
-      ? (endpoint.price_usdc / 1000000).toString()
-      : (defaultPriceUsdc / 1000000).toString(),
+  const [price, setPrice] = useState(
+    endpoint.price !== null
+      ? (endpoint.price / 1000000).toString()
+      : (defaultPrice / 1000000).toString(),
   );
   const [scheme, setScheme] = useState(endpoint.scheme ?? defaultScheme);
   const [description, setDescription] = useState(endpoint.description ?? "");
@@ -60,9 +60,7 @@ export function AdminEditEndpointDialog({
     try {
       await api.put(`/api/admin/tenants/${tenantId}/endpoints/${endpoint.id}`, {
         path: path.trim(),
-        price_usdc: priceUsdc
-          ? Math.round(parseFloat(priceUsdc) * 1000000)
-          : null,
+        price: price ? Math.round(parseFloat(price) * 1000000) : null,
         scheme: scheme || null,
         description: description.trim() || null,
         priority: parseInt(priority) || 100,
@@ -125,11 +123,8 @@ export function AdminEditEndpointDialog({
                   <button
                     type="button"
                     onClick={() => {
-                      const val = Math.max(
-                        0,
-                        parseFloat(priceUsdc || "0") - 0.001,
-                      );
-                      setPriceUsdc(
+                      const val = Math.max(0, parseFloat(price || "0") - 0.001);
+                      setPrice(
                         val === 0 ? "0" : val.toFixed(6).replace(/\.?0+$/, ""),
                       );
                     }}
@@ -141,11 +136,11 @@ export function AdminEditEndpointDialog({
                     <input
                       type="text"
                       inputMode="decimal"
-                      value={priceUsdc}
+                      value={price}
                       onChange={(e) => {
                         const val = e.target.value;
                         if (val === "" || /^\d*\.?\d*$/.test(val)) {
-                          setPriceUsdc(val);
+                          setPrice(val);
                         }
                       }}
                       placeholder="0.001"
@@ -156,8 +151,8 @@ export function AdminEditEndpointDialog({
                   <button
                     type="button"
                     onClick={() => {
-                      const val = parseFloat(priceUsdc || "0") + 0.001;
-                      setPriceUsdc(val.toFixed(6).replace(/\.?0+$/, ""));
+                      const val = parseFloat(price || "0") + 0.001;
+                      setPrice(val.toFixed(6).replace(/\.?0+$/, ""));
                     }}
                     className="flex h-9 w-9 items-center justify-center text-gray-11 hover:bg-gray-4 hover:text-gray-12 transition-colors rounded-r-md"
                   >

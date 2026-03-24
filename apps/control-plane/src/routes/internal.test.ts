@@ -48,7 +48,7 @@ async function createTenant(
       name,
       organization_id: orgId,
       backend_url: "http://backend.example.com",
-      default_price_usdc: 0.01,
+      default_price: 0.01,
       default_scheme: "exact",
       org_slug,
       is_active: opts.is_active ?? true,
@@ -86,7 +86,7 @@ async function createEndpoint(tenantId: number, path: string) {
       tenant_id: tenantId,
       path,
       path_pattern: path,
-      price_usdc: 0.01,
+      price: 0.01,
       scheme: "exact",
     })
     .returning(["id"])
@@ -123,7 +123,7 @@ await t.test("POST /internal/transactions", async (t) => {
       body: JSON.stringify({
         tenant_name: "nonexistent-tenant",
         ngx_request_id: "req-123",
-        amount_usdc: 0,
+        amount: 0,
         request_path: "/test",
       }),
     });
@@ -143,7 +143,7 @@ await t.test("POST /internal/transactions", async (t) => {
       body: JSON.stringify({
         tenant_name: tenant.name,
         ngx_request_id: "req-456",
-        amount_usdc: 0.05,
+        amount: 0.05,
         request_path: "/api/test",
       }),
     });
@@ -163,7 +163,7 @@ await t.test("POST /internal/transactions", async (t) => {
       body: JSON.stringify({
         tenant_name: tenant.name,
         ngx_request_id: "req-789",
-        amount_usdc: 0.05,
+        amount: 0.05,
         tx_hash: "abc123",
         request_path: "/api/test",
       }),
@@ -174,7 +174,7 @@ await t.test("POST /internal/transactions", async (t) => {
     t.ok(data.error.includes("network"));
   });
 
-  await t.test("accepts free transaction (amount_usdc=0)", async (t) => {
+  await t.test("accepts free transaction (amount=0)", async (t) => {
     const org = await createOrg("Team", "team");
     const tenant = await createTenant(org.id, "my-tenant");
 
@@ -184,7 +184,7 @@ await t.test("POST /internal/transactions", async (t) => {
       body: JSON.stringify({
         tenant_name: tenant.name,
         ngx_request_id: "req-free-001",
-        amount_usdc: 0,
+        amount: 0,
         request_path: "/api/free",
       }),
     });
@@ -204,7 +204,7 @@ await t.test("POST /internal/transactions", async (t) => {
         body: JSON.stringify({
           tenant_name: tenant.name,
           ngx_request_id: "req-paid-001",
-          amount_usdc: 0.05,
+          amount: 0.05,
           tx_hash: "abc123def456",
           network: "solana",
           request_path: "/api/paid",
@@ -225,7 +225,7 @@ await t.test("POST /internal/transactions", async (t) => {
       body: JSON.stringify({
         tenant_name: tenant.name,
         ngx_request_id: "req-endpoint-001",
-        amount_usdc: 0,
+        amount: 0,
         request_path: "/api/test",
         endpoint_id: endpoint.id,
       }),
@@ -247,7 +247,7 @@ await t.test("POST /internal/transactions", async (t) => {
         body: JSON.stringify({
           tenant_name: tenant1.name,
           ngx_request_id: "req-wrong-endpoint",
-          amount_usdc: 0,
+          amount: 0,
           request_path: "/api/test",
           endpoint_id: endpoint.id,
         }),
@@ -266,7 +266,7 @@ await t.test("POST /internal/transactions", async (t) => {
       body: JSON.stringify({
         tenant_name: tenant.name,
         ngx_request_id: "req-empty-hash",
-        amount_usdc: 0.05,
+        amount: 0.05,
         tx_hash: "",
         network: "solana",
         request_path: "/api/test",
@@ -275,7 +275,7 @@ await t.test("POST /internal/transactions", async (t) => {
     t.equal(res.status, 400);
   });
 
-  await t.test("rejects negative amount_usdc", async (t) => {
+  await t.test("rejects negative amount", async (t) => {
     const org = await createOrg("Team", "team");
     const tenant = await createTenant(org.id, "my-tenant");
 
@@ -285,7 +285,7 @@ await t.test("POST /internal/transactions", async (t) => {
       body: JSON.stringify({
         tenant_name: tenant.name,
         ngx_request_id: "req-negative",
-        amount_usdc: -0.05,
+        amount: -0.05,
         request_path: "/api/test",
       }),
     });
@@ -302,7 +302,7 @@ await t.test("POST /internal/transactions", async (t) => {
       body: JSON.stringify({
         tenant_name: tenant.name,
         ngx_request_id: "",
-        amount_usdc: 0,
+        amount: 0,
         request_path: "/api/test",
       }),
     });
@@ -316,7 +316,7 @@ await t.test("POST /internal/transactions", async (t) => {
       body: JSON.stringify({
         tenant_name: "",
         ngx_request_id: "req-empty-tenant",
-        amount_usdc: 0,
+        amount: 0,
         request_path: "/api/test",
       }),
     });
@@ -333,7 +333,7 @@ await t.test("POST /internal/transactions", async (t) => {
       body: JSON.stringify({
         tenant_name: tenant.name,
         ngx_request_id: "req-empty-path",
-        amount_usdc: 0,
+        amount: 0,
         request_path: "",
       }),
     });
@@ -350,7 +350,7 @@ await t.test("POST /internal/transactions", async (t) => {
       body: JSON.stringify({
         tenant_name: tenant.name,
         ngx_request_id: "req-null-endpoint",
-        amount_usdc: 0,
+        amount: 0,
         request_path: "/api/test",
         endpoint_id: null,
       }),
@@ -371,7 +371,7 @@ await t.test("POST /internal/transactions", async (t) => {
         body: JSON.stringify({
           tenant_name: tenant.name,
           ngx_request_id: "req-no-auth",
-          amount_usdc: 0,
+          amount: 0,
           request_path: "/api/test",
         }),
       });
@@ -389,7 +389,7 @@ await t.test("POST /internal/transactions", async (t) => {
       body: JSON.stringify({
         tenant_name: tenant.name,
         ngx_request_id: "req-zero-endpoint",
-        amount_usdc: 0,
+        amount: 0,
         request_path: "/api/test",
         endpoint_id: 0,
       }),
@@ -408,7 +408,7 @@ await t.test("POST /internal/transactions", async (t) => {
       body: JSON.stringify({
         tenant_name: tenant.name,
         ngx_request_id: "req-nonexistent-endpoint",
-        amount_usdc: 0,
+        amount: 0,
         request_path: "/api/test",
         endpoint_id: 999999,
       }),
@@ -416,7 +416,7 @@ await t.test("POST /internal/transactions", async (t) => {
     t.equal(res.status, 400, "should reject non-existent endpoint_id");
   });
 
-  await t.test("accepts very small amount_usdc", async (t) => {
+  await t.test("accepts very small amount", async (t) => {
     const org = await createOrg("Team", "team");
     const tenant = await createTenant(org.id, "my-tenant");
 
@@ -426,7 +426,7 @@ await t.test("POST /internal/transactions", async (t) => {
       body: JSON.stringify({
         tenant_name: tenant.name,
         ngx_request_id: "req-small-amount",
-        amount_usdc: 0.000001,
+        amount: 0.000001,
         tx_hash: "tiny-hash",
         network: "solana",
         request_path: "/api/test",
@@ -436,7 +436,7 @@ await t.test("POST /internal/transactions", async (t) => {
     t.not(res.status, 400);
   });
 
-  await t.test("accepts large amount_usdc", async (t) => {
+  await t.test("accepts large amount", async (t) => {
     const org = await createOrg("Team", "team");
     const tenant = await createTenant(org.id, "my-tenant");
 
@@ -446,7 +446,7 @@ await t.test("POST /internal/transactions", async (t) => {
       body: JSON.stringify({
         tenant_name: tenant.name,
         ngx_request_id: "req-large-amount",
-        amount_usdc: 999999.99,
+        amount: 999999.99,
         tx_hash: "large-hash",
         network: "solana",
         request_path: "/api/test",
@@ -465,7 +465,7 @@ await t.test("POST /internal/transactions", async (t) => {
       body: JSON.stringify({
         tenant_name: tenant.name,
         ngx_request_id: "req-abc_123-def.456",
-        amount_usdc: 0,
+        amount: 0,
         request_path: "/api/test",
       }),
     });
@@ -483,7 +483,7 @@ await t.test("POST /internal/transactions", async (t) => {
       body: JSON.stringify({
         tenant_name: "MY-TENANT",
         ngx_request_id: "req-case-test",
-        amount_usdc: 0,
+        amount: 0,
         request_path: "/api/test",
       }),
     });
@@ -504,7 +504,7 @@ await t.test("POST /internal/transactions", async (t) => {
           tenant_name: "my-api",
           org_slug: "acme",
           ngx_request_id: "req-org-slug-001",
-          amount_usdc: 0,
+          amount: 0,
           request_path: "/api/test",
         }),
       });
@@ -525,7 +525,7 @@ await t.test("POST /internal/transactions", async (t) => {
           tenant_name: "legacy-api",
           org_slug: "team",
           ngx_request_id: "req-mismatch-001",
-          amount_usdc: 0,
+          amount: 0,
           request_path: "/api/test",
         }),
       });
@@ -545,7 +545,7 @@ await t.test("POST /internal/transactions", async (t) => {
         body: JSON.stringify({
           tenant_name: "org-only-api",
           ngx_request_id: "req-no-slug-001",
-          amount_usdc: 0,
+          amount: 0,
           request_path: "/api/test",
         }),
       });
@@ -568,7 +568,7 @@ await t.test("POST /internal/transactions", async (t) => {
           tenant_name: "shared-name",
           org_slug: "org-one",
           ngx_request_id: "req-org1-001",
-          amount_usdc: 0,
+          amount: 0,
           request_path: "/api/test",
         }),
       });
@@ -581,7 +581,7 @@ await t.test("POST /internal/transactions", async (t) => {
           tenant_name: "shared-name",
           org_slug: "org-two",
           ngx_request_id: "req-org2-001",
-          amount_usdc: 0,
+          amount: 0,
           request_path: "/api/test",
         }),
       });
@@ -602,7 +602,7 @@ await t.test("POST /internal/transactions", async (t) => {
           tenant_name: "my-api",
           org_slug: "nonexistent-org",
           ngx_request_id: "req-bad-org-001",
-          amount_usdc: 0,
+          amount: 0,
           request_path: "/api/test",
         }),
       });
@@ -621,7 +621,7 @@ await t.test("POST /internal/transactions", async (t) => {
         tenant_name: "my-api",
         org_slug: "ACME",
         ngx_request_id: "req-case-slug-001",
-        amount_usdc: 0,
+        amount: 0,
         request_path: "/api/test",
       }),
     });
@@ -640,7 +640,7 @@ await t.test("POST /internal/transactions", async (t) => {
         body: JSON.stringify({
           tenant_name: "legacy-with-org",
           ngx_request_id: "req-legacy-org-001",
-          amount_usdc: 0,
+          amount: 0,
           request_path: "/api/test",
         }),
       });
@@ -666,7 +666,7 @@ await t.test("POST /internal/transactions", async (t) => {
         body: JSON.stringify({
           tenant_name: "api",
           ngx_request_id: "req-isolate-legacy-001",
-          amount_usdc: 0,
+          amount: 0,
           request_path: "/api/test",
         }),
       });
@@ -680,7 +680,7 @@ await t.test("POST /internal/transactions", async (t) => {
           tenant_name: "api",
           org_slug: "org-two",
           ngx_request_id: "req-isolate-org-001",
-          amount_usdc: 0,
+          amount: 0,
           request_path: "/api/test",
         }),
       });
@@ -701,7 +701,7 @@ await t.test("POST /internal/transactions", async (t) => {
         body: JSON.stringify({
           tenant_name: tenant.name,
           ngx_request_id: "req-ipv4-001",
-          amount_usdc: 0,
+          amount: 0,
           request_path: "/api/test",
           client_ip: "192.168.1.100",
         }),
@@ -719,7 +719,7 @@ await t.test("POST /internal/transactions", async (t) => {
         body: JSON.stringify({
           tenant_name: tenant.name,
           ngx_request_id: "req-ipv6-001",
-          amount_usdc: 0,
+          amount: 0,
           request_path: "/api/test",
           client_ip: "2001:0db8:85a3:0000:0000:8a2e:0370:7334",
         }),
@@ -737,7 +737,7 @@ await t.test("POST /internal/transactions", async (t) => {
         body: JSON.stringify({
           tenant_name: tenant.name,
           ngx_request_id: "req-ipv6-short-001",
-          amount_usdc: 0,
+          amount: 0,
           request_path: "/api/test",
           client_ip: "::1",
         }),
@@ -755,7 +755,7 @@ await t.test("POST /internal/transactions", async (t) => {
         body: JSON.stringify({
           tenant_name: tenant.name,
           ngx_request_id: "req-ip-null-001",
-          amount_usdc: 0,
+          amount: 0,
           request_path: "/api/test",
           client_ip: null,
         }),
@@ -773,7 +773,7 @@ await t.test("POST /internal/transactions", async (t) => {
         body: JSON.stringify({
           tenant_name: tenant.name,
           ngx_request_id: "req-ip-omit-001",
-          amount_usdc: 0,
+          amount: 0,
           request_path: "/api/test",
         }),
       });
@@ -790,7 +790,7 @@ await t.test("POST /internal/transactions", async (t) => {
         body: JSON.stringify({
           tenant_name: tenant.name,
           ngx_request_id: "req-ip-long-001",
-          amount_usdc: 0,
+          amount: 0,
           request_path: "/api/test",
           client_ip: "a".repeat(50),
         }),
@@ -810,7 +810,7 @@ await t.test("POST /internal/transactions", async (t) => {
         body: JSON.stringify({
           tenant_name: tenant.name,
           ngx_request_id: "req-method-get-001",
-          amount_usdc: 0,
+          amount: 0,
           request_path: "/api/test",
           request_method: "GET",
         }),
@@ -828,7 +828,7 @@ await t.test("POST /internal/transactions", async (t) => {
         body: JSON.stringify({
           tenant_name: tenant.name,
           ngx_request_id: "req-method-post-001",
-          amount_usdc: 0,
+          amount: 0,
           request_path: "/api/test",
           request_method: "POST",
         }),
@@ -846,7 +846,7 @@ await t.test("POST /internal/transactions", async (t) => {
         body: JSON.stringify({
           tenant_name: tenant.name,
           ngx_request_id: "req-method-delete-001",
-          amount_usdc: 0,
+          amount: 0,
           request_path: "/api/test",
           request_method: "DELETE",
         }),
@@ -864,7 +864,7 @@ await t.test("POST /internal/transactions", async (t) => {
         body: JSON.stringify({
           tenant_name: tenant.name,
           ngx_request_id: "req-method-null-001",
-          amount_usdc: 0,
+          amount: 0,
           request_path: "/api/test",
           request_method: null,
         }),
@@ -882,7 +882,7 @@ await t.test("POST /internal/transactions", async (t) => {
         body: JSON.stringify({
           tenant_name: tenant.name,
           ngx_request_id: "req-method-omit-001",
-          amount_usdc: 0,
+          amount: 0,
           request_path: "/api/test",
         }),
       });
@@ -899,7 +899,7 @@ await t.test("POST /internal/transactions", async (t) => {
         body: JSON.stringify({
           tenant_name: tenant.name,
           ngx_request_id: "req-method-long-001",
-          amount_usdc: 0,
+          amount: 0,
           request_path: "/api/test",
           request_method: "VERYLONGMETHOD",
         }),
@@ -919,7 +919,7 @@ await t.test("POST /internal/transactions", async (t) => {
         body: JSON.stringify({
           tenant_name: tenant.name,
           ngx_request_id: "req-meta-simple-001",
-          amount_usdc: 0,
+          amount: 0,
           request_path: "/api/test",
           metadata: {
             host: "api.example.com",
@@ -940,7 +940,7 @@ await t.test("POST /internal/transactions", async (t) => {
         body: JSON.stringify({
           tenant_name: tenant.name,
           ngx_request_id: "req-meta-null-001",
-          amount_usdc: 0,
+          amount: 0,
           request_path: "/api/test",
           metadata: null,
         }),
@@ -958,7 +958,7 @@ await t.test("POST /internal/transactions", async (t) => {
         body: JSON.stringify({
           tenant_name: tenant.name,
           ngx_request_id: "req-meta-omit-001",
-          amount_usdc: 0,
+          amount: 0,
           request_path: "/api/test",
         }),
       });
@@ -975,7 +975,7 @@ await t.test("POST /internal/transactions", async (t) => {
         body: JSON.stringify({
           tenant_name: tenant.name,
           ngx_request_id: "req-meta-empty-001",
-          amount_usdc: 0,
+          amount: 0,
           request_path: "/api/test",
           metadata: {},
         }),
@@ -993,7 +993,7 @@ await t.test("POST /internal/transactions", async (t) => {
         body: JSON.stringify({
           tenant_name: tenant.name,
           ngx_request_id: "req-meta-free-001",
-          amount_usdc: 0,
+          amount: 0,
           request_path: "/api/test",
           client_ip: "192.168.1.1",
           request_method: "GET",
@@ -1020,7 +1020,7 @@ await t.test("POST /internal/transactions", async (t) => {
           body: JSON.stringify({
             tenant_name: tenant.name,
             ngx_request_id: "req-meta-evm-001",
-            amount_usdc: 0.01,
+            amount: 0.01,
             tx_hash: "0xabc123",
             network: "base",
             request_path: "/api/paid",
@@ -1066,7 +1066,7 @@ await t.test("POST /internal/transactions", async (t) => {
           body: JSON.stringify({
             tenant_name: tenant.name,
             ngx_request_id: "req-meta-solana-001",
-            amount_usdc: 0.01,
+            amount: 0.01,
             tx_hash:
               "5KxzZ9Nh7PjVkAqYqoxMjF8FcQjS9JfqNqXrKwYNJzQqBx1qKjYvNqXrKwYNJzQq",
             network: "solana-mainnet-beta",
@@ -1104,7 +1104,7 @@ await t.test("POST /internal/transactions", async (t) => {
         body: JSON.stringify({
           tenant_name: tenant.name,
           ngx_request_id: "req-meta-string-001",
-          amount_usdc: 0,
+          amount: 0,
           request_path: "/api/test",
           metadata: "not an object",
         }),
@@ -1122,7 +1122,7 @@ await t.test("POST /internal/transactions", async (t) => {
         body: JSON.stringify({
           tenant_name: tenant.name,
           ngx_request_id: "req-meta-number-001",
-          amount_usdc: 0,
+          amount: 0,
           request_path: "/api/test",
           metadata: 12345,
         }),
@@ -1145,7 +1145,7 @@ await t.test("POST /internal/transactions", async (t) => {
             tenant_name: tenant.name,
             org_slug: "team",
             ngx_request_id: "req-combined-free-001",
-            amount_usdc: 0,
+            amount: 0,
             request_path: "/api/free-endpoint",
             client_ip: "10.0.0.1",
             request_method: "GET",
@@ -1174,7 +1174,7 @@ await t.test("POST /internal/transactions", async (t) => {
             tenant_name: tenant.name,
             org_slug: "team",
             ngx_request_id: "req-combined-paid-001",
-            amount_usdc: 0.05,
+            amount: 0.05,
             tx_hash: "0xfullhash123456789",
             network: "base",
             request_path: "/api/paid-endpoint",
@@ -1218,7 +1218,7 @@ await t.test("POST /internal/transactions", async (t) => {
         body: JSON.stringify({
           tenant_name: tenant.name,
           ngx_request_id: "req-backward-compat-001",
-          amount_usdc: 0,
+          amount: 0,
           request_path: "/api/test",
         }),
       });
@@ -1237,7 +1237,7 @@ await t.test("POST /internal/transactions", async (t) => {
           body: JSON.stringify({
             tenant_name: tenant.name,
             ngx_request_id: "req-backward-paid-001",
-            amount_usdc: 0.1,
+            amount: 0.1,
             tx_hash: "oldhash123",
             network: "solana",
             request_path: "/api/paid",
@@ -1390,7 +1390,7 @@ await t.test("GET /internal/nodes/:id/sync", async (t) => {
         name: "configured-tenant",
         organization_id: org.id,
         backend_url: "http://backend.example.com",
-        default_price_usdc: 0.05,
+        default_price: 0.05,
         default_scheme: "exact",
         is_active: true,
         status: "active",
@@ -1410,7 +1410,7 @@ await t.test("GET /internal/nodes/:id/sync", async (t) => {
         path: "/api/test",
         path_pattern: "^/api/test$",
         priority: 10,
-        price_usdc: 0.1,
+        price: 0.1,
         scheme: "prepay",
         is_active: true,
       })
@@ -1424,7 +1424,7 @@ await t.test("GET /internal/nodes/:id/sync", async (t) => {
     const tenantConfig = data.config["configured-tenant.api.corbits.dev"];
     t.ok(tenantConfig, "tenant config exists");
     t.equal(tenantConfig.backend_url, "http://backend.example.com");
-    t.equal(tenantConfig.default_price_usdc, 0.05);
+    t.equal(tenantConfig.default_price, 0.05);
     t.equal(tenantConfig.default_scheme, "exact");
     t.equal(tenantConfig.upstream_auth_header, "Authorization");
     t.equal(tenantConfig.upstream_auth_value, "Bearer secret123");
@@ -1434,7 +1434,7 @@ await t.test("GET /internal/nodes/:id/sync", async (t) => {
     const endpoint = tenantConfig.endpoints[0];
     t.ok(endpoint.id, "endpoint has id");
     t.equal(endpoint.path_pattern, "^/api/test$");
-    t.equal(endpoint.price_usdc, 0.1);
+    t.equal(endpoint.price, 0.1);
     t.equal(endpoint.scheme, "prepay");
     t.equal(endpoint.priority, 10);
   });

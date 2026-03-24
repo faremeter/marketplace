@@ -521,7 +521,7 @@ organizationsRoutes.get("/:id/tenants", async (c) => {
       "tenants.upstream_auth_header",
       "tenants.upstream_auth_value",
       "tenants.created_at",
-      "tenants.default_price_usdc",
+      "tenants.default_price",
       "tenants.default_scheme",
       "tenants.org_slug",
       "wallets.name as wallet_name",
@@ -620,8 +620,8 @@ organizationsRoutes.put(
     if (body.upstream_auth_value !== undefined) {
       updateData.upstream_auth_value = body.upstream_auth_value || null;
     }
-    if (body.default_price_usdc !== undefined) {
-      updateData.default_price_usdc = body.default_price_usdc;
+    if (body.default_price !== undefined) {
+      updateData.default_price = body.default_price;
     }
     if (body.default_scheme !== undefined) {
       updateData.default_scheme = body.default_scheme;
@@ -1189,7 +1189,7 @@ organizationsRoutes.post(
         backend_url: body.backend_url,
         organization_id: orgId,
         wallet_id: body.wallet_id ?? null,
-        default_price_usdc: body.default_price_usdc ?? 0,
+        default_price: body.default_price ?? 0,
         default_scheme: body.default_scheme ?? "exact",
         upstream_auth_header: body.upstream_auth_header ?? null,
         upstream_auth_value: body.upstream_auth_value ?? null,

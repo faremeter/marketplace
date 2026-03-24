@@ -16,7 +16,7 @@ interface AddEndpointDialogProps {
   tenantId: number;
   hasOpenApiSpec: boolean;
   onSuccess: () => void;
-  defaultPriceUsdc: number;
+  defaultPrice: number;
   defaultScheme: string;
 }
 
@@ -34,11 +34,11 @@ export function AddEndpointDialog({
   tenantId,
   hasOpenApiSpec,
   onSuccess,
-  defaultPriceUsdc,
+  defaultPrice,
   defaultScheme,
 }: AddEndpointDialogProps) {
   const [pathPattern, setPathPattern] = useState("");
-  const [priceUsdc, setPriceUsdc] = useState("");
+  const [price, setPrice] = useState("");
   const [scheme, setScheme] = useState("");
   const [description, setDescription] = useState("");
   const [saving, setSaving] = useState(false);
@@ -133,9 +133,7 @@ export function AddEndpointDialog({
     try {
       await api.post(`/api/tenants/${tenantId}/endpoints`, {
         path: pathPattern.trim(),
-        price_usdc: priceUsdc
-          ? Math.round(parseFloat(priceUsdc) * 1000000)
-          : null,
+        price: price ? Math.round(parseFloat(price) * 1000000) : null,
         scheme: scheme || null,
         description: description.trim() || null,
         openapi_source_paths: selectedPaths.length > 0 ? selectedPaths : null,
@@ -152,7 +150,7 @@ export function AddEndpointDialog({
       }
 
       setPathPattern("");
-      setPriceUsdc("");
+      setPrice("");
       setScheme("");
       setDescription("");
       setTags([]);
@@ -251,11 +249,8 @@ export function AddEndpointDialog({
                   <button
                     type="button"
                     onClick={() => {
-                      const val = Math.max(
-                        0,
-                        parseFloat(priceUsdc || "0") - 0.01,
-                      );
-                      setPriceUsdc(val.toFixed(3));
+                      const val = Math.max(0, parseFloat(price || "0") - 0.01);
+                      setPrice(val.toFixed(3));
                     }}
                     className="flex h-9 w-9 items-center justify-center text-gray-11 hover:bg-gray-4 hover:text-gray-12 transition-colors rounded-l-md"
                   >
@@ -265,14 +260,14 @@ export function AddEndpointDialog({
                     <input
                       type="text"
                       inputMode="decimal"
-                      value={priceUsdc}
+                      value={price}
                       onChange={(e) => {
                         const val = e.target.value;
                         if (val === "" || /^\d*\.?\d*$/.test(val)) {
-                          setPriceUsdc(val);
+                          setPrice(val);
                         }
                       }}
-                      placeholder={(defaultPriceUsdc / 1_000_000).toFixed(3)}
+                      placeholder={(defaultPrice / 1_000_000).toFixed(3)}
                       className="w-full bg-transparent py-2 text-center text-sm text-gray-12 placeholder-gray-9 focus:outline-none"
                     />
                     <span className="pr-2 text-xs text-gray-11">USDC</span>
@@ -280,8 +275,8 @@ export function AddEndpointDialog({
                   <button
                     type="button"
                     onClick={() => {
-                      const val = parseFloat(priceUsdc || "0") + 0.01;
-                      setPriceUsdc(val.toFixed(3));
+                      const val = parseFloat(price || "0") + 0.01;
+                      setPrice(val.toFixed(3));
                     }}
                     className="flex h-9 w-9 items-center justify-center text-gray-11 hover:bg-gray-4 hover:text-gray-12 transition-colors rounded-r-md"
                   >

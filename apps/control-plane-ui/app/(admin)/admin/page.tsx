@@ -35,13 +35,13 @@ export default function AdminDashboardPage() {
       <div className="grid gap-4 sm:grid-cols-2">
         <EarningsStatCard
           title="Total Processed"
-          value={formatUSDC(analytics?.total_earned_usdc)}
-          valueColor={getValueColor(analytics?.total_earned_usdc)}
+          value={formatUSDC(analytics?.total_earned)}
+          valueColor={getValueColor(analytics?.total_earned)}
         />
         <EarningsStatCard
           title="Processed This Month"
-          value={formatUSDC(analytics?.current_month_earned_usdc)}
-          valueColor={getValueColor(analytics?.current_month_earned_usdc)}
+          value={formatUSDC(analytics?.current_month_earned)}
+          valueColor={getValueColor(analytics?.current_month_earned)}
           change={formatChange(analytics?.percent_change)}
           changeColor={getChangeColor(analytics?.percent_change)}
         />
@@ -165,7 +165,7 @@ function RecentTransactionsList() {
     api.get<{
       transactions: {
         id: number;
-        amount_usdc: string;
+        amount: string;
         created_at: string;
         tenant_name: string | null;
         request_path: string | null;
@@ -187,7 +187,7 @@ function RecentTransactionsList() {
         >
           <div className="flex items-center justify-between">
             <span className="text-sm font-medium text-gray-12">
-              {formatUSDC(parseFloat(tx.amount_usdc))}
+              {formatUSDC(parseFloat(tx.amount))}
             </span>
             <span className="text-xs text-gray-9">
               {new Date(tx.created_at).toLocaleDateString()}

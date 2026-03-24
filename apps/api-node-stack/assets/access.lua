@@ -166,13 +166,14 @@ if tenant_config.upstream_auth_header and tenant_config.upstream_auth_header ~= 
     ngx.req.set_header(tenant_config.upstream_auth_header, auth_value)
 end
 
-local default_price = tenant_config.default_price_usdc
-if default_price == cjson.null then default_price = nil end
-local price = default_price or 0
+-- Support both new (default_price) and legacy (default_price_usdc) config field names
+local raw_price = tenant_config.default_price or tenant_config.default_price_usdc
+if raw_price == cjson.null then raw_price = nil end
+local price = raw_price or 0
 
-local default_scheme = tenant_config.default_scheme
-if default_scheme == cjson.null then default_scheme = nil end
-local scheme = default_scheme or "exact"
+local raw_scheme = tenant_config.default_scheme
+if raw_scheme == cjson.null then raw_scheme = nil end
+local scheme = raw_scheme or "exact"
 local matched_endpoint_id = nil
 if tenant_config.endpoints then
     for _, endpoint in ipairs(tenant_config.endpoints) do
@@ -195,8 +196,9 @@ if tenant_config.endpoints then
 
         if matched then
             matched_endpoint_id = endpoint.id
-            if endpoint.price_usdc and endpoint.price_usdc ~= cjson.null then
-                price = endpoint.price_usdc
+            local ep_price = endpoint.price or endpoint.price_usdc
+            if ep_price and ep_price ~= cjson.null then
+                price = ep_price
             end
             if endpoint.scheme and endpoint.scheme ~= cjson.null then
                 scheme = endpoint.scheme
@@ -232,7 +234,7 @@ if scheme == "free" or price == 0 then
             tenant_name = free_tenant_name,
             org_slug = free_org_slug or cjson.null,
             endpoint_id = free_endpoint_id or cjson.null,
-            amount_usdc = 0,
+            amount = 0,
             network = cjson.null,
             request_path = free_request_path,
             client_ip = free_client_ip,
@@ -619,8 +621,10 @@ if tx_hash then
             tenant_name = tx_tenant_name,
             org_slug = tx_org_slug or cjson.null,
             endpoint_id = tx_endpoint_id or cjson.null,
-            amount_usdc = tx_amount,
+            amount = tx_amount,
             network = tx_network,
+            token_symbol = resolved_token_symbol or cjson.null,
+            mint_address = matching_req and matching_req.asset or cjson.null,
             request_path = tx_request_path,
             client_ip = tx_client_ip,
             request_method = tx_request_method,

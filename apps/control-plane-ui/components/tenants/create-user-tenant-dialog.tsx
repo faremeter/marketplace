@@ -268,7 +268,7 @@ export function CreateUserTenantDialog({
             backend_url: backendUrl.trim(),
             upstream_auth_header: getFinalAuthHeader(),
             upstream_auth_value: getFinalAuthValue(),
-            default_price_usdc: Math.round(
+            default_price: Math.round(
               (parseFloat(defaultPrice) || 0) * 1_000_000,
             ),
             default_scheme: defaultScheme,
@@ -564,7 +564,7 @@ export function CreateUserTenantDialog({
           backend_url: backendUrl.trim(),
           upstream_auth_header: finalHeader,
           upstream_auth_value: finalValue,
-          default_price_usdc: Math.round(
+          default_price: Math.round(
             (parseFloat(defaultPrice) || 0) * 1_000_000,
           ),
           default_scheme: defaultScheme,

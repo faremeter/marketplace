@@ -34,7 +34,7 @@ interface Tenant {
   status: string;
   wallet_id: number | null;
   wallet_funding_status: string | null;
-  default_price_usdc: number;
+  default_price: number;
   default_scheme: string;
   org_slug?: string | null;
 }
@@ -43,7 +43,7 @@ interface Endpoint {
   id: number;
   path: string | null;
   path_pattern: string;
-  price_usdc: number | null;
+  price: number | null;
   scheme: string | null;
   description: string | null;
   tags: string[];
@@ -357,16 +357,16 @@ function CatchAllRow({
       </td>
       <td className="whitespace-nowrap py-2 pl-4 text-right align-middle">
         <div className="flex items-center justify-end gap-2">
-          {tenant.default_price_usdc < 0.0000001 && (
+          {tenant.default_price < 0.0000001 && (
             <span className="rounded bg-green-900/50 px-1.5 py-0.5 text-[10px] font-medium text-green-400 border border-green-800">
               Free
             </span>
           )}
           <InlinePriceEdit
-            priceUsdc={tenant.default_price_usdc}
+            priceMicro={tenant.default_price}
             onUpdate={onUpdate}
             apiEndpoint={apiEndpoint}
-            fieldName="default_price_usdc"
+            fieldName="default_price"
             label="Default Price"
           />
         </div>
@@ -381,14 +381,14 @@ function CatchAllRow({
         />
       </td>
       <td
-        className={`whitespace-nowrap py-2 text-right align-middle text-xs ${isLoading ? "text-gray-9" : getValueColor(analytics?.total_earned_usdc)}`}
+        className={`whitespace-nowrap py-2 text-right align-middle text-xs ${isLoading ? "text-gray-9" : getValueColor(analytics?.total_earned)}`}
       >
-        {isLoading ? "..." : formatUSDC(analytics?.total_earned_usdc)}
+        {isLoading ? "..." : formatUSDC(analytics?.total_earned)}
       </td>
       <td
-        className={`whitespace-nowrap py-2 text-right align-middle text-xs ${isLoading ? "text-gray-9" : getValueColor(analytics?.current_month_earned_usdc)}`}
+        className={`whitespace-nowrap py-2 text-right align-middle text-xs ${isLoading ? "text-gray-9" : getValueColor(analytics?.current_month_earned)}`}
       >
-        {isLoading ? "..." : formatUSDC(analytics?.current_month_earned_usdc)}
+        {isLoading ? "..." : formatUSDC(analytics?.current_month_earned)}
       </td>
       <td
         className={`whitespace-nowrap py-2 text-right align-middle text-xs ${isLoading ? "text-gray-9" : getChangeColor(analytics?.percent_change)}`}
@@ -459,17 +459,17 @@ function EndpointRow({
       </td>
       <td className="whitespace-nowrap py-2 pl-4 text-right align-middle">
         <div className="flex items-center justify-end gap-2">
-          {(endpoint.price_usdc ?? tenant.default_price_usdc) < 0.0000001 && (
+          {(endpoint.price ?? tenant.default_price) < 0.0000001 && (
             <span className="rounded bg-green-900/50 px-1.5 py-0.5 text-[10px] font-medium text-green-400 border border-green-800">
               Free
             </span>
           )}
           <InlinePriceEdit
-            priceUsdc={endpoint.price_usdc ?? tenant.default_price_usdc}
-            defaultPriceUsdc={tenant.default_price_usdc}
+            priceMicro={endpoint.price ?? tenant.default_price}
+            defaultPriceMicro={tenant.default_price}
             onUpdate={onUpdate}
             apiEndpoint={`/api/tenants/${tenant.id}/endpoints/${endpoint.id}`}
-            fieldName="price_usdc"
+            fieldName="price"
             label="Price"
           />
         </div>
@@ -485,14 +485,14 @@ function EndpointRow({
         />
       </td>
       <td
-        className={`whitespace-nowrap py-2 text-right align-middle text-xs ${isLoading ? "text-gray-9" : getValueColor(analytics?.total_earned_usdc)}`}
+        className={`whitespace-nowrap py-2 text-right align-middle text-xs ${isLoading ? "text-gray-9" : getValueColor(analytics?.total_earned)}`}
       >
-        {isLoading ? "..." : formatUSDC(analytics?.total_earned_usdc)}
+        {isLoading ? "..." : formatUSDC(analytics?.total_earned)}
       </td>
       <td
-        className={`whitespace-nowrap py-2 text-right align-middle text-xs ${isLoading ? "text-gray-9" : getValueColor(analytics?.current_month_earned_usdc)}`}
+        className={`whitespace-nowrap py-2 text-right align-middle text-xs ${isLoading ? "text-gray-9" : getValueColor(analytics?.current_month_earned)}`}
       >
-        {isLoading ? "..." : formatUSDC(analytics?.current_month_earned_usdc)}
+        {isLoading ? "..." : formatUSDC(analytics?.current_month_earned)}
       </td>
       <td
         className={`whitespace-nowrap py-2 text-right align-middle text-xs ${isLoading ? "text-gray-9" : getChangeColor(analytics?.percent_change)}`}

@@ -2,16 +2,16 @@ import { db } from "../db/instance.js";
 import { sql } from "kysely";
 
 export interface EarningsAnalytics {
-  total_earned_usdc: number;
-  current_month_earned_usdc: number;
-  previous_month_earned_usdc: number;
+  total_earned: number;
+  current_month_earned: number;
+  previous_month_earned: number;
   percent_change: number | null;
   total_transactions: number;
 }
 
 export interface MonthlyEarnings {
   month: string;
-  total_usdc: number;
+  total: number;
 }
 
 function getMonthBoundaries(): {
@@ -39,20 +39,20 @@ export async function getPlatformEarnings(): Promise<EarningsAnalytics> {
     db
       .selectFrom("transactions")
       .select([
-        sql<number>`COALESCE(SUM(amount_usdc), 0)`.as("total"),
+        sql<number>`COALESCE(SUM(amount), 0)`.as("total"),
         sql<number>`COUNT(*)`.as("count"),
       ])
       .executeTakeFirst(),
 
     db
       .selectFrom("transactions")
-      .select(sql<number>`COALESCE(SUM(amount_usdc), 0)`.as("total"))
+      .select(sql<number>`COALESCE(SUM(amount), 0)`.as("total"))
       .where("created_at", ">=", currentMonthStart)
       .executeTakeFirst(),
 
     db
       .selectFrom("transactions")
-      .select(sql<number>`COALESCE(SUM(amount_usdc), 0)`.as("total"))
+      .select(sql<number>`COALESCE(SUM(amount), 0)`.as("total"))
       .where("created_at", ">=", previousMonthStart)
       .where("created_at", "<", currentMonthStart)
       .executeTakeFirst(),
@@ -64,9 +64,9 @@ export async function getPlatformEarnings(): Promise<EarningsAnalytics> {
   const previousEarned = Number(previousMonth?.total ?? 0);
 
   return {
-    total_earned_usdc: totalEarned,
-    current_month_earned_usdc: currentEarned,
-    previous_month_earned_usdc: previousEarned,
+    total_earned: totalEarned,
+    current_month_earned: currentEarned,
+    previous_month_earned: previousEarned,
     percent_change: calculatePercentChange(currentEarned, previousEarned),
     total_transactions: totalTransactions,
   };
@@ -81,7 +81,7 @@ export async function getOrganizationEarnings(
     db
       .selectFrom("transactions")
       .select([
-        sql<number>`COALESCE(SUM(amount_usdc), 0)`.as("total"),
+        sql<number>`COALESCE(SUM(amount), 0)`.as("total"),
         sql<number>`COUNT(*)`.as("count"),
       ])
       .where("organization_id", "=", organizationId)
@@ -89,14 +89,14 @@ export async function getOrganizationEarnings(
 
     db
       .selectFrom("transactions")
-      .select(sql<number>`COALESCE(SUM(amount_usdc), 0)`.as("total"))
+      .select(sql<number>`COALESCE(SUM(amount), 0)`.as("total"))
       .where("organization_id", "=", organizationId)
       .where("created_at", ">=", currentMonthStart)
       .executeTakeFirst(),
 
     db
       .selectFrom("transactions")
-      .select(sql<number>`COALESCE(SUM(amount_usdc), 0)`.as("total"))
+      .select(sql<number>`COALESCE(SUM(amount), 0)`.as("total"))
       .where("organization_id", "=", organizationId)
       .where("created_at", ">=", previousMonthStart)
       .where("created_at", "<", currentMonthStart)
@@ -109,9 +109,9 @@ export async function getOrganizationEarnings(
   const previousEarned = Number(previousMonth?.total ?? 0);
 
   return {
-    total_earned_usdc: totalEarned,
-    current_month_earned_usdc: currentEarned,
-    previous_month_earned_usdc: previousEarned,
+    total_earned: totalEarned,
+    current_month_earned: currentEarned,
+    previous_month_earned: previousEarned,
     percent_change: calculatePercentChange(currentEarned, previousEarned),
     total_transactions: totalTransactions,
   };
@@ -126,7 +126,7 @@ export async function getTenantEarnings(
     db
       .selectFrom("transactions")
       .select([
-        sql<number>`COALESCE(SUM(amount_usdc), 0)`.as("total"),
+        sql<number>`COALESCE(SUM(amount), 0)`.as("total"),
         sql<number>`COUNT(*)`.as("count"),
       ])
       .where("tenant_id", "=", tenantId)
@@ -134,14 +134,14 @@ export async function getTenantEarnings(
 
     db
       .selectFrom("transactions")
-      .select(sql<number>`COALESCE(SUM(amount_usdc), 0)`.as("total"))
+      .select(sql<number>`COALESCE(SUM(amount), 0)`.as("total"))
       .where("tenant_id", "=", tenantId)
       .where("created_at", ">=", currentMonthStart)
       .executeTakeFirst(),
 
     db
       .selectFrom("transactions")
-      .select(sql<number>`COALESCE(SUM(amount_usdc), 0)`.as("total"))
+      .select(sql<number>`COALESCE(SUM(amount), 0)`.as("total"))
       .where("tenant_id", "=", tenantId)
       .where("created_at", ">=", previousMonthStart)
       .where("created_at", "<", currentMonthStart)
@@ -154,9 +154,9 @@ export async function getTenantEarnings(
   const previousEarned = Number(previousMonth?.total ?? 0);
 
   return {
-    total_earned_usdc: totalEarned,
-    current_month_earned_usdc: currentEarned,
-    previous_month_earned_usdc: previousEarned,
+    total_earned: totalEarned,
+    current_month_earned: currentEarned,
+    previous_month_earned: previousEarned,
     percent_change: calculatePercentChange(currentEarned, previousEarned),
     total_transactions: totalTransactions,
   };
@@ -171,7 +171,7 @@ export async function getCatchAllEarnings(
     db
       .selectFrom("transactions")
       .select([
-        sql<number>`COALESCE(SUM(amount_usdc), 0)`.as("total"),
+        sql<number>`COALESCE(SUM(amount), 0)`.as("total"),
         sql<number>`COUNT(*)`.as("count"),
       ])
       .where("tenant_id", "=", tenantId)
@@ -180,7 +180,7 @@ export async function getCatchAllEarnings(
 
     db
       .selectFrom("transactions")
-      .select(sql<number>`COALESCE(SUM(amount_usdc), 0)`.as("total"))
+      .select(sql<number>`COALESCE(SUM(amount), 0)`.as("total"))
       .where("tenant_id", "=", tenantId)
       .where("endpoint_id", "is", null)
       .where("created_at", ">=", currentMonthStart)
@@ -188,7 +188,7 @@ export async function getCatchAllEarnings(
 
     db
       .selectFrom("transactions")
-      .select(sql<number>`COALESCE(SUM(amount_usdc), 0)`.as("total"))
+      .select(sql<number>`COALESCE(SUM(amount), 0)`.as("total"))
       .where("tenant_id", "=", tenantId)
       .where("endpoint_id", "is", null)
       .where("created_at", ">=", previousMonthStart)
@@ -202,9 +202,9 @@ export async function getCatchAllEarnings(
   const previousEarned = Number(previousMonth?.total ?? 0);
 
   return {
-    total_earned_usdc: totalEarned,
-    current_month_earned_usdc: currentEarned,
-    previous_month_earned_usdc: previousEarned,
+    total_earned: totalEarned,
+    current_month_earned: currentEarned,
+    previous_month_earned: previousEarned,
     percent_change: calculatePercentChange(currentEarned, previousEarned),
     total_transactions: totalTransactions,
   };
@@ -219,7 +219,7 @@ export async function getEndpointEarnings(
     db
       .selectFrom("transactions")
       .select([
-        sql<number>`COALESCE(SUM(amount_usdc), 0)`.as("total"),
+        sql<number>`COALESCE(SUM(amount), 0)`.as("total"),
         sql<number>`COUNT(*)`.as("count"),
       ])
       .where("endpoint_id", "=", endpointId)
@@ -227,14 +227,14 @@ export async function getEndpointEarnings(
 
     db
       .selectFrom("transactions")
-      .select(sql<number>`COALESCE(SUM(amount_usdc), 0)`.as("total"))
+      .select(sql<number>`COALESCE(SUM(amount), 0)`.as("total"))
       .where("endpoint_id", "=", endpointId)
       .where("created_at", ">=", currentMonthStart)
       .executeTakeFirst(),
 
     db
       .selectFrom("transactions")
-      .select(sql<number>`COALESCE(SUM(amount_usdc), 0)`.as("total"))
+      .select(sql<number>`COALESCE(SUM(amount), 0)`.as("total"))
       .where("endpoint_id", "=", endpointId)
       .where("created_at", ">=", previousMonthStart)
       .where("created_at", "<", currentMonthStart)
@@ -247,9 +247,9 @@ export async function getEndpointEarnings(
   const previousEarned = Number(previousMonth?.total ?? 0);
 
   return {
-    total_earned_usdc: totalEarned,
-    current_month_earned_usdc: currentEarned,
-    previous_month_earned_usdc: previousEarned,
+    total_earned: totalEarned,
+    current_month_earned: currentEarned,
+    previous_month_earned: previousEarned,
     percent_change: calculatePercentChange(currentEarned, previousEarned),
     total_transactions: totalTransactions,
   };
@@ -259,7 +259,7 @@ export type Granularity = "day" | "week" | "month";
 
 export interface PeriodEarnings {
   period: string;
-  total_usdc: number;
+  total: number;
   call_count: number;
 }
 
@@ -297,7 +297,7 @@ export async function getEarningsByPeriod(
     .selectFrom("transactions")
     .select([
       sql<string>`TO_CHAR(created_at, ${sql.lit(format)})`.as("period"),
-      sql<number>`COALESCE(SUM(amount_usdc), 0)`.as("total_usdc"),
+      sql<number>`COALESCE(SUM(amount), 0)`.as("total"),
       sql<number>`COUNT(*)`.as("call_count"),
     ])
     .where(column, "=", id)
@@ -308,7 +308,7 @@ export async function getEarningsByPeriod(
 
   return result.map((r) => ({
     period: r.period,
-    total_usdc: Number(r.total_usdc),
+    total: Number(r.total),
     call_count: Number(r.call_count),
   }));
 }

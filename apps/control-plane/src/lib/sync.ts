@@ -10,6 +10,7 @@ export async function buildNodeConfig(nodeId: number) {
     .executeTakeFirst();
 
   if (!node) {
+    logger.warn(`buildNodeConfig: Node ${nodeId} not found`);
     return null;
   }
 
@@ -22,7 +23,7 @@ export async function buildNodeConfig(nodeId: number) {
       "tenants.name",
       "tenants.backend_url",
       "tenants.wallet_id",
-      "tenants.default_price_usdc",
+      "tenants.default_price",
       "tenants.default_scheme",
       "tenants.upstream_auth_header",
       "tenants.upstream_auth_value",
@@ -83,14 +84,14 @@ export async function buildNodeConfig(nodeId: number) {
       org_slug: tenant.org_slug ?? null,
       backend_url: tenant.backend_url,
       wallet_config: walletConfig,
-      default_price_usdc: tenant.default_price_usdc,
+      default_price: tenant.default_price,
       default_scheme: tenant.default_scheme,
       upstream_auth_header: tenant.upstream_auth_header,
       upstream_auth_value: tenant.upstream_auth_value,
       endpoints: endpoints.map((e) => ({
         id: e.id,
         path_pattern: e.path_pattern,
-        price_usdc: e.price_usdc,
+        price: e.price,
         scheme: e.scheme,
         priority: e.priority,
       })),

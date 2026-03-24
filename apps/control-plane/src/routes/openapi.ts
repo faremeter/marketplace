@@ -95,7 +95,7 @@ interface ExtractedPath {
   path: string;
   pattern: string;
   description: string | null;
-  price_usdc: number | null;
+  price: number | null;
   scheme: string | null;
   tags: string[] | null;
 }
@@ -137,8 +137,7 @@ function extractPathsFromSpec(spec: OpenApiSpec): ExtractedPath[] {
     const rawTags = raw["x-corbits-tags"];
 
     const extInput: Record<string, unknown> = {};
-    if (pricing?.price_usdc !== undefined)
-      extInput.price_usdc = pricing.price_usdc;
+    if (pricing?.price !== undefined) extInput.price = pricing.price;
     if (pricing?.scheme !== undefined) extInput.scheme = pricing.scheme;
     if (Array.isArray(rawTags) && rawTags.length > 0) extInput.tags = rawTags;
 
@@ -157,13 +156,13 @@ function extractPathsFromSpec(spec: OpenApiSpec): ExtractedPath[] {
         path,
         pattern,
         description,
-        price_usdc: null,
+        price: null,
         scheme: null,
         tags: null,
       });
     } else {
       const v = ext as {
-        price_usdc?: number | null;
+        price?: number | null;
         scheme?: string | null;
         tags?: string[];
       };
@@ -171,7 +170,7 @@ function extractPathsFromSpec(spec: OpenApiSpec): ExtractedPath[] {
         path,
         pattern,
         description,
-        price_usdc: v.price_usdc ?? null,
+        price: v.price ?? null,
         scheme: v.scheme ?? null,
         tags: v.tags ?? null,
       });
@@ -287,8 +286,7 @@ openapiRoutes.post(
         };
         if (pathInfo.description !== null)
           updates.description = pathInfo.description;
-        if (pathInfo.price_usdc !== null)
-          updates.price_usdc = pathInfo.price_usdc;
+        if (pathInfo.price !== null) updates.price = pathInfo.price;
         if (pathInfo.scheme !== null) updates.scheme = pathInfo.scheme;
         if (pathInfo.tags !== null) updates.tags = pathInfo.tags;
 
@@ -309,8 +307,8 @@ openapiRoutes.post(
             priority: 100,
             is_active: true,
             openapi_source_paths: [pathInfo.path],
-            ...(pathInfo.price_usdc !== null && {
-              price_usdc: pathInfo.price_usdc,
+            ...(pathInfo.price !== null && {
+              price: pathInfo.price,
             }),
             ...(pathInfo.scheme !== null && { scheme: pathInfo.scheme }),
             ...(pathInfo.tags !== null && { tags: pathInfo.tags }),
@@ -352,7 +350,7 @@ openapiRoutes.get("/export", async (c) => {
       "name",
       "backend_url",
       "openapi_spec",
-      "default_price_usdc",
+      "default_price",
       "default_scheme",
     ])
     .where("id", "=", tenantId)
@@ -415,7 +413,7 @@ openapiRoutes.get("/export", async (c) => {
         }
 
         pathObj["x-corbits-pricing"] = {
-          price_usdc: endpoint.price_usdc ?? tenant.default_price_usdc,
+          price: endpoint.price ?? tenant.default_price,
           scheme: endpoint.scheme ?? tenant.default_scheme,
         };
 
@@ -445,7 +443,7 @@ openapiRoutes.get("/export", async (c) => {
           "x-corbits-orphan": true,
           "x-corbits-original-pattern": endpoint.path_pattern,
           "x-corbits-pricing": {
-            price_usdc: endpoint.price_usdc ?? tenant.default_price_usdc,
+            price: endpoint.price ?? tenant.default_price,
             scheme: endpoint.scheme ?? tenant.default_scheme,
           },
         };

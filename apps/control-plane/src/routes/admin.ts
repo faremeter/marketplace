@@ -583,7 +583,7 @@ adminRoutes.get("/tenants", async (c) => {
       "tenants.name",
       "tenants.backend_url",
       "tenants.organization_id",
-      "tenants.default_price_usdc",
+      "tenants.default_price",
       "tenants.default_scheme",
       "tenants.is_active",
       "tenants.status",
@@ -761,7 +761,7 @@ adminRoutes.post(
         backend_url: body.backend_url,
         organization_id: body.organization_id ?? null,
         wallet_id: walletId ?? null,
-        default_price_usdc: body.default_price_usdc ?? 0,
+        default_price: body.default_price ?? 0,
         default_scheme: body.default_scheme ?? "exact",
         upstream_auth_header: body.upstream_auth_header ?? null,
         upstream_auth_value: body.upstream_auth_value ?? null,
@@ -1576,7 +1576,7 @@ adminRoutes.put(
         updateData.path_pattern = inputPath;
       }
     }
-    if (body.price_usdc !== undefined) updateData.price_usdc = body.price_usdc;
+    if (body.price !== undefined) updateData.price = body.price;
     if (body.scheme !== undefined) updateData.scheme = body.scheme;
     if (body.description !== undefined)
       updateData.description = body.description;
@@ -1683,7 +1683,7 @@ adminRoutes.get("/transactions", async (c) => {
       "transactions.id",
       "transactions.endpoint_id",
       "transactions.tenant_id",
-      "transactions.amount_usdc",
+      "transactions.amount",
       "transactions.tx_hash",
       "transactions.network",
       "transactions.request_path",
@@ -1723,7 +1723,7 @@ adminRoutes.get("/tenants/:id/transactions", async (c) => {
       "endpoint_id",
       "tenant_id",
       "organization_id",
-      "amount_usdc",
+      "amount",
       "tx_hash",
       "network",
       "request_path",

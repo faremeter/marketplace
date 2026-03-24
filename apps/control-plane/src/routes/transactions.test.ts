@@ -53,7 +53,7 @@ async function createTenant(orgId: number, name: string) {
       name,
       organization_id: orgId,
       backend_url: "http://backend.example.com",
-      default_price_usdc: 0.01,
+      default_price: 0.01,
       default_scheme: "exact",
     })
     .returning(["id"])
@@ -62,13 +62,13 @@ async function createTenant(orgId: number, name: string) {
 
 async function createTransaction(
   tenantId: number,
-  opts: { amount_usdc?: number; request_path?: string } = {},
+  opts: { amount?: number; request_path?: string } = {},
 ) {
   return db
     .insertInto("transactions")
     .values({
       tenant_id: tenantId,
-      amount_usdc: opts.amount_usdc ?? 0.01,
+      amount: opts.amount ?? 0.01,
       ngx_request_id: `req-${Date.now()}-${Math.random()}`,
       request_path: opts.request_path ?? "/test",
     })
@@ -128,8 +128,8 @@ await t.test("GET /api/tenants/:tenantId/transactions", async (t) => {
     await addMember(user.id, org.id);
     const tenant = await createTenant(org.id, "my-tenant");
 
-    await createTransaction(tenant.id, { amount_usdc: 0.05 });
-    await createTransaction(tenant.id, { amount_usdc: 0.1 });
+    await createTransaction(tenant.id, { amount: 0.05 });
+    await createTransaction(tenant.id, { amount: 0.1 });
 
     const res = await app.request(`/api/tenants/${tenant.id}/transactions`, {
       headers: { Cookie: `auth_token=${user.token}` },
@@ -182,12 +182,12 @@ await t.test("GET /api/tenants/:tenantId/transactions", async (t) => {
     const earlier = new Date(Date.now() - 60000).toISOString();
 
     await sql`
-      INSERT INTO transactions (tenant_id, amount_usdc, ngx_request_id, request_path, created_at)
+      INSERT INTO transactions (tenant_id, amount, ngx_request_id, request_path, created_at)
       VALUES (${tenant.id}, 0.01, 'req-old', '/test', ${earlier})
     `.execute(db);
 
     await sql`
-      INSERT INTO transactions (tenant_id, amount_usdc, ngx_request_id, request_path, created_at)
+      INSERT INTO transactions (tenant_id, amount, ngx_request_id, request_path, created_at)
       VALUES (${tenant.id}, 0.99, 'req-new', '/test', ${now})
     `.execute(db);
 
@@ -197,8 +197,8 @@ await t.test("GET /api/tenants/:tenantId/transactions", async (t) => {
     t.equal(res.status, 200);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const data = (await res.json()) as any[];
-    t.equal(data[0].amount_usdc, 0.99);
-    t.equal(data[1].amount_usdc, 0.01);
+    t.equal(data[0].amount, 0.99);
+    t.equal(data[1].amount, 0.01);
   });
 
   await t.test("returns empty when date range excludes all", async (t) => {
@@ -449,7 +449,7 @@ await t.test("GET /api/tenants/:tenantId/transactions/:id", async (t) => {
     const tenant = await createTenant(org.id, "my-tenant");
 
     const txn = await createTransaction(tenant.id, {
-      amount_usdc: 0.25,
+      amount: 0.25,
       request_path: "/api/users",
     });
 
@@ -460,7 +460,7 @@ await t.test("GET /api/tenants/:tenantId/transactions/:id", async (t) => {
     t.equal(res.status, 200);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const data = (await res.json()) as any;
-    t.equal(data.amount_usdc, 0.25);
+    t.equal(data.amount, 0.25);
     t.equal(data.request_path, "/api/users");
   });
 });

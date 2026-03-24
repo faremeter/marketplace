@@ -26,7 +26,7 @@ async function createTenant(overrides: {
     .values({
       name: overrides.name ?? "Test Tenant",
       backend_url: "https://api.example.com",
-      default_price_usdc: 0.01,
+      default_price: 0.01,
       default_scheme: "exact",
       is_active: overrides.is_active ?? true,
       status: overrides.status ?? "active",

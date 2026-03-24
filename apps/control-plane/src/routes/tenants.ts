@@ -85,7 +85,7 @@ tenantsRoutes.post(
         backend_url: body.backend_url,
         organization_id: body.organization_id ?? null,
         wallet_id: body.wallet_id ?? null,
-        default_price_usdc: body.default_price_usdc ?? 0,
+        default_price: body.default_price ?? 0,
         default_scheme: body.default_scheme ?? "exact",
         upstream_auth_header: body.upstream_auth_header ?? null,
         upstream_auth_value: body.upstream_auth_value ?? null,
@@ -157,8 +157,8 @@ tenantsRoutes.put(
       }
     }
     if (body.wallet_id !== undefined) updateData.wallet_id = body.wallet_id;
-    if (body.default_price_usdc !== undefined)
-      updateData.default_price_usdc = body.default_price_usdc;
+    if (body.default_price !== undefined)
+      updateData.default_price = body.default_price;
     if (body.default_scheme !== undefined)
       updateData.default_scheme = body.default_scheme;
     if (body.upstream_auth_header !== undefined)

@@ -6,7 +6,7 @@ interface Tenant {
   id: number;
   name: string;
   backend_url: string;
-  default_price_usdc: number;
+  default_price: number;
   default_scheme: string;
   is_active: boolean;
   status: string;

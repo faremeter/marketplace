@@ -16,7 +16,7 @@ import {
   AdminUpdateTenantSchema,
   AdminUpdateEndpointSchema,
   MAX_NAME_LENGTH,
-  MAX_PRICE_USDC,
+  MAX_PRICE,
   MIN_PASSWORD_LENGTH,
   MAX_TAGS,
   MAX_TAG_LENGTH,
@@ -105,7 +105,7 @@ await t.test("CreateEndpointSchema", async (t) => {
   await t.test("accepts full valid data", async (t) => {
     const result = CreateEndpointSchema({
       path: "/api/test",
-      price_usdc: 10000, // $0.01 in micro-USDC
+      price: 10000, // $0.01 in micro-USDC
       scheme: "exact",
       description: "Test endpoint",
       priority: 10,
@@ -129,40 +129,40 @@ await t.test("CreateEndpointSchema", async (t) => {
   await t.test("rejects negative price", async (t) => {
     const result = CreateEndpointSchema({
       path: "/api/test",
-      price_usdc: -1,
+      price: -1,
     });
     t.equal(isError(result), true);
   });
 
-  await t.test(`rejects price > ${MAX_PRICE_USDC}`, async (t) => {
+  await t.test(`rejects price > ${MAX_PRICE}`, async (t) => {
     const result = CreateEndpointSchema({
       path: "/api/test",
-      price_usdc: MAX_PRICE_USDC + 1,
+      price: MAX_PRICE + 1,
     });
     t.equal(isError(result), true);
   });
 
-  await t.test("accepts null price_usdc", async (t) => {
+  await t.test("accepts null price", async (t) => {
     const result = CreateEndpointSchema({
       path: "/api/test",
-      price_usdc: null,
+      price: null,
     });
     t.equal(isError(result), false);
   });
 
-  await t.test("price_usdc edge cases", async (t) => {
+  await t.test("price edge cases", async (t) => {
     await t.test("accepts 0 (free)", async (t) => {
       const result = CreateEndpointSchema({
         path: "/api/test",
-        price_usdc: 0,
+        price: 0,
       });
       t.equal(isError(result), false);
     });
 
-    await t.test(`accepts ${MAX_PRICE_USDC} (max price)`, async (t) => {
+    await t.test(`accepts ${MAX_PRICE} (max price)`, async (t) => {
       const result = CreateEndpointSchema({
         path: "/api/test",
-        price_usdc: MAX_PRICE_USDC,
+        price: MAX_PRICE,
       });
       t.equal(isError(result), false);
     });
@@ -170,7 +170,7 @@ await t.test("CreateEndpointSchema", async (t) => {
     await t.test("accepts fractional values", async (t) => {
       const result = CreateEndpointSchema({
         path: "/api/test",
-        price_usdc: 0.5,
+        price: 0.5,
       });
       t.equal(isError(result), false);
     });
@@ -185,7 +185,7 @@ await t.test("UpdateEndpointSchema", async (t) => {
 
   await t.test("accepts partial update", async (t) => {
     const result = UpdateEndpointSchema({
-      price_usdc: 0.05,
+      price: 0.05,
       is_active: false,
     });
     t.equal(isError(result), false);
@@ -206,7 +206,7 @@ await t.test("CreateTenantSchema", async (t) => {
       name: "my-tenant",
       backend_url: "https://api.example.com",
       wallet_id: 1,
-      default_price_usdc: 0.01,
+      default_price: 0.01,
       default_scheme: "exact",
       upstream_auth_header: "Authorization",
       upstream_auth_value: "Bearer token",
@@ -233,30 +233,30 @@ await t.test("CreateTenantSchema", async (t) => {
     t.equal(isError(result), true);
   });
 
-  await t.test("default_price_usdc edge cases", async (t) => {
+  await t.test("default_price edge cases", async (t) => {
     await t.test("accepts 0 (free)", async (t) => {
       const result = CreateTenantSchema({
         name: "my-tenant",
         backend_url: "https://api.example.com",
-        default_price_usdc: 0,
+        default_price: 0,
       });
       t.equal(isError(result), false);
     });
 
-    await t.test(`accepts ${MAX_PRICE_USDC} (max price)`, async (t) => {
+    await t.test(`accepts ${MAX_PRICE} (max price)`, async (t) => {
       const result = CreateTenantSchema({
         name: "my-tenant",
         backend_url: "https://api.example.com",
-        default_price_usdc: MAX_PRICE_USDC,
+        default_price: MAX_PRICE,
       });
       t.equal(isError(result), false);
     });
 
-    await t.test(`rejects ${MAX_PRICE_USDC + 1} (over max)`, async (t) => {
+    await t.test(`rejects ${MAX_PRICE + 1} (over max)`, async (t) => {
       const result = CreateTenantSchema({
         name: "my-tenant",
         backend_url: "https://api.example.com",
-        default_price_usdc: MAX_PRICE_USDC + 1,
+        default_price: MAX_PRICE + 1,
       });
       t.equal(isError(result), true);
     });
@@ -265,7 +265,7 @@ await t.test("CreateTenantSchema", async (t) => {
       const result = CreateTenantSchema({
         name: "my-tenant",
         backend_url: "https://api.example.com",
-        default_price_usdc: -1,
+        default_price: -1,
       });
       t.equal(isError(result), true);
     });

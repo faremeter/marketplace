@@ -22,7 +22,7 @@ interface Tenant {
   backend_url: string;
   organization_id: number | null;
   organization_name: string | null;
-  default_price_usdc: number;
+  default_price: number;
   default_scheme: string;
   is_active: boolean;
   status: string;

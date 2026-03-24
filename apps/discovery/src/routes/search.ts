@@ -10,7 +10,7 @@ interface TenantResult {
   id: number;
   name: string;
   org_slug: string | null;
-  default_price_usdc: number;
+  default_price: number;
   default_scheme: string;
   tags: string[];
 }
@@ -22,7 +22,7 @@ interface EndpointResult {
   org_slug: string | null;
   path_pattern: string;
   description: string | null;
-  price_usdc: number | null;
+  price: number | null;
   scheme: string | null;
   tags: string[];
 }
@@ -63,7 +63,7 @@ searchRoutes.get("/", async (c) => {
             "id",
             "name",
             "org_slug",
-            "default_price_usdc",
+            "default_price",
             "default_scheme",
             "tags",
           ])
@@ -91,7 +91,7 @@ searchRoutes.get("/", async (c) => {
             "t.org_slug",
             "e.path_pattern",
             "e.description",
-            "e.price_usdc",
+            "e.price",
             "e.scheme",
             "e.tags",
           ])
@@ -127,7 +127,7 @@ searchRoutes.get("/", async (c) => {
             "id",
             "name",
             "org_slug",
-            "default_price_usdc",
+            "default_price",
             "default_scheme",
             "tags",
           ])
@@ -148,7 +148,7 @@ searchRoutes.get("/", async (c) => {
             "t.org_slug",
             "e.path_pattern",
             "e.description",
-            "e.price_usdc",
+            "e.price",
             "e.scheme",
             "e.tags",
           ])

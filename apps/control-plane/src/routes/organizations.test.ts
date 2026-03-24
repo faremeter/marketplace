@@ -1029,7 +1029,7 @@ await t.test("GET /api/organizations/:id/tenants", async (t) => {
         name: "my-proxy",
         backend_url: "http://backend.com",
         organization_id: org.id,
-        default_price_usdc: 0.01,
+        default_price: 0.01,
         default_scheme: "exact",
       })
       .returning("id")
@@ -1101,7 +1101,7 @@ await t.test("GET /api/organizations/:id/tenants/check-name", async (t) => {
           organization_id: org.id,
           org_slug: "team",
           backend_url: "http://backend.com",
-          default_price_usdc: 0.01,
+          default_price: 0.01,
           default_scheme: "exact",
         })
         .execute();
@@ -1132,7 +1132,7 @@ await t.test("GET /api/organizations/:id/tenants/check-name", async (t) => {
         .values({
           name: "legacy-api",
           backend_url: "http://backend.com",
-          default_price_usdc: 0.01,
+          default_price: 0.01,
           default_scheme: "exact",
           org_slug: null,
         })
@@ -1168,7 +1168,7 @@ await t.test("GET /api/organizations/:id/tenants/check-name", async (t) => {
           name: "shared-api",
           organization_id: org1.id,
           backend_url: "http://backend.com",
-          default_price_usdc: 0.01,
+          default_price: 0.01,
           default_scheme: "exact",
           org_slug: "org-one",
         })
@@ -1203,7 +1203,7 @@ await t.test("GET /api/organizations/:id/tenants/check-name", async (t) => {
           name: "taken-api",
           organization_id: org.id,
           backend_url: "http://backend.com",
-          default_price_usdc: 0.01,
+          default_price: 0.01,
           default_scheme: "exact",
           org_slug: "team",
         })
@@ -1439,7 +1439,7 @@ await t.test("GET /api/organizations/:id/onboarding-status", async (t) => {
           name: "my-proxy",
           backend_url: "http://backend.com",
           organization_id: org.id,
-          default_price_usdc: 0.01,
+          default_price: 0.01,
           default_scheme: "exact",
         })
         .returning("id")
@@ -1530,7 +1530,7 @@ await t.test("POST /api/organizations/:id/complete-onboarding", async (t) => {
         name: "my-proxy",
         backend_url: "http://backend.com",
         organization_id: org.id,
-        default_price_usdc: 0.01,
+        default_price: 0.01,
         default_scheme: "exact",
       })
       .returning("id")
@@ -1625,7 +1625,7 @@ await t.test("PUT /api/organizations/:id/tenants/:tenantId", async (t) => {
         name: "test-proxy",
         backend_url: "http://backend.com",
         organization_id: org.id,
-        default_price_usdc: 0.01,
+        default_price: 0.01,
         default_scheme: "exact",
       })
       .returning("id")
@@ -1675,7 +1675,7 @@ await t.test("PUT /api/organizations/:id/tenants/:tenantId", async (t) => {
         name: "other-proxy",
         backend_url: "http://backend.com",
         organization_id: org2.id,
-        default_price_usdc: 0.01,
+        default_price: 0.01,
         default_scheme: "exact",
       })
       .returning("id")
@@ -1707,7 +1707,7 @@ await t.test("PUT /api/organizations/:id/tenants/:tenantId", async (t) => {
         name: "deleting-proxy",
         backend_url: "http://backend.com",
         organization_id: org.id,
-        default_price_usdc: 0.01,
+        default_price: 0.01,
         default_scheme: "exact",
         status: "deleting",
       })
@@ -1753,7 +1753,7 @@ await t.test("PUT /api/organizations/:id/tenants/:tenantId", async (t) => {
         name: "registered-proxy",
         backend_url: "http://backend.com",
         organization_id: org.id,
-        default_price_usdc: 0.01,
+        default_price: 0.01,
         default_scheme: "exact",
         status: "registered",
         org_slug: "team",
@@ -1794,7 +1794,7 @@ await t.test("PUT /api/organizations/:id/tenants/:tenantId", async (t) => {
         name: "test-proxy",
         backend_url: "http://backend.com",
         organization_id: org.id,
-        default_price_usdc: 0.01,
+        default_price: 0.01,
         default_scheme: "exact",
         status: "active",
       })
@@ -1841,7 +1841,7 @@ await t.test("PUT /api/organizations/:id/tenants/:tenantId", async (t) => {
         name: "test-proxy",
         backend_url: "http://backend.com",
         organization_id: org1.id,
-        default_price_usdc: 0.01,
+        default_price: 0.01,
         default_scheme: "exact",
         status: "active",
       })
@@ -1875,7 +1875,7 @@ await t.test("DELETE /api/organizations/:id/tenants/:tenantId", async (t) => {
         name: "test-proxy",
         backend_url: "http://backend.com",
         organization_id: org.id,
-        default_price_usdc: 0.01,
+        default_price: 0.01,
         default_scheme: "exact",
       })
       .returning("id")
@@ -1917,7 +1917,7 @@ await t.test("DELETE /api/organizations/:id/tenants/:tenantId", async (t) => {
         name: "other-proxy",
         backend_url: "http://backend.com",
         organization_id: org2.id,
-        default_price_usdc: 0.01,
+        default_price: 0.01,
         default_scheme: "exact",
       })
       .returning("id")
@@ -1945,7 +1945,7 @@ await t.test("DELETE /api/organizations/:id/tenants/:tenantId", async (t) => {
         name: "deleting-proxy",
         backend_url: "http://backend.com",
         organization_id: org.id,
-        default_price_usdc: 0.01,
+        default_price: 0.01,
         default_scheme: "exact",
         status: "deleting",
       })
@@ -1977,7 +1977,7 @@ await t.test("DELETE /api/organizations/:id/tenants/:tenantId", async (t) => {
         name: "cert-proxy",
         backend_url: "http://backend.com",
         organization_id: org.id,
-        default_price_usdc: 0.01,
+        default_price: 0.01,
         default_scheme: "exact",
       })
       .returning("id")
@@ -2202,7 +2202,7 @@ await t.test("POST /api/organizations/:id/tenants", async (t) => {
     const data = (await res.json()) as any;
     t.equal(data.name, "my-new-proxy");
     t.equal(data.backend_url, "http://backend.com");
-    t.equal(data.default_price_usdc, 0);
+    t.equal(data.default_price, 0);
     t.equal(data.default_scheme, "exact");
   });
 
@@ -2251,7 +2251,7 @@ await t.test("POST /api/organizations/:id/tenants", async (t) => {
         name: "full-proxy",
         backend_url: "http://backend.com",
         wallet_id: wallet.id,
-        default_price_usdc: 0.05,
+        default_price: 0.05,
         default_scheme: "exact",
         upstream_auth_header: "X-API-Key",
         upstream_auth_value: "secret123",
@@ -2261,7 +2261,7 @@ await t.test("POST /api/organizations/:id/tenants", async (t) => {
     t.equal(res.status, 201);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const data = (await res.json()) as any;
-    t.equal(data.default_price_usdc, 0.05);
+    t.equal(data.default_price, 0.05);
     t.equal(data.default_scheme, "exact");
     t.equal(data.upstream_auth_header, "X-API-Key");
     t.equal(data.upstream_auth_value, "secret123");
@@ -2366,7 +2366,7 @@ await t.test("POST /api/organizations/:id/tenants", async (t) => {
         name: "unique-proxy",
         backend_url: "http://backend.com",
         wallet_id: wallet.id,
-        default_price_usdc: 0.01,
+        default_price: 0.01,
         default_scheme: "exact",
       }),
     });
@@ -2381,7 +2381,7 @@ await t.test("POST /api/organizations/:id/tenants", async (t) => {
         name: "unique-proxy",
         backend_url: "http://other.com",
         wallet_id: wallet.id,
-        default_price_usdc: 0.01,
+        default_price: 0.01,
         default_scheme: "exact",
       }),
     });
@@ -2720,7 +2720,7 @@ await t.test(
           backend_url: "http://backend.com",
           organization_id: org.id,
           wallet_id: wallet.id,
-          default_price_usdc: 0.01,
+          default_price: 0.01,
           default_scheme: "exact",
           status: "registered",
           org_slug: "team",
@@ -2780,7 +2780,7 @@ await t.test(
           name: "active-proxy",
           backend_url: "http://backend.com",
           organization_id: org.id,
-          default_price_usdc: 0.01,
+          default_price: 0.01,
           default_scheme: "exact",
           status: "active",
           org_slug: "team",
@@ -2816,7 +2816,7 @@ await t.test(
           backend_url: "http://backend.com",
           organization_id: org.id,
           wallet_id: null,
-          default_price_usdc: 0.01,
+          default_price: 0.01,
           default_scheme: "exact",
           status: "registered",
           org_slug: "team",
@@ -2863,7 +2863,7 @@ await t.test(
           backend_url: "http://backend.com",
           organization_id: org.id,
           wallet_id: wallet.id,
-          default_price_usdc: 0.01,
+          default_price: 0.01,
           default_scheme: "exact",
           status: "registered",
           org_slug: "team",
@@ -2910,7 +2910,7 @@ await t.test(
           backend_url: "",
           organization_id: org.id,
           wallet_id: wallet.id,
-          default_price_usdc: 0.01,
+          default_price: 0.01,
           default_scheme: "exact",
           status: "registered",
           org_slug: "team",
@@ -2961,7 +2961,7 @@ await t.test(
             backend_url: "http://backend.com",
             organization_id: org.id,
             wallet_id: wallet.id,
-            default_price_usdc: 0.01,
+            default_price: 0.01,
             default_scheme: "exact",
             status: "registered",
             org_slug: "team",
@@ -2999,7 +2999,7 @@ await t.test(
           name: "registered-proxy",
           backend_url: "http://backend.com",
           organization_id: org.id,
-          default_price_usdc: 0.01,
+          default_price: 0.01,
           default_scheme: "exact",
           status: "registered",
           org_slug: "team",
@@ -3042,7 +3042,7 @@ await t.test(
           name: "test-proxy",
           backend_url: "http://backend.com",
           organization_id: org.id,
-          default_price_usdc: 0.01,
+          default_price: 0.01,
           default_scheme: "exact",
         })
         .returning("id")
@@ -3068,7 +3068,7 @@ await t.test(
           name: "other-proxy",
           backend_url: "http://backend.com",
           organization_id: org2.id,
-          default_price_usdc: 0.01,
+          default_price: 0.01,
           default_scheme: "exact",
         })
         .returning("id")
@@ -3093,7 +3093,7 @@ await t.test(
           name: "test-proxy",
           backend_url: "http://backend.com",
           organization_id: org.id,
-          default_price_usdc: 0.01,
+          default_price: 0.01,
           default_scheme: "exact",
         })
         .returning("id")
@@ -3122,7 +3122,7 @@ await t.test(
           name: "test-proxy",
           backend_url: "http://backend.com",
           organization_id: org.id,
-          default_price_usdc: 0.01,
+          default_price: 0.01,
           default_scheme: "exact",
         })
         .returning("id")
@@ -3157,7 +3157,7 @@ await t.test(
           name: "tenant-1",
           backend_url: "http://backend.com",
           organization_id: org.id,
-          default_price_usdc: 0.01,
+          default_price: 0.01,
           default_scheme: "exact",
         })
         .returning("id")
@@ -3169,7 +3169,7 @@ await t.test(
           name: "tenant-2",
           backend_url: "http://backend.com",
           organization_id: org.id,
-          default_price_usdc: 0.01,
+          default_price: 0.01,
           default_scheme: "exact",
         })
         .returning("id")
@@ -3204,7 +3204,7 @@ await t.test(
           name: "test-proxy",
           backend_url: "http://backend.com",
           organization_id: org.id,
-          default_price_usdc: 0.01,
+          default_price: 0.01,
           default_scheme: "exact",
         })
         .returning("id")
@@ -3243,7 +3243,7 @@ await t.test(
           name: "test-proxy",
           backend_url: "http://backend.com",
           organization_id: org.id,
-          default_price_usdc: 0.01,
+          default_price: 0.01,
           default_scheme: "exact",
         })
         .returning("id")
@@ -3269,7 +3269,7 @@ await t.test(
           name: "other-proxy",
           backend_url: "http://backend.com",
           organization_id: org2.id,
-          default_price_usdc: 0.01,
+          default_price: 0.01,
           default_scheme: "exact",
         })
         .returning("id")
@@ -3294,7 +3294,7 @@ await t.test(
           name: "test-proxy",
           backend_url: "http://backend.com",
           organization_id: org.id,
-          default_price_usdc: 0.01,
+          default_price: 0.01,
           default_scheme: "exact",
         })
         .returning("id")
@@ -3399,7 +3399,7 @@ await t.test("GET /api/organizations/:id/analytics/earnings", async (t) => {
         name: "other-proxy",
         backend_url: "http://backend.com",
         organization_id: org2.id,
-        default_price_usdc: 0.01,
+        default_price: 0.01,
         default_scheme: "exact",
       })
       .returning("id")
@@ -3425,7 +3425,7 @@ await t.test("GET /api/organizations/:id/analytics/earnings", async (t) => {
         name: "other-proxy",
         backend_url: "http://backend.com",
         organization_id: org2.id,
-        default_price_usdc: 0.01,
+        default_price: 0.01,
         default_scheme: "exact",
       })
       .returning("id")
@@ -3489,7 +3489,7 @@ await t.test("GET /api/organizations/:id/analytics/earnings", async (t) => {
         name: "test-proxy",
         backend_url: "http://backend.com",
         organization_id: org.id,
-        default_price_usdc: 0.01,
+        default_price: 0.01,
         default_scheme: "exact",
       })
       .returning("id")
@@ -3514,7 +3514,7 @@ await t.test("GET /api/organizations/:id/analytics/earnings", async (t) => {
         name: "test-proxy",
         backend_url: "http://backend.com",
         organization_id: org.id,
-        default_price_usdc: 0.01,
+        default_price: 0.01,
         default_scheme: "exact",
       })
       .returning("id")
@@ -3600,7 +3600,7 @@ await t.test("Admin bypass - access non-member org", async (t) => {
         name: "other-proxy",
         backend_url: "http://backend.com",
         organization_id: org.id,
-        default_price_usdc: 0.01,
+        default_price: 0.01,
         default_scheme: "exact",
       })
       .execute();
@@ -3631,7 +3631,7 @@ await t.test("DELETE /api/organizations/:id - cascade behavior", async (t) => {
           name: "my-proxy",
           backend_url: "http://backend.com",
           organization_id: org.id,
-          default_price_usdc: 0.01,
+          default_price: 0.01,
           default_scheme: "exact",
         })
         .returning("id")

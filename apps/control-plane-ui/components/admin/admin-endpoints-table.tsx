@@ -29,7 +29,7 @@ interface Endpoint {
   tenant_id: number;
   path: string | null;
   path_pattern: string;
-  price_usdc: number | null;
+  price: number | null;
   scheme: string | null;
   description: string | null;
   priority: number;
@@ -46,7 +46,7 @@ interface OpenApiSpecResponse {
 
 interface AdminEndpointsTableProps {
   tenantId: number;
-  defaultPriceUsdc: number;
+  defaultPrice: number;
   defaultScheme: string;
   enabled: boolean;
   onDefaultsChange?: () => void;
@@ -54,7 +54,7 @@ interface AdminEndpointsTableProps {
 
 export function AdminEndpointsTable({
   tenantId,
-  defaultPriceUsdc,
+  defaultPrice,
   defaultScheme,
   enabled,
   onDefaultsChange,
@@ -165,7 +165,7 @@ export function AdminEndpointsTable({
                 key={endpoint.id}
                 endpoint={endpoint}
                 tenantId={tenantId}
-                defaultPriceUsdc={defaultPriceUsdc}
+                defaultPrice={defaultPrice}
                 defaultScheme={defaultScheme}
                 hasOpenApiSpec={hasOpenApiSpec}
                 onUpdate={() => mutate()}
@@ -175,7 +175,7 @@ export function AdminEndpointsTable({
             ))}
             <DefaultRow
               tenantId={tenantId}
-              defaultPriceUsdc={defaultPriceUsdc}
+              defaultPrice={defaultPrice}
               defaultScheme={defaultScheme}
               hasOpenApiSpec={hasOpenApiSpec}
               onUpdate={() => {
@@ -225,7 +225,7 @@ export function AdminEndpointsTable({
         <AdminEditEndpointDialog
           endpoint={editingEndpoint}
           tenantId={tenantId}
-          defaultPriceUsdc={defaultPriceUsdc}
+          defaultPrice={defaultPrice}
           defaultScheme={defaultScheme}
           onClose={() => setEditingEndpoint(null)}
           onSuccess={() => {
@@ -241,7 +241,7 @@ export function AdminEndpointsTable({
 function EndpointRow({
   endpoint,
   tenantId,
-  defaultPriceUsdc,
+  defaultPrice,
   defaultScheme,
   hasOpenApiSpec,
   onUpdate,
@@ -250,7 +250,7 @@ function EndpointRow({
 }: {
   endpoint: Endpoint;
   tenantId: number;
-  defaultPriceUsdc: number;
+  defaultPrice: number;
   defaultScheme: string;
   hasOpenApiSpec: boolean;
   onUpdate: () => void;
@@ -291,14 +291,14 @@ function EndpointRow({
       <td className="whitespace-nowrap px-4 py-3">
         <div className="flex items-center gap-2">
           <InlinePriceEdit
-            priceUsdc={endpoint.price_usdc ?? defaultPriceUsdc}
-            defaultPriceUsdc={defaultPriceUsdc}
+            priceMicro={endpoint.price ?? defaultPrice}
+            defaultPriceMicro={defaultPrice}
             onUpdate={onUpdate}
             apiEndpoint={`/api/admin/tenants/${tenantId}/endpoints/${endpoint.id}`}
-            fieldName="price_usdc"
+            fieldName="price"
             label="Price"
           />
-          {(endpoint.price_usdc ?? defaultPriceUsdc) === 0 && (
+          {(endpoint.price ?? defaultPrice) === 0 && (
             <span className="rounded bg-green-900/50 px-1.5 py-0.5 text-xs font-medium text-green-400 border border-green-800">
               Free
             </span>
@@ -316,14 +316,14 @@ function EndpointRow({
         />
       </td>
       <td
-        className={`whitespace-nowrap px-4 py-3 text-right text-sm ${isLoading ? "text-gray-9" : getValueColor(analytics?.total_earned_usdc)}`}
+        className={`whitespace-nowrap px-4 py-3 text-right text-sm ${isLoading ? "text-gray-9" : getValueColor(analytics?.total_earned)}`}
       >
-        {isLoading ? "..." : formatUSDC(analytics?.total_earned_usdc)}
+        {isLoading ? "..." : formatUSDC(analytics?.total_earned)}
       </td>
       <td
-        className={`whitespace-nowrap px-4 py-3 text-right text-sm ${isLoading ? "text-gray-9" : getValueColor(analytics?.current_month_earned_usdc)}`}
+        className={`whitespace-nowrap px-4 py-3 text-right text-sm ${isLoading ? "text-gray-9" : getValueColor(analytics?.current_month_earned)}`}
       >
-        {isLoading ? "..." : formatUSDC(analytics?.current_month_earned_usdc)}
+        {isLoading ? "..." : formatUSDC(analytics?.current_month_earned)}
       </td>
       <td
         className={`whitespace-nowrap px-4 py-3 text-right text-sm ${isLoading ? "text-gray-9" : getChangeColor(analytics?.percent_change)}`}
@@ -418,13 +418,13 @@ function EndpointRow({
 
 function DefaultRow({
   tenantId,
-  defaultPriceUsdc,
+  defaultPrice,
   defaultScheme,
   hasOpenApiSpec,
   onUpdate,
 }: {
   tenantId: number;
-  defaultPriceUsdc: number;
+  defaultPrice: number;
   defaultScheme: string;
   hasOpenApiSpec: boolean;
   onUpdate: () => void;
@@ -448,13 +448,13 @@ function DefaultRow({
       <td className="whitespace-nowrap px-4 py-3">
         <div className="flex items-center gap-2">
           <InlinePriceEdit
-            priceUsdc={defaultPriceUsdc}
+            priceMicro={defaultPrice}
             onUpdate={onUpdate}
             apiEndpoint={`/api/admin/tenants/${tenantId}`}
-            fieldName="default_price_usdc"
+            fieldName="default_price"
             label="Default Price"
           />
-          {defaultPriceUsdc === 0 && (
+          {defaultPrice === 0 && (
             <span className="rounded bg-green-900/50 px-1.5 py-0.5 text-xs font-medium text-green-400 border border-green-800">
               Free
             </span>
@@ -471,14 +471,14 @@ function DefaultRow({
         />
       </td>
       <td
-        className={`whitespace-nowrap px-4 py-3 text-right text-sm ${isLoading ? "text-gray-9" : getValueColor(analytics?.total_earned_usdc)}`}
+        className={`whitespace-nowrap px-4 py-3 text-right text-sm ${isLoading ? "text-gray-9" : getValueColor(analytics?.total_earned)}`}
       >
-        {isLoading ? "..." : formatUSDC(analytics?.total_earned_usdc)}
+        {isLoading ? "..." : formatUSDC(analytics?.total_earned)}
       </td>
       <td
-        className={`whitespace-nowrap px-4 py-3 text-right text-sm ${isLoading ? "text-gray-9" : getValueColor(analytics?.current_month_earned_usdc)}`}
+        className={`whitespace-nowrap px-4 py-3 text-right text-sm ${isLoading ? "text-gray-9" : getValueColor(analytics?.current_month_earned)}`}
       >
-        {isLoading ? "..." : formatUSDC(analytics?.current_month_earned_usdc)}
+        {isLoading ? "..." : formatUSDC(analytics?.current_month_earned)}
       </td>
       <td
         className={`whitespace-nowrap px-4 py-3 text-right text-sm ${isLoading ? "text-gray-9" : getChangeColor(analytics?.percent_change)}`}

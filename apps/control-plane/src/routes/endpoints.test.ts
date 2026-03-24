@@ -53,7 +53,7 @@ async function createTenant(orgId: number, name: string) {
       name,
       organization_id: orgId,
       backend_url: "http://backend.example.com",
-      default_price_usdc: 0.01,
+      default_price: 0.01,
       default_scheme: "exact",
     })
     .returning(["id"])
@@ -63,7 +63,7 @@ async function createTenant(orgId: number, name: string) {
 async function createEndpoint(
   tenantId: number,
   path: string,
-  opts: { priority?: number; is_active?: boolean; price_usdc?: number } = {},
+  opts: { priority?: number; is_active?: boolean; price?: number } = {},
 ) {
   return db
     .insertInto("endpoints")
@@ -73,7 +73,7 @@ async function createEndpoint(
       path_pattern: path,
       priority: opts.priority ?? 100,
       is_active: opts.is_active ?? true,
-      price_usdc: opts.price_usdc ?? 0.01,
+      price: opts.price ?? 0.01,
     })
     .returning(["id"])
     .executeTakeFirstOrThrow();
@@ -255,7 +255,7 @@ await t.test("GET /api/tenants/:tenantId/endpoints/:id", async (t) => {
     const tenant = await createTenant(org.id, "my-tenant");
 
     const endpoint = await createEndpoint(tenant.id, "/users/list", {
-      price_usdc: 0.05,
+      price: 0.05,
       priority: 50,
     });
 
@@ -267,7 +267,7 @@ await t.test("GET /api/tenants/:tenantId/endpoints/:id", async (t) => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const data = (await res.json()) as any;
     t.equal(data.path, "/users/list");
-    t.equal(data.price_usdc, 0.05);
+    t.equal(data.price, 0.05);
     t.equal(data.priority, 50);
   });
 });
@@ -287,7 +287,7 @@ await t.test("POST /api/tenants/:tenantId/endpoints", async (t) => {
       },
       body: JSON.stringify({
         path: "/users/list",
-        price_usdc: 0.02,
+        price: 0.02,
       }),
     });
 
@@ -296,7 +296,7 @@ await t.test("POST /api/tenants/:tenantId/endpoints", async (t) => {
     const data = (await res.json()) as any;
     t.equal(data.path, "/users/list");
     t.equal(data.path_pattern, "/users/list");
-    t.equal(data.price_usdc, 0.02);
+    t.equal(data.price, 0.02);
     t.equal(data.is_active, true);
   });
 
@@ -410,7 +410,7 @@ await t.test("POST /api/tenants/:tenantId/endpoints", async (t) => {
       },
       body: JSON.stringify({
         path: "/premium/endpoint",
-        price_usdc: 1.5,
+        price: 1.5,
         scheme: "exact",
         description: "Premium API endpoint",
         priority: 10,
@@ -420,7 +420,7 @@ await t.test("POST /api/tenants/:tenantId/endpoints", async (t) => {
     t.equal(res.status, 201);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const data = (await res.json()) as any;
-    t.equal(data.price_usdc, 1.5);
+    t.equal(data.price, 1.5);
     t.equal(data.scheme, "exact");
     t.equal(data.description, "Premium API endpoint");
     t.equal(data.priority, 10);
@@ -437,7 +437,7 @@ await t.test("POST /api/tenants/:tenantId/endpoints", async (t) => {
         name: "registered-tenant",
         organization_id: org.id,
         backend_url: "http://backend.example.com",
-        default_price_usdc: 0.01,
+        default_price: 0.01,
         default_scheme: "exact",
         status: "registered",
       })
@@ -452,7 +452,7 @@ await t.test("POST /api/tenants/:tenantId/endpoints", async (t) => {
       },
       body: JSON.stringify({
         path: "/api/test",
-        price_usdc: 0.05,
+        price: 0.05,
       }),
     });
 
@@ -510,7 +510,7 @@ await t.test("POST /api/tenants/:tenantId/endpoints", async (t) => {
         Cookie: `auth_token=${user.token}`,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ price_usdc: 0.05 }),
+      body: JSON.stringify({ price: 0.05 }),
     });
 
     t.equal(res.status, 400);
@@ -695,7 +695,7 @@ await t.test("PUT /api/tenants/:tenantId/endpoints/:id", async (t) => {
         Cookie: `auth_token=${user.token}`,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ price_usdc: 0.05 }),
+      body: JSON.stringify({ price: 0.05 }),
     });
 
     t.equal(res.status, 404);
@@ -708,7 +708,7 @@ await t.test("PUT /api/tenants/:tenantId/endpoints/:id", async (t) => {
     const tenant = await createTenant(org.id, "my-tenant");
 
     const endpoint = await createEndpoint(tenant.id, "/old-path", {
-      price_usdc: 0.01,
+      price: 0.01,
       priority: 100,
     });
 
@@ -722,7 +722,7 @@ await t.test("PUT /api/tenants/:tenantId/endpoints/:id", async (t) => {
         },
         body: JSON.stringify({
           path: "/new-path",
-          price_usdc: 0.1,
+          price: 0.1,
           priority: 50,
           description: "Updated description",
         }),
@@ -733,7 +733,7 @@ await t.test("PUT /api/tenants/:tenantId/endpoints/:id", async (t) => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const data = (await res.json()) as any;
     t.equal(data.path, "/new-path");
-    t.equal(data.price_usdc, 0.1);
+    t.equal(data.price, 0.1);
     t.equal(data.priority, 50);
     t.equal(data.description, "Updated description");
   });
@@ -745,7 +745,7 @@ await t.test("PUT /api/tenants/:tenantId/endpoints/:id", async (t) => {
     const tenant = await createTenant(org.id, "my-tenant");
 
     const endpoint = await createEndpoint(tenant.id, "/my-path", {
-      price_usdc: 0.01,
+      price: 0.01,
       priority: 100,
     });
 
@@ -765,7 +765,7 @@ await t.test("PUT /api/tenants/:tenantId/endpoints/:id", async (t) => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const data = (await res.json()) as any;
     t.equal(data.path, "/my-path");
-    t.equal(data.price_usdc, 0.01);
+    t.equal(data.price, 0.01);
     t.equal(data.priority, 25);
   });
 
@@ -974,7 +974,7 @@ await t.test("PUT /api/tenants/:tenantId/endpoints/:id", async (t) => {
           Cookie: `auth_token=${user.token}`,
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ price_usdc: 0.99 }),
+        body: JSON.stringify({ price: 0.99 }),
       },
     );
 
@@ -1096,7 +1096,7 @@ await t.test("GET /api/tenants/:tenantId/endpoints/:id/stats", async (t) => {
     const data = (await res.json()) as any;
     t.equal(data.endpoint_id, endpoint.id);
     t.equal(data.total_transactions, 0);
-    t.equal(data.total_spent_usdc, 0);
+    t.equal(data.total_spent, 0);
   });
 
   await t.test("returns stats with transactions", async (t) => {
@@ -1113,14 +1113,14 @@ await t.test("GET /api/tenants/:tenantId/endpoints/:id/stats", async (t) => {
         {
           tenant_id: tenant.id,
           endpoint_id: endpoint.id,
-          amount_usdc: 0.05,
+          amount: 0.05,
           ngx_request_id: "req-1",
           request_path: "/stats-test",
         },
         {
           tenant_id: tenant.id,
           endpoint_id: endpoint.id,
-          amount_usdc: 0.1,
+          amount: 0.1,
           ngx_request_id: "req-2",
           request_path: "/stats-test",
         },
@@ -1137,8 +1137,8 @@ await t.test("GET /api/tenants/:tenantId/endpoints/:id/stats", async (t) => {
     const data = (await res.json()) as any;
     t.equal(data.total_transactions, 2);
     t.ok(
-      Math.abs(data.total_spent_usdc - 0.15) < 0.001,
-      `expected ~0.15, got ${data.total_spent_usdc}`,
+      Math.abs(data.total_spent - 0.15) < 0.001,
+      `expected ~0.15, got ${data.total_spent}`,
     );
   });
 
@@ -1159,7 +1159,7 @@ await t.test("GET /api/tenants/:tenantId/endpoints/:id/stats", async (t) => {
       .values({
         tenant_id: tenant.id,
         endpoint_id: endpoint.id,
-        amount_usdc: 0.05,
+        amount: 0.05,
         ngx_request_id: "req-date-1",
         request_path: "/date-filter",
       })
@@ -1229,14 +1229,14 @@ await t.test(
           {
             tenant_id: tenant.id,
             endpoint_id: endpoint.id,
-            amount_usdc: 0.05,
+            amount: 0.05,
             ngx_request_id: "req-txn-1",
             request_path: "/with-txns",
           },
           {
             tenant_id: tenant.id,
             endpoint_id: endpoint.id,
-            amount_usdc: 0.1,
+            amount: 0.1,
             ngx_request_id: "req-txn-2",
             request_path: "/with-txns",
           },
@@ -1268,7 +1268,7 @@ await t.test(
           .values({
             tenant_id: tenant.id,
             endpoint_id: endpoint.id,
-            amount_usdc: 0.01 * (i + 1),
+            amount: 0.01 * (i + 1),
             ngx_request_id: `req-page-${i}`,
             request_path: "/paginated",
           })
@@ -1315,7 +1315,7 @@ await t.test(
         .values({
           tenant_id: tenant.id,
           endpoint_id: endpoint.id,
-          amount_usdc: 0.01,
+          amount: 0.01,
           ngx_request_id: "req-neg",
           request_path: "/neg-offset",
         })
@@ -1433,14 +1433,14 @@ await t.test(
 await t.test(
   "PUT /api/tenants/:tenantId/endpoints/:id - clearing fields",
   async (t) => {
-    await t.test("can set price_usdc to null", async (t) => {
+    await t.test("can set price to null", async (t) => {
       const user = await createUser("member@example.com");
       const org = await createOrg("Team", "team");
       await addMember(user.id, org.id);
       const tenant = await createTenant(org.id, "my-tenant");
 
       const endpoint = await createEndpoint(tenant.id, "/priced-endpoint", {
-        price_usdc: 0.05,
+        price: 0.05,
       });
 
       const res = await app.request(
@@ -1451,14 +1451,14 @@ await t.test(
             Cookie: `auth_token=${user.token}`,
             "Content-Type": "application/json",
           },
-          body: JSON.stringify({ price_usdc: null }),
+          body: JSON.stringify({ price: null }),
         },
       );
 
       t.equal(res.status, 200);
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const data = (await res.json()) as any;
-      t.equal(data.price_usdc, null);
+      t.equal(data.price, null);
     });
 
     await t.test("can set scheme to null", async (t) => {
@@ -1577,7 +1577,7 @@ await t.test(
           },
           body: JSON.stringify({
             path: "/users/{id}",
-            price_usdc: 100,
+            price: 100,
             scheme: "exact",
             description: "Get user by ID",
           }),

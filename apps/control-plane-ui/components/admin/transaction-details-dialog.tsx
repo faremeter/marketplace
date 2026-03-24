@@ -12,7 +12,7 @@ interface Transaction {
   endpoint_id: number | null;
   tenant_id: number;
   organization_id: number | null;
-  amount_usdc: number;
+  amount: number;
   tx_hash: string | null;
   network: string | null;
   request_path: string;
@@ -154,7 +154,7 @@ export function TransactionDetailsDialog({
                 <div>
                   <p className="text-xs text-gray-11">Amount</p>
                   <p className="mt-1 text-2xl font-semibold text-green-400">
-                    {formatUSDC(transaction.amount_usdc)}
+                    {formatUSDC(transaction.amount)}
                   </p>
                 </div>
                 <div>

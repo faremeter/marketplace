@@ -135,7 +135,7 @@ endpointsRoutes.post(
         tenant_id: tenantId,
         path: processed.path,
         path_pattern: processed.path_pattern,
-        price_usdc: body.price_usdc ?? null,
+        price: body.price ?? null,
         scheme: body.scheme ?? null,
         description: body.description ?? null,
         priority: body.priority ?? 100,
@@ -177,7 +177,7 @@ endpointsRoutes.put(
     }
     if (body.openapi_source_paths !== undefined)
       updateData.openapi_source_paths = body.openapi_source_paths;
-    if (body.price_usdc !== undefined) updateData.price_usdc = body.price_usdc;
+    if (body.price !== undefined) updateData.price = body.price;
     if (body.scheme !== undefined) updateData.scheme = body.scheme;
     if (body.description !== undefined)
       updateData.description = body.description;
@@ -257,7 +257,7 @@ endpointsRoutes.get("/:id/stats", async (c) => {
     .selectFrom("transactions")
     .select([
       sql<number>`count(*)`.as("total_transactions"),
-      sql<number>`coalesce(sum(amount_usdc), 0)`.as("total_spent_usdc"),
+      sql<number>`coalesce(sum(amount), 0)`.as("total_spent"),
     ])
     .where("endpoint_id", "=", id);
 
@@ -274,7 +274,7 @@ endpointsRoutes.get("/:id/stats", async (c) => {
     endpoint_id: id,
     path_pattern: endpoint.path_pattern,
     total_transactions: Number(stats?.total_transactions ?? 0),
-    total_spent_usdc: Number(stats?.total_spent_usdc ?? 0),
+    total_spent: Number(stats?.total_spent ?? 0),
     period: { from: from ?? null, to: to ?? null },
   });
 });

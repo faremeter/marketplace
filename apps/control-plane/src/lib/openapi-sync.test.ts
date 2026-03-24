@@ -12,7 +12,7 @@ async function createTenant(name: string, openapiSpec?: unknown) {
       name,
       organization_id: null,
       backend_url: "http://backend.example.com",
-      default_price_usdc: 0.01,
+      default_price: 0.01,
       default_scheme: "exact",
       openapi_spec: openapiSpec ? JSON.stringify(openapiSpec) : undefined,
     })

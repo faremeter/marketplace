@@ -13,7 +13,7 @@ import { getProxyUrl } from "@/lib/format";
 interface Tenant {
   id: number;
   name: string;
-  default_price_usdc: number;
+  default_price: number;
   default_scheme: string;
   org_slug?: string | null;
 }
@@ -75,7 +75,7 @@ export function CollapsibleTenantSection({
         <div className="px-3 pb-3">
           <AdminEndpointsTable
             tenantId={tenant.id}
-            defaultPriceUsdc={tenant.default_price_usdc}
+            defaultPrice={tenant.default_price}
             defaultScheme={tenant.default_scheme}
             enabled={isExpanded}
             onDefaultsChange={onTenantUpdate}

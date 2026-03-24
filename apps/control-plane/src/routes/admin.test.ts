@@ -61,7 +61,7 @@ async function createTenant(
       name,
       organization_id: orgId,
       backend_url: opts.backend_url ?? "http://backend.example.com",
-      default_price_usdc: 0.01,
+      default_price: 0.01,
       default_scheme: "exact",
       wallet_id: opts.wallet_id ?? null,
       status: opts.status ?? "active",
@@ -1015,7 +1015,7 @@ await t.test("GET /api/admin/tenants", async (t) => {
         name: "tagged-tenant",
         organization_id: org.id,
         backend_url: "http://backend.example.com",
-        default_price_usdc: 0.01,
+        default_price: 0.01,
         default_scheme: "exact",
         status: "active",
         tags: ["production", "api"],
@@ -1923,7 +1923,7 @@ await t.test("PUT /api/admin/tenants/:id", async (t) => {
       body: JSON.stringify({
         backend_url: "http://new.example.com",
         wallet_id: wallet.id,
-        default_price_usdc: 0.05,
+        default_price: 0.05,
       }),
     });
     t.equal(res.status, 200);
@@ -2499,7 +2499,7 @@ await t.test("PUT /api/admin/tenants/:id", async (t) => {
         name: "tags-tenant",
         organization_id: org.id,
         backend_url: "http://backend.example.com",
-        default_price_usdc: 0.01,
+        default_price: 0.01,
         default_scheme: "exact",
         status: "active",
         tags: ["old-tag"],
@@ -2531,7 +2531,7 @@ await t.test("PUT /api/admin/tenants/:id", async (t) => {
         name: "clear-tags-tenant",
         organization_id: org.id,
         backend_url: "http://backend.example.com",
-        default_price_usdc: 0.01,
+        default_price: 0.01,
         default_scheme: "exact",
         status: "active",
         tags: ["tag1", "tag2"],
@@ -2899,13 +2899,13 @@ await t.test(
             Cookie: `auth_token=${admin.token}`,
             "Content-Type": "application/json",
           },
-          body: JSON.stringify({ price_usdc: 0.05 }),
+          body: JSON.stringify({ price: 0.05 }),
         },
       );
       t.equal(res.status, 200);
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const data = (await res.json()) as any;
-      t.equal(data.price_usdc, 0.05);
+      t.equal(data.price, 0.05);
     });
 
     await t.test("returns 404 for non-existent endpoint", async (t) => {
@@ -2921,7 +2921,7 @@ await t.test(
             Cookie: `auth_token=${admin.token}`,
             "Content-Type": "application/json",
           },
-          body: JSON.stringify({ price_usdc: 0.05 }),
+          body: JSON.stringify({ price: 0.05 }),
         },
       );
       t.equal(res.status, 404);
@@ -2987,7 +2987,7 @@ await t.test("GET /api/admin/transactions", async (t) => {
       .insertInto("transactions")
       .values({
         tenant_id: tenant.id,
-        amount_usdc: 0.05,
+        amount: 0.05,
         ngx_request_id: "req-1",
         request_path: "/test",
       })
@@ -3445,7 +3445,7 @@ await t.test("GET /api/admin/analytics", async (t) => {
       .insertInto("transactions")
       .values({
         tenant_id: tenant.id,
-        amount_usdc: 0.05,
+        amount: 0.05,
         ngx_request_id: "req-1",
         request_path: "/test",
       })

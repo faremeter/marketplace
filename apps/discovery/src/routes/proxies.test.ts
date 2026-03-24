@@ -20,7 +20,7 @@ async function createTenant(overrides: {
   status?: string;
   openapi_spec?: string;
   backend_url?: string;
-  default_price_usdc?: number;
+  default_price?: number;
   default_scheme?: string;
   tags?: string[];
 }) {
@@ -29,7 +29,7 @@ async function createTenant(overrides: {
     .values({
       name: overrides.name ?? "Test Tenant",
       backend_url: overrides.backend_url ?? "https://api.example.com",
-      default_price_usdc: overrides.default_price_usdc ?? 0.01,
+      default_price: overrides.default_price ?? 0.01,
       default_scheme: overrides.default_scheme ?? "exact",
       is_active: overrides.is_active ?? true,
       status: overrides.status ?? "active",
@@ -49,7 +49,7 @@ async function createEndpoint(
     is_active?: boolean;
     deleted_at?: string;
     description?: string;
-    price_usdc?: number;
+    price?: number;
     scheme?: string;
     priority?: number;
     tags?: string[];
@@ -63,7 +63,7 @@ async function createEndpoint(
       is_active: overrides?.is_active ?? true,
       deleted_at: overrides?.deleted_at ?? null,
       description: overrides?.description ?? null,
-      price_usdc: overrides?.price_usdc ?? null,
+      price: overrides?.price ?? null,
       scheme: overrides?.scheme ?? null,
       ...(overrides?.priority !== undefined
         ? { priority: overrides.priority }
@@ -186,7 +186,7 @@ await t.test("GET /api/v1/proxies", async (t) => {
       name: "test-api",
       org_slug: "test-org",
       backend_url: "https://backend.example.com",
-      default_price_usdc: 0.05,
+      default_price: 0.05,
       default_scheme: "exact",
     });
 
@@ -198,7 +198,7 @@ await t.test("GET /api/v1/proxies", async (t) => {
         name: string;
         org_slug: string;
         url: string;
-        default_price_usdc: number;
+        default_price: number;
         default_scheme: string;
       }[];
     };
@@ -209,7 +209,7 @@ await t.test("GET /api/v1/proxies", async (t) => {
     t.equal(proxy.name, "test-api");
     t.equal(proxy.org_slug, "test-org");
     t.equal(proxy.url, "https://test-api.test-org.api.corbits.dev");
-    t.equal(proxy.default_price_usdc, 0.05);
+    t.equal(proxy.default_price, 0.05);
     t.equal(proxy.default_scheme, "exact");
   });
 
@@ -534,7 +534,7 @@ await t.test("GET /api/v1/proxies/:id/endpoints/:endpointId", async (t) => {
     const endpoint = await createEndpoint(tenant.id, {
       path_pattern: "/v1/users",
       description: "List users",
-      price_usdc: 0.02,
+      price: 0.02,
       scheme: "exact",
       priority: 5,
       tags: ["users", "read"],
@@ -549,7 +549,7 @@ await t.test("GET /api/v1/proxies/:id/endpoints/:endpointId", async (t) => {
         id: number;
         path_pattern: string;
         description: string;
-        price_usdc: number;
+        price: number;
         scheme: string;
         priority: number;
         tags: string[];
@@ -559,7 +559,7 @@ await t.test("GET /api/v1/proxies/:id/endpoints/:endpointId", async (t) => {
     t.equal(data.data.id, endpoint.id);
     t.equal(data.data.path_pattern, "/v1/users");
     t.equal(data.data.description, "List users");
-    t.equal(data.data.price_usdc, 0.02);
+    t.equal(data.data.price, 0.02);
     t.equal(data.data.scheme, "exact");
     t.equal(data.data.priority, 5);
     t.same(data.data.tags, ["users", "read"]);

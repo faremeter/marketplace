@@ -1,7 +1,7 @@
 export interface EarningsAnalytics {
-  total_earned_usdc: number;
-  current_month_earned_usdc: number;
-  previous_month_earned_usdc: number;
+  total_earned: number;
+  current_month_earned: number;
+  previous_month_earned: number;
   percent_change: number | null;
   total_transactions: number;
 }

@@ -79,7 +79,7 @@ export interface TenantsTable {
   organization_id: number | null;
   wallet_id: number | null;
   status: ColumnType<string, string | undefined, string>;
-  default_price_usdc: number;
+  default_price: number;
   default_scheme: string;
   upstream_auth_header: string | null;
   upstream_auth_value: string | null;
@@ -116,7 +116,7 @@ export interface EndpointsTable {
   tenant_id: number;
   path: string | null;
   path_pattern: string;
-  price_usdc: number | null;
+  price: number | null;
   scheme: string | null;
   description: string | null;
   priority: ColumnType<number, number | undefined, number>;
@@ -136,10 +136,12 @@ export interface TransactionsTable {
   endpoint_id: number | null;
   tenant_id: number;
   organization_id: number | null;
-  amount_usdc: number;
+  amount: number;
   ngx_request_id: string;
   tx_hash: string | null;
   network: string | null;
+  token_symbol: string | null;
+  mint_address: string | null;
   request_path: string;
   client_ip: string | null;
   request_method: string | null;

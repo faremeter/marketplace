@@ -13,7 +13,7 @@ interface ProxyListItem {
   id: number;
   name: string;
   org_slug: string | null;
-  default_price_usdc: number;
+  default_price: number;
   default_scheme: string;
   tags: string[];
 }
@@ -22,7 +22,7 @@ interface EndpointListItem {
   id: number;
   path_pattern: string;
   description: string | null;
-  price_usdc: number | null;
+  price: number | null;
   scheme: string | null;
   tags: string[];
 }
@@ -40,7 +40,7 @@ proxiesRoutes.get("/", async (c) => {
         "id",
         "name",
         "org_slug",
-        "default_price_usdc",
+        "default_price",
         "default_scheme",
         "tags",
       ])
@@ -80,7 +80,7 @@ proxiesRoutes.get("/:id", async (c) => {
         "id",
         "name",
         "org_slug",
-        "default_price_usdc",
+        "default_price",
         "default_scheme",
         "tags",
       ])
@@ -178,7 +178,7 @@ proxiesRoutes.get("/:id/endpoints/:endpointId", async (c) => {
         "id",
         "path_pattern",
         "description",
-        "price_usdc",
+        "price",
         "scheme",
         "priority",
         "tags",
@@ -228,14 +228,7 @@ proxiesRoutes.get("/:id/endpoints", async (c) => {
 
     let query = db
       .selectFrom("endpoints")
-      .select([
-        "id",
-        "path_pattern",
-        "description",
-        "price_usdc",
-        "scheme",
-        "tags",
-      ])
+      .select(["id", "path_pattern", "description", "price", "scheme", "tags"])
       .where("tenant_id", "=", id)
       .where("is_active", "=", true)
       .where("deleted_at", "is", null)

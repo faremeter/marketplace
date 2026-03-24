@@ -60,12 +60,14 @@ export interface TransactionRecordingJob {
   tenant_id: number;
   organization_id: number | null;
   endpoint_id: number | null;
-  amount_usdc: number;
+  amount: number;
   network: string | null;
   request_path: string;
   client_ip: string | null;
   request_method: string | null;
   metadata: Record<string, unknown> | null;
+  token_symbol: string | null;
+  mint_address: string | null;
 }
 
 interface EmailJob {
@@ -733,12 +735,14 @@ export async function startQueue(config: {
           tenant_id,
           organization_id,
           endpoint_id,
-          amount_usdc,
+          amount,
           network,
           request_path,
           client_ip,
           request_method,
           metadata,
+          token_symbol,
+          mint_address,
         } = job.data;
 
         try {
@@ -750,12 +754,14 @@ export async function startQueue(config: {
               tenant_id,
               organization_id,
               endpoint_id,
-              amount_usdc,
+              amount,
               network,
               request_path,
               client_ip,
               request_method,
               metadata: metadata ? JSON.stringify(metadata) : null,
+              token_symbol,
+              mint_address,
             })
             .onConflict((oc) => oc.column("ngx_request_id").doNothing())
             .execute();

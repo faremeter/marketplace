@@ -52,7 +52,7 @@ interface Tenant {
   wallet_id: number | null;
   wallet_name: string | null;
   wallet_funding_status: string | null;
-  default_price_usdc: number;
+  default_price: number;
   default_scheme: string;
   upstream_auth_header: string | null;
   upstream_auth_value: string | null;
@@ -68,7 +68,7 @@ interface OpenApiSpecResponse {
 
 interface DailyCallData {
   period: string;
-  total_usdc: number;
+  total: number;
   call_count: number;
 }
 
@@ -148,7 +148,7 @@ export default function ProxyDetailPage() {
   const revenueChartData = useMemo(() => {
     const dataMap = new Map<string, number>();
     if (dailyData && Array.isArray(dailyData)) {
-      dailyData.forEach((d) => dataMap.set(d.period, d.total_usdc));
+      dailyData.forEach((d) => dataMap.set(d.period, d.total));
     }
     const result = [];
     const today = new Date();
@@ -343,18 +343,18 @@ export default function ProxyDetailPage() {
               <div className="rounded-lg border border-gray-6 bg-gray-2 p-4">
                 <p className="text-[12px] text-gray-9">Total Earned</p>
                 <p
-                  className={`mt-1 text-[15px] font-medium ${getValueColor(analytics?.total_earned_usdc)}`}
+                  className={`mt-1 text-[15px] font-medium ${getValueColor(analytics?.total_earned)}`}
                 >
-                  {formatUSDC(analytics?.total_earned_usdc)}
+                  {formatUSDC(analytics?.total_earned)}
                 </p>
               </div>
               <div className="rounded-lg border border-gray-6 bg-gray-2 p-4">
                 <p className="text-[12px] text-gray-9">This Month</p>
                 <div className="mt-1 flex items-baseline gap-2">
                   <p
-                    className={`text-[15px] font-medium ${getValueColor(analytics?.current_month_earned_usdc)}`}
+                    className={`text-[15px] font-medium ${getValueColor(analytics?.current_month_earned)}`}
                   >
-                    {formatUSDC(analytics?.current_month_earned_usdc)}
+                    {formatUSDC(analytics?.current_month_earned)}
                   </p>
                   {formatChange(analytics?.percent_change) !== "-" && (
                     <span
@@ -484,7 +484,7 @@ export default function ProxyDetailPage() {
           <EndpointsTab
             tenantId={tenantId}
             orgId={currentOrg.id}
-            defaultPriceUsdc={tenant.default_price_usdc}
+            defaultPrice={tenant.default_price}
             defaultScheme={tenant.default_scheme}
             hasOpenApiSpec={specData?.hasSpec ?? false}
             onSpecChange={() => mutateSpec()}
@@ -555,7 +555,7 @@ export default function ProxyDetailPage() {
                   <dt className="text-gray-11">Default Price</dt>
                   <dd className="mt-1">
                     <InlinePriceEdit
-                      priceUsdc={tenant.default_price_usdc}
+                      priceMicro={tenant.default_price}
                       onUpdate={() => mutateTenants()}
                       apiEndpoint={apiEndpoint}
                     />

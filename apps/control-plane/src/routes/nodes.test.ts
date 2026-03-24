@@ -69,7 +69,7 @@ async function createTenant(
       name,
       organization_id: orgId,
       backend_url: "http://backend.example.com",
-      default_price_usdc: 0.01,
+      default_price: 0.01,
       default_scheme: "exact",
       is_active: opts.is_active ?? true,
       status: opts.status ?? "active",
