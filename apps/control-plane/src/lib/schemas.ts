@@ -317,6 +317,21 @@ export const InternalTransactionSchema = type({
   "metadata?": "object | null",
 });
 
+export const CreateTokenPriceSchema = type({
+  token_symbol: "string > 0 & string <= 20",
+  mint_address: "string > 0 & string <= 100",
+  network:
+    "'solana-mainnet-beta' | 'base' | 'polygon' | 'eip155:137' | 'eip155:143'",
+  amount: "number.integer >= 0",
+  "decimals?": "0 <= number.integer <= 18",
+  "endpoint_id?": "number.integer > 0 | null",
+});
+
+export const UpdateTokenPriceSchema = type({
+  "amount?": "number.integer >= 0",
+  "decimals?": "0 <= number.integer <= 18",
+});
+
 export const AdminAssignNodeSchema = type({
   node_id: "number",
 });

@@ -14,6 +14,7 @@ import { adminRoutes } from "./routes/admin.js";
 import { walletsRoutes } from "./routes/wallets.js";
 import { publicRoutes } from "./routes/public.js";
 import { internalRoutes } from "./routes/internal.js";
+import { tokenPricesRoutes } from "./routes/token-prices.js";
 import { logger } from "./logger.js";
 import { startQueue, stopQueue } from "./lib/queue.js";
 
@@ -40,6 +41,7 @@ app.route("/api/organizations", organizationsRoutes);
 app.route("/api/admin", adminRoutes);
 app.route("/api/tenants", tenantsRoutes);
 app.route("/api/tenants/:tenantId/endpoints", endpointsRoutes);
+app.route("/api/tenants/:tenantId/token-prices", tokenPricesRoutes);
 app.route("/api/tenants/:tenantId/transactions", transactionsRoutes);
 app.route("/api/tenants/:tenantId/openapi", openapiRoutes);
 app.route("/api/nodes", nodesRoutes);

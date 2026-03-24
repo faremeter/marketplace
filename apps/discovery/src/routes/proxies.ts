@@ -101,10 +101,19 @@ proxiesRoutes.get("/:id", async (c) => {
       .where("deleted_at", "is", null)
       .executeTakeFirst();
 
+    const tokenPrices = await db
+      .selectFrom("token_prices")
+      .select(["token_symbol", "mint_address", "network", "amount", "decimals"])
+      .where("tenant_id", "=", id)
+      .where("endpoint_id", "is", null)
+      .orderBy("token_symbol", "asc")
+      .execute();
+
     const result = {
       ...(proxy as ProxyListItem),
       url: buildProxyUrl(proxy.name, proxy.org_slug),
       endpoint_count: Number(endpointCount?.count ?? 0),
+      token_prices: tokenPrices,
     };
 
     return c.json({ data: result });
@@ -194,7 +203,15 @@ proxiesRoutes.get("/:id/endpoints/:endpointId", async (c) => {
       return c.json({ error: "Endpoint not found" }, 404);
     }
 
-    return c.json({ data: endpoint });
+    const tokenPrices = await db
+      .selectFrom("token_prices")
+      .select(["token_symbol", "mint_address", "network", "amount", "decimals"])
+      .where("tenant_id", "=", id)
+      .where("endpoint_id", "=", endpointId)
+      .orderBy("token_symbol", "asc")
+      .execute();
+
+    return c.json({ data: { ...endpoint, token_prices: tokenPrices } });
   } catch (error) {
     logger.error("Endpoint detail error", { error });
     return c.json({ error: "Failed to get endpoint" }, 500);

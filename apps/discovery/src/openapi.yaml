@@ -265,14 +265,39 @@ components:
           type: string
           description: "Proxy base URL, e.g. https://name.org.api.corbits.dev"
 
+    TokenPrice:
+      type: object
+      required: [token_symbol, mint_address, network, amount, decimals]
+      properties:
+        token_symbol:
+          type: string
+          description: Token symbol (e.g., USDC, USDT, PYUSD)
+        mint_address:
+          type: string
+          description: Token mint/contract address
+        network:
+          type: string
+          description: Network identifier (e.g., solana-mainnet-beta, base)
+        amount:
+          type: string
+          description: Price in smallest token unit (bigint as string)
+        decimals:
+          type: integer
+          description: Token decimal places
+
     ProxyDetail:
       allOf:
         - $ref: "#/components/schemas/Proxy"
         - type: object
-          required: [endpoint_count]
+          required: [endpoint_count, token_prices]
           properties:
             endpoint_count:
               type: integer
+            token_prices:
+              type: array
+              items:
+                $ref: "#/components/schemas/TokenPrice"
+              description: Tenant-level token prices
 
     Endpoint:
       type: object
@@ -301,13 +326,18 @@ components:
       allOf:
         - $ref: "#/components/schemas/Endpoint"
         - type: object
-          required: [priority, created_at]
+          required: [priority, created_at, token_prices]
           properties:
             priority:
               type: integer
             created_at:
               type: string
               format: date-time
+            token_prices:
+              type: array
+              items:
+                $ref: "#/components/schemas/TokenPrice"
+              description: Endpoint-level token price overrides
 
     SearchEndpoint:
       allOf:
