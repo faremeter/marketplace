@@ -77,7 +77,7 @@ export function InlinePriceEdit({
     <Popover.Root open={isOpen} onOpenChange={handleOpen}>
       <Popover.Trigger asChild>
         <button className="group flex items-center gap-1 rounded bg-gray-4 px-2 py-1 text-xs text-gray-11 hover:bg-gray-5 cursor-pointer text-left">
-          <span>{displayPrice} USDC</span>
+          <span>{displayPrice} USD</span>
           <Pencil1Icon className="h-3 w-3 opacity-50 group-hover:opacity-100" />
         </button>
       </Popover.Trigger>
@@ -116,7 +116,7 @@ export function InlinePriceEdit({
                     }}
                     className="w-full bg-transparent py-1.5 text-center text-sm text-gray-12 focus:outline-none"
                   />
-                  <span className="pr-2 text-xs text-gray-11">USDC</span>
+                  <span className="pr-2 text-xs text-gray-11">USD</span>
                 </div>
                 <button
                   type="button"

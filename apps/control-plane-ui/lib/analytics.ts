@@ -1,9 +1,23 @@
+export interface TokenBreakdown {
+  symbol: string;
+  total: number;
+}
+
 export interface EarningsAnalytics {
   total_earned: number;
   current_month_earned: number;
   previous_month_earned: number;
   percent_change: number | null;
   total_transactions: number;
+  token_breakdown?: TokenBreakdown[];
+}
+
+export function buildTokenTooltip(
+  breakdown?: TokenBreakdown[],
+): string | undefined {
+  if (!breakdown || breakdown.length === 0) return undefined;
+  const symbols = breakdown.map((t) => t.symbol);
+  return `Also includes payments in ${symbols.join(", ")}`;
 }
 
 export function formatUSDC(amount?: number): string {

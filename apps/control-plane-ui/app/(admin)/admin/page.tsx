@@ -8,6 +8,7 @@ import {
   getValueColor,
   getChangeColor,
   formatChange,
+  buildTokenTooltip,
 } from "@/lib/analytics";
 
 interface AdminStats {
@@ -37,6 +38,7 @@ export default function AdminDashboardPage() {
           title="Total Processed"
           value={formatUSDC(analytics?.total_earned)}
           valueColor={getValueColor(analytics?.total_earned)}
+          tooltip={buildTokenTooltip(analytics?.token_breakdown)}
         />
         <EarningsStatCard
           title="Processed This Month"
@@ -92,18 +94,25 @@ function EarningsStatCard({
   valueColor,
   change,
   changeColor,
+  tooltip,
 }: {
   title: string;
   value: string;
   valueColor: string;
   change?: string;
   changeColor?: string;
+  tooltip?: string;
 }) {
   return (
     <div className="rounded-lg border border-gray-6 bg-gray-2 p-4">
       <p className="text-sm text-gray-11">{title}</p>
       <div className="mt-1 flex items-baseline gap-2">
         <p className={`text-2xl font-medium ${valueColor}`}>{value}</p>
+        {tooltip && (
+          <span className="cursor-help text-[10px] text-gray-9" title={tooltip}>
+            [i]
+          </span>
+        )}
         {change && change !== "-" && (
           <span className={`text-sm font-medium ${changeColor}`}>{change}</span>
         )}

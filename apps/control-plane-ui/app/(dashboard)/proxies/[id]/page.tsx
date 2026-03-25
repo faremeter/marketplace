@@ -29,12 +29,14 @@ import {
   getValueColor,
   getChangeColor,
   formatChange,
+  buildTokenTooltip,
 } from "@/lib/analytics";
 import { useToast } from "@/components/ui/toast";
 import { InlineUrlEdit } from "@/components/shared/inline-url-edit";
 import { InlineActiveToggle } from "@/components/shared/inline-active-toggle";
 import { InlineAuthEdit } from "@/components/shared/inline-auth-edit";
 import { InlinePriceEdit } from "@/components/shared/inline-price-edit";
+import { TokenPricesSection } from "@/components/shared/token-prices-section";
 import { InlineSchemeEdit } from "@/components/shared/inline-scheme-edit";
 import { InlineWalletSelect } from "@/components/shared/inline-wallet-select";
 import { EndpointsTab } from "@/components/proxy-endpoints/endpoints-tab";
@@ -340,14 +342,31 @@ export default function ProxyDetailPage() {
         {activeTab === "overview" && (
           <div className="space-y-6">
             <div className="grid gap-4 sm:grid-cols-2">
-              <div className="rounded-lg border border-gray-6 bg-gray-2 p-4">
-                <p className="text-[12px] text-gray-9">Total Earned</p>
-                <p
-                  className={`mt-1 text-[15px] font-medium ${getValueColor(analytics?.total_earned)}`}
-                >
-                  {formatUSDC(analytics?.total_earned)}
-                </p>
-              </div>
+              {(() => {
+                const tokenTooltip = buildTokenTooltip(
+                  analytics?.token_breakdown,
+                );
+                return (
+                  <div className="rounded-lg border border-gray-6 bg-gray-2 p-4">
+                    <p className="text-[12px] text-gray-9">Total Earned</p>
+                    <div className="mt-1 flex items-baseline gap-1.5">
+                      <p
+                        className={`text-[15px] font-medium ${getValueColor(analytics?.total_earned)}`}
+                      >
+                        {formatUSDC(analytics?.total_earned)}
+                      </p>
+                      {tokenTooltip && (
+                        <span
+                          className="cursor-help text-[10px] text-gray-9"
+                          title={tokenTooltip}
+                        >
+                          [i]
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                );
+              })()}
               <div className="rounded-lg border border-gray-6 bg-gray-2 p-4">
                 <p className="text-[12px] text-gray-9">This Month</p>
                 <div className="mt-1 flex items-baseline gap-2">
@@ -560,6 +579,12 @@ export default function ProxyDetailPage() {
                       apiEndpoint={apiEndpoint}
                     />
                   </dd>
+                </div>
+                <div className="col-span-2">
+                  <TokenPricesSection
+                    tenantId={tenant.id}
+                    onUpdated={() => mutateTenants()}
+                  />
                 </div>
                 <div>
                   <dt className="text-gray-11">Default Scheme</dt>

@@ -22,6 +22,7 @@ import {
   getValueColor,
   getChangeColor,
   formatChange,
+  buildTokenTooltip,
 } from "@/lib/analytics";
 import { type WalletConfig, isWalletUsable } from "@/lib/wallet";
 import {
@@ -171,6 +172,7 @@ export default function DashboardPage() {
               value={formatUSDC(analytics?.total_earned)}
               isText
               valueColor={getValueColor(analytics?.total_earned)}
+              tooltip={buildTokenTooltip(analytics?.token_breakdown)}
             />
             <EarningsCard
               title="This Month"
@@ -381,20 +383,29 @@ function StatCard({
   value,
   isText,
   valueColor,
+  tooltip,
 }: {
   title: string;
   value: string | number;
   isText?: boolean;
   valueColor?: string;
+  tooltip?: string;
 }) {
   return (
     <div className="rounded-lg border border-white/10 bg-gray-2 p-4">
       <p className="text-[12px] text-gray-9">{title}</p>
-      <p
-        className={`mt-1 font-medium ${valueColor ?? "text-white"} ${isText ? "text-[15px]" : "text-xl"}`}
-      >
-        {value}
-      </p>
+      <div className="mt-1 flex items-baseline gap-1.5">
+        <p
+          className={`font-medium ${valueColor ?? "text-white"} ${isText ? "text-[15px]" : "text-xl"}`}
+        >
+          {value}
+        </p>
+        {tooltip && (
+          <span className="cursor-help text-[10px] text-gray-9" title={tooltip}>
+            [i]
+          </span>
+        )}
+      </div>
     </div>
   );
 }
@@ -403,10 +414,12 @@ function EarningsCard({
   title,
   value,
   percentChange,
+  tooltip,
 }: {
   title: string;
   value?: number;
   percentChange?: number | null;
+  tooltip?: string;
 }) {
   const changeText = formatChange(percentChange);
 
@@ -417,6 +430,11 @@ function EarningsCard({
         <p className={`text-[15px] font-medium ${getValueColor(value)}`}>
           {formatUSDC(value)}
         </p>
+        {tooltip && (
+          <span className="cursor-help text-[10px] text-gray-9" title={tooltip}>
+            [i]
+          </span>
+        )}
         {changeText !== "-" && (
           <span
             className={`text-[12px] font-medium ${getChangeColor(percentChange)}`}

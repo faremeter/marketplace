@@ -20,6 +20,7 @@ import {
   AssignNodeSchema,
   USD_PEGGED_SYMBOLS,
 } from "../lib/schemas.js";
+import { seedTokenPricesForTenant } from "../lib/token-seed.js";
 
 export const tenantsRoutes = new Hono();
 
@@ -79,23 +80,28 @@ tenantsRoutes.post(
 
     const isRegisterOnly = body.register_only === true;
 
-    const result = await db
-      .insertInto("tenants")
-      .values({
-        name: sanitizedName,
-        backend_url: body.backend_url,
-        organization_id: body.organization_id ?? null,
-        wallet_id: body.wallet_id ?? null,
-        default_price: body.default_price ?? 0,
-        default_scheme: body.default_scheme ?? "exact",
-        upstream_auth_header: body.upstream_auth_header ?? null,
-        upstream_auth_value: body.upstream_auth_value ?? null,
-        is_active: isRegisterOnly ? false : (body.is_active ?? true),
-        org_slug: orgSlug,
-        status: isRegisterOnly ? "registered" : "active",
-      })
-      .returningAll()
-      .executeTakeFirstOrThrow();
+    const result = await db.transaction().execute(async (trx) => {
+      const tenant = await trx
+        .insertInto("tenants")
+        .values({
+          name: sanitizedName,
+          backend_url: body.backend_url,
+          organization_id: body.organization_id ?? null,
+          wallet_id: body.wallet_id ?? null,
+          default_price: body.default_price ?? 0,
+          default_scheme: body.default_scheme ?? "exact",
+          upstream_auth_header: body.upstream_auth_header ?? null,
+          upstream_auth_value: body.upstream_auth_value ?? null,
+          is_active: isRegisterOnly ? false : (body.is_active ?? true),
+          org_slug: orgSlug,
+          status: isRegisterOnly ? "registered" : "active",
+        })
+        .returningAll()
+        .executeTakeFirstOrThrow();
+
+      await seedTokenPricesForTenant(trx, tenant.id, tenant.default_price);
+      return tenant;
+    });
 
     return c.json(result, 201);
   },

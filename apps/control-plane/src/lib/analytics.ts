@@ -1,5 +1,14 @@
+// All SUM(amount) queries assume amounts are stored in micro-USD-equivalent units.
+// This works because all supported tokens are USD-pegged stablecoins (1:1).
+// If non-USD tokens like EURC are added, amounts would need conversion before summing.
+
 import { db } from "../db/instance.js";
 import { sql } from "kysely";
+
+export interface TokenBreakdown {
+  symbol: string;
+  total: number;
+}
 
 export interface EarningsAnalytics {
   total_earned: number;
@@ -7,6 +16,7 @@ export interface EarningsAnalytics {
   previous_month_earned: number;
   percent_change: number | null;
   total_transactions: number;
+  token_breakdown?: TokenBreakdown[];
 }
 
 export interface MonthlyEarnings {
@@ -35,7 +45,7 @@ function calculatePercentChange(
 export async function getPlatformEarnings(): Promise<EarningsAnalytics> {
   const { currentMonthStart, previousMonthStart } = getMonthBoundaries();
 
-  const [totals, currentMonth, previousMonth] = await Promise.all([
+  const [totals, currentMonth, previousMonth, breakdown] = await Promise.all([
     db
       .selectFrom("transactions")
       .select([
@@ -56,6 +66,17 @@ export async function getPlatformEarnings(): Promise<EarningsAnalytics> {
       .where("created_at", ">=", previousMonthStart)
       .where("created_at", "<", currentMonthStart)
       .executeTakeFirst(),
+
+    db
+      .selectFrom("transactions")
+      .select([
+        sql<string>`token_symbol`.as("symbol"),
+        sql<number>`COALESCE(SUM(amount), 0)`.as("total"),
+      ])
+      .where("token_symbol", "is not", null)
+      .where("token_symbol", "!=", "USDC")
+      .groupBy("token_symbol")
+      .execute(),
   ]);
 
   const totalEarned = Number(totals?.total ?? 0);
@@ -69,6 +90,10 @@ export async function getPlatformEarnings(): Promise<EarningsAnalytics> {
     previous_month_earned: previousEarned,
     percent_change: calculatePercentChange(currentEarned, previousEarned),
     total_transactions: totalTransactions,
+    token_breakdown: breakdown.map((r) => ({
+      symbol: r.symbol,
+      total: Number(r.total),
+    })),
   };
 }
 
@@ -77,7 +102,7 @@ export async function getOrganizationEarnings(
 ): Promise<EarningsAnalytics> {
   const { currentMonthStart, previousMonthStart } = getMonthBoundaries();
 
-  const [totals, currentMonth, previousMonth] = await Promise.all([
+  const [totals, currentMonth, previousMonth, breakdown] = await Promise.all([
     db
       .selectFrom("transactions")
       .select([
@@ -101,6 +126,18 @@ export async function getOrganizationEarnings(
       .where("created_at", ">=", previousMonthStart)
       .where("created_at", "<", currentMonthStart)
       .executeTakeFirst(),
+
+    db
+      .selectFrom("transactions")
+      .select([
+        sql<string>`token_symbol`.as("symbol"),
+        sql<number>`COALESCE(SUM(amount), 0)`.as("total"),
+      ])
+      .where("organization_id", "=", organizationId)
+      .where("token_symbol", "is not", null)
+      .where("token_symbol", "!=", "USDC")
+      .groupBy("token_symbol")
+      .execute(),
   ]);
 
   const totalEarned = Number(totals?.total ?? 0);
@@ -114,6 +151,10 @@ export async function getOrganizationEarnings(
     previous_month_earned: previousEarned,
     percent_change: calculatePercentChange(currentEarned, previousEarned),
     total_transactions: totalTransactions,
+    token_breakdown: breakdown.map((r) => ({
+      symbol: r.symbol,
+      total: Number(r.total),
+    })),
   };
 }
 
@@ -122,7 +163,7 @@ export async function getTenantEarnings(
 ): Promise<EarningsAnalytics> {
   const { currentMonthStart, previousMonthStart } = getMonthBoundaries();
 
-  const [totals, currentMonth, previousMonth] = await Promise.all([
+  const [totals, currentMonth, previousMonth, breakdown] = await Promise.all([
     db
       .selectFrom("transactions")
       .select([
@@ -146,6 +187,18 @@ export async function getTenantEarnings(
       .where("created_at", ">=", previousMonthStart)
       .where("created_at", "<", currentMonthStart)
       .executeTakeFirst(),
+
+    db
+      .selectFrom("transactions")
+      .select([
+        sql<string>`token_symbol`.as("symbol"),
+        sql<number>`COALESCE(SUM(amount), 0)`.as("total"),
+      ])
+      .where("tenant_id", "=", tenantId)
+      .where("token_symbol", "is not", null)
+      .where("token_symbol", "!=", "USDC")
+      .groupBy("token_symbol")
+      .execute(),
   ]);
 
   const totalEarned = Number(totals?.total ?? 0);
@@ -159,6 +212,10 @@ export async function getTenantEarnings(
     previous_month_earned: previousEarned,
     percent_change: calculatePercentChange(currentEarned, previousEarned),
     total_transactions: totalTransactions,
+    token_breakdown: breakdown.map((r) => ({
+      symbol: r.symbol,
+      total: Number(r.total),
+    })),
   };
 }
 

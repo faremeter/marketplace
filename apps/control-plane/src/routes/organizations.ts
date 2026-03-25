@@ -49,6 +49,7 @@ import {
   UpdateOrganizationSchema,
   USD_PEGGED_SYMBOLS,
 } from "../lib/schemas.js";
+import { seedTokenPricesForTenant } from "../lib/token-seed.js";
 
 export const organizationsRoutes = new Hono();
 
@@ -1194,23 +1195,30 @@ organizationsRoutes.post(
 
     const nodeIds = nodesWithCounts.map((n) => n.id);
 
-    const tenant = await db
-      .insertInto("tenants")
-      .values({
-        name: sanitizedName,
-        backend_url: body.backend_url,
-        organization_id: orgId,
-        wallet_id: body.wallet_id ?? null,
-        default_price: body.default_price ?? 0,
-        default_scheme: body.default_scheme ?? "exact",
-        upstream_auth_header: body.upstream_auth_header ?? null,
-        upstream_auth_value: body.upstream_auth_value ?? null,
-        org_slug: org.slug,
-        is_active: !isRegisterOnly,
-        status: isRegisterOnly ? "registered" : "pending",
-      })
-      .returningAll()
-      .executeTakeFirst();
+    const tenant = await db.transaction().execute(async (trx) => {
+      const t = await trx
+        .insertInto("tenants")
+        .values({
+          name: sanitizedName,
+          backend_url: body.backend_url,
+          organization_id: orgId,
+          wallet_id: body.wallet_id ?? null,
+          default_price: body.default_price ?? 0,
+          default_scheme: body.default_scheme ?? "exact",
+          upstream_auth_header: body.upstream_auth_header ?? null,
+          upstream_auth_value: body.upstream_auth_value ?? null,
+          org_slug: org.slug,
+          is_active: !isRegisterOnly,
+          status: isRegisterOnly ? "registered" : "pending",
+        })
+        .returningAll()
+        .executeTakeFirst();
+
+      if (!t) throw new Error("Failed to create proxy");
+
+      await seedTokenPricesForTenant(trx, t.id, t.default_price);
+      return t;
+    });
 
     if (!tenant) {
       return c.json({ error: "Failed to create proxy" }, 500);

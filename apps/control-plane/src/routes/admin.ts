@@ -42,7 +42,9 @@ import {
   AdminAssignNodeSchema,
   AdminImportOrgsSchema,
   AdminUpdateEmailConfigSchema,
+  USD_PEGGED_SYMBOLS,
 } from "../lib/schemas.js";
+import { seedTokenPricesForTenant } from "../lib/token-seed.js";
 import { slugify, generateSlugSuffix } from "../lib/slug.js";
 import {
   getPlatformEarnings,
@@ -754,24 +756,29 @@ adminRoutes.post(
       orgSlug = org.slug;
     }
 
-    const tenant = await db
-      .insertInto("tenants")
-      .values({
-        name: sanitizedName,
-        backend_url: body.backend_url,
-        organization_id: body.organization_id ?? null,
-        wallet_id: walletId ?? null,
-        default_price: body.default_price ?? 0,
-        default_scheme: body.default_scheme ?? "exact",
-        upstream_auth_header: body.upstream_auth_header ?? null,
-        upstream_auth_value: body.upstream_auth_value ?? null,
-        org_slug: orgSlug,
-        is_active: !isRegisterOnly,
-        status: isRegisterOnly ? "registered" : "pending",
-        tags: body.tags ?? [],
-      })
-      .returningAll()
-      .executeTakeFirstOrThrow();
+    const tenant = await db.transaction().execute(async (trx) => {
+      const t = await trx
+        .insertInto("tenants")
+        .values({
+          name: sanitizedName,
+          backend_url: body.backend_url,
+          organization_id: body.organization_id ?? null,
+          wallet_id: walletId ?? null,
+          default_price: body.default_price ?? 0,
+          default_scheme: body.default_scheme ?? "exact",
+          upstream_auth_header: body.upstream_auth_header ?? null,
+          upstream_auth_value: body.upstream_auth_value ?? null,
+          org_slug: orgSlug,
+          is_active: !isRegisterOnly,
+          status: isRegisterOnly ? "registered" : "pending",
+          tags: body.tags ?? [],
+        })
+        .returningAll()
+        .executeTakeFirstOrThrow();
+
+      await seedTokenPricesForTenant(trx, t.id, t.default_price);
+      return t;
+    });
 
     // Build domain info for DNS/cert operations
     const domainInfo: TenantDomainInfo = {
@@ -1066,6 +1073,10 @@ adminRoutes.put(
     const updateData: Record<string, unknown> = {};
     if (body.backend_url !== undefined)
       updateData.backend_url = body.backend_url;
+    if (body.default_price !== undefined)
+      updateData.default_price = body.default_price;
+    if (body.default_scheme !== undefined)
+      updateData.default_scheme = body.default_scheme;
     if (body.is_active !== undefined) updateData.is_active = body.is_active;
     if (body.upstream_auth_header !== undefined)
       updateData.upstream_auth_header = body.upstream_auth_header;
@@ -1104,6 +1115,17 @@ adminRoutes.put(
 
     if (!result) {
       return c.json({ error: "Tenant not found" }, 404);
+    }
+
+    // Propagate default_price to USD-pegged tenant-level token_prices
+    if (body.default_price !== undefined) {
+      await db
+        .updateTable("token_prices")
+        .set({ amount: body.default_price, updated_at: new Date() })
+        .where("tenant_id", "=", id)
+        .where("endpoint_id", "is", null)
+        .where("token_symbol", "in", [...USD_PEGGED_SYMBOLS])
+        .execute();
     }
 
     const tenantNodes = await db

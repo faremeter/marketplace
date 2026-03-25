@@ -270,7 +270,7 @@ export function AddEndpointDialog({
                       placeholder={(defaultPrice / 1_000_000).toFixed(3)}
                       className="w-full bg-transparent py-2 text-center text-sm text-gray-12 placeholder-gray-9 focus:outline-none"
                     />
-                    <span className="pr-2 text-xs text-gray-11">USDC</span>
+                    <span className="pr-2 text-xs text-gray-11">USD</span>
                   </div>
                   <button
                     type="button"

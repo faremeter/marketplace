@@ -196,6 +196,8 @@ export const AdminUpdateTenantSchema = type({
   "backend_url?": backendUrlType.or(type("null")),
   "organization_id?": "number | null",
   "wallet_id?": "number | null",
+  "default_price?": `0 <= number <= ${MAX_PRICE}`,
+  "default_scheme?": "'exact' | 'flex' | null",
   "is_active?": "boolean",
   "upstream_auth_header?": `string <= ${MAX_AUTH_HEADER_LENGTH} | null`,
   "upstream_auth_value?": `string <= ${MAX_AUTH_VALUE_LENGTH} | null`,

@@ -7,6 +7,7 @@ import { api } from "@/lib/api/client";
 import { useToast } from "@/components/ui/toast";
 import { SCHEME_OPTIONS } from "@/lib/types/api";
 import { TagsInput } from "@/components/shared/tags-input";
+import { TokenPricesSection } from "@/components/shared/token-prices-section";
 
 interface Endpoint {
   id: number;
@@ -140,7 +141,7 @@ export function EditEndpointPopover({
                       placeholder="0.01"
                       className="w-full bg-transparent py-2 text-center text-sm text-gray-12 placeholder-gray-9 focus:outline-none"
                     />
-                    <span className="pr-2 text-xs text-gray-11">USDC</span>
+                    <span className="pr-2 text-xs text-gray-11">USD</span>
                   </div>
                   <button
                     type="button"
@@ -171,6 +172,8 @@ export function EditEndpointPopover({
                 </select>
               </div>
             </div>
+
+            <TokenPricesSection tenantId={tenantId} endpointId={endpoint.id} />
 
             <div>
               <label className="block text-sm font-medium text-gray-11">
