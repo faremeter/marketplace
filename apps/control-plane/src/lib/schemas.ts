@@ -317,6 +317,24 @@ export const InternalTransactionSchema = type({
   "metadata?": "object | null",
 });
 
+// USD-pegged tokens whose price should follow the default_price
+// EURC and any future non-USD tokens must NOT be in this list
+export const USD_PEGGED_SYMBOLS = [
+  "USDC",
+  "USDT",
+  "PYUSD",
+  "USDG",
+  "USD1",
+  "USX",
+  "CASH",
+  "JupUSD",
+  "USDS",
+  "USDtb",
+  "USDu",
+  "USDGO",
+  "FDUSD",
+] as const;
+
 export const CreateTokenPriceSchema = type({
   token_symbol: "string > 0 & string <= 20",
   mint_address: "string > 0 & string <= 100",

@@ -18,6 +18,7 @@ import {
   CreateTenantSchema,
   UpdateTenantSchema,
   AssignNodeSchema,
+  USD_PEGGED_SYMBOLS,
 } from "../lib/schemas.js";
 
 export const tenantsRoutes = new Hono();
@@ -176,6 +177,17 @@ tenantsRoutes.put(
 
     if (!result) {
       return c.json({ error: "Tenant not found" }, 404);
+    }
+
+    // Propagate default_price to USD-pegged tenant-level token_prices only
+    if (body.default_price !== undefined) {
+      await db
+        .updateTable("token_prices")
+        .set({ amount: body.default_price, updated_at: new Date() })
+        .where("tenant_id", "=", id)
+        .where("endpoint_id", "is", null)
+        .where("token_symbol", "in", [...USD_PEGGED_SYMBOLS])
+        .execute();
     }
 
     const assignedNodes = await db
