@@ -27,3 +27,12 @@ export function formatChange(change?: number | null): string {
   if (change === undefined || change === null) return "-";
   return `${change > 0 ? "+" : ""}${change.toFixed(1)}%`;
 }
+
+export function formatTokenAmount(
+  microAmount: number,
+  symbol: string,
+  decimals = 6,
+): string {
+  const amount = microAmount / 10 ** decimals;
+  return `${amount.toFixed(2)} ${symbol}`;
+}

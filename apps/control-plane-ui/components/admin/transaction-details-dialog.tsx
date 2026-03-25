@@ -15,6 +15,8 @@ interface Transaction {
   amount: number;
   tx_hash: string | null;
   network: string | null;
+  token_symbol: string | null;
+  mint_address: string | null;
   request_path: string;
   client_ip: string | null;
   request_method: string | null;
@@ -31,6 +33,7 @@ interface TransactionDetailsDialogProps {
 function getExplorerUrl(network: string | null, txHash: string): string {
   switch (network) {
     case "solana":
+    case "solana-mainnet-beta":
       return `https://solscan.io/tx/${txHash}`;
     case "base":
       return `https://basescan.org/tx/${txHash}`;
@@ -156,6 +159,12 @@ export function TransactionDetailsDialog({
                   <p className="mt-1 text-2xl font-semibold text-green-400">
                     {formatUSDC(transaction.amount)}
                   </p>
+                  {transaction.token_symbol &&
+                    transaction.token_symbol !== "USDC" && (
+                      <p className="mt-1 text-xs text-amber-400">
+                        Paid with {transaction.token_symbol}
+                      </p>
+                    )}
                 </div>
                 <div>
                   <p className="text-xs text-gray-11">Network</p>

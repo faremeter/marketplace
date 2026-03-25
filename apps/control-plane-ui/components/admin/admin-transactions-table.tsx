@@ -20,6 +20,8 @@ interface Transaction {
   amount: number;
   tx_hash: string | null;
   network: string | null;
+  token_symbol: string | null;
+  mint_address: string | null;
   request_path: string;
   client_ip: string | null;
   request_method: string | null;
@@ -48,6 +50,7 @@ function truncateHash(hash: string, chars = 8): string {
 function getExplorerUrl(network: string | null, txHash: string): string {
   switch (network) {
     case "solana":
+    case "solana-mainnet-beta":
       return `https://solscan.io/tx/${txHash}`;
     case "base":
       return `https://basescan.org/tx/${txHash}`;
@@ -163,6 +166,14 @@ export function AdminTransactionsTable({
                   <span className="text-sm font-medium text-green-400">
                     {formatUSDC(tx.amount)}
                   </span>
+                  {tx.token_symbol && tx.token_symbol !== "USDC" && (
+                    <span
+                      className="ml-1.5 inline-flex rounded-full border border-amber-700 bg-amber-900/30 px-1.5 py-0.5 text-[10px] text-amber-400"
+                      title={`Originally paid with ${tx.token_symbol}`}
+                    >
+                      {tx.token_symbol}
+                    </span>
+                  )}
                 </td>
                 <td className="px-4 py-3">
                   {tx.network ? (
