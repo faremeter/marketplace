@@ -53,6 +53,7 @@ interface Wallet {
 interface ChainBalances {
   native: string;
   usdc: string;
+  tokens?: { symbol: string; amount: string }[];
 }
 
 interface WalletBalances {
@@ -711,6 +712,17 @@ function WalletCard({
                     )}
                   </span>
                 </div>
+                {chainBalances?.tokens?.map((t) => (
+                  <div
+                    key={t.symbol}
+                    className="flex items-center justify-between"
+                  >
+                    <span className="text-xs text-gray-11">{t.symbol}</span>
+                    <span className="font-mono text-xs text-gray-12">
+                      {t.amount}
+                    </span>
+                  </div>
+                ))}
               </div>
             </div>
           );

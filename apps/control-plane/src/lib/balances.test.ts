@@ -86,70 +86,70 @@ await t.test("checkBalancesMeetMinimum", async (t) => {
 
   await t.test("returns true when solana meets minimum", async (t) => {
     const balances: WalletBalances = {
-      solana: { native: "0.01", usdc: "1.00" },
-      base: { native: "0", usdc: "0" },
-      polygon: { native: "0", usdc: "0" },
-      monad: { native: "0", usdc: "0" },
+      solana: { native: "0.01", usdc: "1.00", tokens: [] },
+      base: { native: "0", usdc: "0", tokens: [] },
+      polygon: { native: "0", usdc: "0", tokens: [] },
+      monad: { native: "0", usdc: "0", tokens: [] },
     };
     t.equal(checkBalancesMeetMinimum(balances, 0.001, 0.01), true);
   });
 
   await t.test("returns false when solana below minimum sol", async (t) => {
     const balances: WalletBalances = {
-      solana: { native: "0.0001", usdc: "1.00" },
-      base: { native: "0", usdc: "0" },
-      polygon: { native: "0", usdc: "0" },
-      monad: { native: "0", usdc: "0" },
+      solana: { native: "0.0001", usdc: "1.00", tokens: [] },
+      base: { native: "0", usdc: "0", tokens: [] },
+      polygon: { native: "0", usdc: "0", tokens: [] },
+      monad: { native: "0", usdc: "0", tokens: [] },
     };
     t.equal(checkBalancesMeetMinimum(balances, 0.001, 0.01), false);
   });
 
   await t.test("returns false when solana below minimum usdc", async (t) => {
     const balances: WalletBalances = {
-      solana: { native: "0.01", usdc: "0.001" },
-      base: { native: "0", usdc: "0" },
-      polygon: { native: "0", usdc: "0" },
-      monad: { native: "0", usdc: "0" },
+      solana: { native: "0.01", usdc: "0.001", tokens: [] },
+      base: { native: "0", usdc: "0", tokens: [] },
+      polygon: { native: "0", usdc: "0", tokens: [] },
+      monad: { native: "0", usdc: "0", tokens: [] },
     };
     t.equal(checkBalancesMeetMinimum(balances, 0.001, 0.01), false);
   });
 
   await t.test("returns true when base chain meets minimum", async (t) => {
     const balances: WalletBalances = {
-      solana: { native: "0", usdc: "0" },
-      base: { native: "0.01", usdc: "1.00" },
-      polygon: { native: "0", usdc: "0" },
-      monad: { native: "0", usdc: "0" },
+      solana: { native: "0", usdc: "0", tokens: [] },
+      base: { native: "0.01", usdc: "1.00", tokens: [] },
+      polygon: { native: "0", usdc: "0", tokens: [] },
+      monad: { native: "0", usdc: "0", tokens: [] },
     };
     t.equal(checkBalancesMeetMinimum(balances, 0.001, 0.01), true);
   });
 
   await t.test("returns true when polygon chain meets minimum", async (t) => {
     const balances: WalletBalances = {
-      solana: { native: "0", usdc: "0" },
-      base: { native: "0", usdc: "0" },
-      polygon: { native: "0.5", usdc: "50.00" },
-      monad: { native: "0", usdc: "0" },
+      solana: { native: "0", usdc: "0", tokens: [] },
+      base: { native: "0", usdc: "0", tokens: [] },
+      polygon: { native: "0.5", usdc: "50.00", tokens: [] },
+      monad: { native: "0", usdc: "0", tokens: [] },
     };
     t.equal(checkBalancesMeetMinimum(balances, 0.001, 0.01), true);
   });
 
   await t.test("returns true when monad chain meets minimum", async (t) => {
     const balances: WalletBalances = {
-      solana: { native: "0", usdc: "0" },
-      base: { native: "0", usdc: "0" },
-      polygon: { native: "0", usdc: "0" },
-      monad: { native: "1.0", usdc: "100.00" },
+      solana: { native: "0", usdc: "0", tokens: [] },
+      base: { native: "0", usdc: "0", tokens: [] },
+      polygon: { native: "0", usdc: "0", tokens: [] },
+      monad: { native: "1.0", usdc: "100.00", tokens: [] },
     };
     t.equal(checkBalancesMeetMinimum(balances, 0.001, 0.01), true);
   });
 
   await t.test("returns false when evm has usdc but no native", async (t) => {
     const balances: WalletBalances = {
-      solana: { native: "0", usdc: "0" },
-      base: { native: "0", usdc: "100.00" },
-      polygon: { native: "0", usdc: "0" },
-      monad: { native: "0", usdc: "0" },
+      solana: { native: "0", usdc: "0", tokens: [] },
+      base: { native: "0", usdc: "100.00", tokens: [] },
+      polygon: { native: "0", usdc: "0", tokens: [] },
+      monad: { native: "0", usdc: "0", tokens: [] },
     };
     // EVM chains require native > 0 for gas
     t.equal(checkBalancesMeetMinimum(balances, 0.001, 0.01), false);
@@ -157,20 +157,20 @@ await t.test("checkBalancesMeetMinimum", async (t) => {
 
   await t.test("returns false when all chains are empty", async (t) => {
     const balances: WalletBalances = {
-      solana: { native: "0", usdc: "0" },
-      base: { native: "0", usdc: "0" },
-      polygon: { native: "0", usdc: "0" },
-      monad: { native: "0", usdc: "0" },
+      solana: { native: "0", usdc: "0", tokens: [] },
+      base: { native: "0", usdc: "0", tokens: [] },
+      polygon: { native: "0", usdc: "0", tokens: [] },
+      monad: { native: "0", usdc: "0", tokens: [] },
     };
     t.equal(checkBalancesMeetMinimum(balances, 0.001, 0.01), false);
   });
 
   await t.test("handles empty string balances", async (t) => {
     const balances: WalletBalances = {
-      solana: { native: "", usdc: "" },
-      base: { native: "", usdc: "" },
-      polygon: { native: "", usdc: "" },
-      monad: { native: "", usdc: "" },
+      solana: { native: "", usdc: "", tokens: [] },
+      base: { native: "", usdc: "", tokens: [] },
+      polygon: { native: "", usdc: "", tokens: [] },
+      monad: { native: "", usdc: "", tokens: [] },
     };
     t.equal(checkBalancesMeetMinimum(balances, 0.001, 0.01), false);
   });

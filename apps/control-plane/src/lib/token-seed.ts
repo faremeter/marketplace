@@ -55,7 +55,7 @@ export async function seedTokenPricesForTenant(
   amount: number,
   endpointId?: number | null,
 ): Promise<void> {
-  if (amount < 0) return;
+  if (amount <= 0) return;
 
   const values = USD_TOKEN_SEED_LIST.map((t) => ({
     tenant_id: tenantId,

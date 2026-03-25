@@ -198,6 +198,12 @@ export const SUPPORTED_TOKENS: SupportedToken[] = [
   },
   {
     symbol: "USDC",
+    mint: "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359",
+    network: "eip155:137",
+    isUsdPegged: true,
+  },
+  {
+    symbol: "USDC",
     mint: "0x754704Bc059F8C67012fEd69BC8A327a5aafb603",
     network: "eip155:143",
     isUsdPegged: true,

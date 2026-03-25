@@ -1,4 +1,5 @@
 import { Connection, PublicKey } from "@solana/web3.js";
+import { TOKEN_PROGRAM_ID, TOKEN_2022_PROGRAM_ID } from "@solana/spl-token";
 import { createPublicClient, http, formatUnits, erc20Abi } from "viem";
 import { base, polygon } from "viem/chains";
 import { evm, solana } from "@faremeter/info";
@@ -51,9 +52,15 @@ const monad = {
   },
 } as const;
 
+export interface TokenBalance {
+  symbol: string;
+  amount: string;
+}
+
 interface ChainBalances {
   native: string;
   usdc: string;
+  tokens: TokenBalance[];
 }
 
 export interface WalletBalances {
@@ -61,6 +68,38 @@ export interface WalletBalances {
   base: ChainBalances;
   polygon: ChainBalances;
   monad: ChainBalances;
+}
+
+// Build a map of known stablecoin mint address -> symbol
+const KNOWN_SOLANA_MINTS = new Map<string, string>();
+const SOLANA_STABLECOIN_SYMBOLS = [
+  "USDT",
+  "PYUSD",
+  "USDG",
+  "USD1",
+  "USX",
+  "CASH",
+  "EURC",
+  "JupUSD",
+  "USDS",
+  "USDtb",
+  "USDu",
+  "USDGO",
+  "FDUSD",
+] as const;
+
+for (const symbol of SOLANA_STABLECOIN_SYMBOLS) {
+  const info = solana.lookupKnownSPLToken("mainnet-beta", symbol);
+  if (info) KNOWN_SOLANA_MINTS.set(info.address, symbol);
+}
+
+interface ParsedTokenAccountData {
+  parsed?: {
+    info?: {
+      mint?: string;
+      tokenAmount?: { uiAmount?: number; uiAmountString?: string };
+    };
+  };
 }
 
 async function getSolanaBalances(addr: string): Promise<ChainBalances> {
@@ -72,29 +111,51 @@ async function getSolanaBalances(addr: string): Promise<ChainBalances> {
       const nativeLamports = await connection.getBalance(pubkey);
       const native = (nativeLamports / 10 ** SOLANA_DECIMALS).toFixed(4);
 
-      let usdc = "0.00";
-      if (SOLANA_USDC) {
-        try {
-          const tokenAccounts = await connection.getParsedTokenAccountsByOwner(
-            pubkey,
-            { mint: new PublicKey(SOLANA_USDC.address) },
-          );
+      // Fetch ALL token accounts in 2 calls (SPL Token + Token-2022) instead of per-mint
+      const [splAccounts, token2022Accounts] = await Promise.allSettled([
+        connection.getParsedTokenAccountsByOwner(pubkey, {
+          programId: TOKEN_PROGRAM_ID,
+        }),
+        connection.getParsedTokenAccountsByOwner(pubkey, {
+          programId: TOKEN_2022_PROGRAM_ID,
+        }),
+      ]);
 
-          if (tokenAccounts.value.length > 0) {
-            const tokenAccount = tokenAccounts.value[0];
-            const parsed = tokenAccount?.account?.data as {
-              parsed?: { info?: { tokenAmount?: { uiAmountString?: string } } };
-            };
-            const rawUsdc =
-              parsed?.parsed?.info?.tokenAmount?.uiAmountString ?? "0";
-            usdc = parseFloat(rawUsdc).toFixed(2);
-          }
-        } catch {
-          // Token account may not exist - this is OK, USDC balance is 0
+      // Aggregate balances per mint across all accounts
+      const mintBalances = new Map<string, number>();
+      const allAccounts = [
+        ...(splAccounts.status === "fulfilled" ? splAccounts.value.value : []),
+        ...(token2022Accounts.status === "fulfilled"
+          ? token2022Accounts.value.value
+          : []),
+      ];
+
+      for (const account of allAccounts) {
+        const data = account.account.data as ParsedTokenAccountData;
+        const mint = data.parsed?.info?.mint;
+        const amount = data.parsed?.info?.tokenAmount?.uiAmount ?? 0;
+        if (mint && amount > 0) {
+          mintBalances.set(mint, (mintBalances.get(mint) ?? 0) + amount);
         }
       }
 
-      return { native, usdc };
+      // Extract USDC balance
+      let usdc = "0.00";
+      if (SOLANA_USDC) {
+        const usdcAmount = mintBalances.get(SOLANA_USDC.address) ?? 0;
+        usdc = usdcAmount.toFixed(2);
+      }
+
+      // Extract other known stablecoin balances
+      const tokens: TokenBalance[] = [];
+      for (const [mint, symbol] of KNOWN_SOLANA_MINTS) {
+        const amount = mintBalances.get(mint) ?? 0;
+        if (amount > 0) {
+          tokens.push({ symbol, amount: amount.toFixed(2) });
+        }
+      }
+
+      return { native, usdc, tokens };
     },
     { name: `Solana balance fetch (${addr.slice(0, 8)}...)` },
   );
@@ -135,6 +196,7 @@ async function getEvmBalances(
       return {
         native: parseFloat(native).toFixed(6),
         usdc: parseFloat(usdc).toFixed(2),
+        tokens: [],
       };
     },
     { name: `${chain.name} balance fetch (${addr.slice(0, 8)}...)` },
@@ -146,8 +208,8 @@ export async function fetchWalletBalances(addresses: {
   evm: string | null;
 }): Promise<WalletBalances> {
   const defaults = {
-    solana: { native: "0.0000", usdc: "0.00" },
-    evm: { native: "0.000000", usdc: "0.00" },
+    solana: { native: "0.0000", usdc: "0.00", tokens: [] as TokenBalance[] },
+    evm: { native: "0.000000", usdc: "0.00", tokens: [] as TokenBalance[] },
   };
 
   const chainNames = ["solana", "base", "polygon", "monad"] as const;
