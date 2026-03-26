@@ -37,17 +37,17 @@ export async function withRetry<T>(
 const SOLANA_USDC = solana.lookupKnownSPLToken("mainnet-beta", "USDC");
 const BASE_USDC = evm.lookupKnownAsset("base", "USDC");
 const POLYGON_USDC = evm.lookupKnownAsset("eip155:137", "USDC");
-const MONAD_USDC = evm.lookupKnownAsset("eip155:10143", "USDC");
+const MONAD_USDC = evm.lookupKnownAsset("eip155:143", "USDC");
 
 const SOLANA_RPC_URL =
   process.env.SOLANA_RPC_URL || "https://api.mainnet-beta.solana.com";
 
-const monadTestnet = {
-  id: 10143,
-  name: "Monad Testnet",
+const monad = {
+  id: 143,
+  name: "Monad",
   nativeCurrency: { name: "MON", symbol: "MON", decimals: 18 },
   rpcUrls: {
-    default: { http: ["https://testnet-rpc.monad.xyz"] },
+    default: { http: ["https://rpc.monad.xyz"] },
   },
 } as const;
 
@@ -102,7 +102,7 @@ async function getSolanaBalances(addr: string): Promise<ChainBalances> {
 
 async function getEvmBalances(
   addr: string,
-  chain: typeof base | typeof polygon | typeof monadTestnet,
+  chain: typeof base | typeof polygon | typeof monad,
   usdcAddress?: string,
 ): Promise<ChainBalances> {
   return withRetry(
@@ -161,7 +161,7 @@ export async function fetchWalletBalances(addresses: {
       ? getEvmBalances(addresses.evm, polygon, POLYGON_USDC?.address)
       : defaults.evm,
     addresses.evm
-      ? getEvmBalances(addresses.evm, monadTestnet, MONAD_USDC?.address)
+      ? getEvmBalances(addresses.evm, monad, MONAD_USDC?.address)
       : defaults.evm,
   ]);
 

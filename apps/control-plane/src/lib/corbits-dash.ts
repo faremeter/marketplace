@@ -7,7 +7,7 @@ const USDC_ADDRESSES = new Set<string>(
     solana.lookupKnownSPLToken("mainnet-beta", "USDC")?.address,
     evm.lookupKnownAsset("base", "USDC")?.address?.toLowerCase(),
     evm.lookupKnownAsset("eip155:137", "USDC")?.address?.toLowerCase(),
-    evm.lookupKnownAsset("eip155:10143", "USDC")?.address?.toLowerCase(),
+    evm.lookupKnownAsset("eip155:143", "USDC")?.address?.toLowerCase(),
   ].filter((addr): addr is string => addr !== undefined),
 );
 
