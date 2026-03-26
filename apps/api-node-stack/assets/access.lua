@@ -119,15 +119,22 @@ if not ok then
     return ngx.exit(500)
 end
 
-if not tenant_config.backend_url then
+if not tenant_config.backend_url or tenant_config.backend_url == cjson.null then
     ngx.status = 500
     ngx.header["Content-Type"] = "application/json"
     ngx.say(cjson.encode({error = "Tenant missing backend_url"}))
     return ngx.exit(500)
 end
 
-tenant_config.domain = tenant_config.domain or tenant_domain
-local proxy_name = tenant_config.proxy_name or tenant_config.name or tenant_domain
+local tenant_domain_cfg = tenant_config.domain
+if tenant_domain_cfg == cjson.null then tenant_domain_cfg = nil end
+tenant_config.domain = tenant_domain_cfg or tenant_domain
+
+local proxy_name_cfg = tenant_config.proxy_name
+if proxy_name_cfg == cjson.null then proxy_name_cfg = nil end
+local name_cfg = tenant_config.name
+if name_cfg == cjson.null then name_cfg = nil end
+local proxy_name = proxy_name_cfg or name_cfg or tenant_domain
 local tenant_org_slug = tenant_config.org_slug
 if tenant_org_slug == cjson.null then tenant_org_slug = nil end
 
@@ -153,12 +160,19 @@ if backend_host then
     ngx.var.backend_host = backend_host
 end
 
-if tenant_config.upstream_auth_header then
-    ngx.req.set_header(tenant_config.upstream_auth_header, tenant_config.upstream_auth_value)
+if tenant_config.upstream_auth_header and tenant_config.upstream_auth_header ~= cjson.null then
+    local auth_value = tenant_config.upstream_auth_value
+    if auth_value == cjson.null then auth_value = nil end
+    ngx.req.set_header(tenant_config.upstream_auth_header, auth_value)
 end
 
-local price = tenant_config.default_price_usdc or 0
-local scheme = tenant_config.default_scheme or "exact"
+local default_price = tenant_config.default_price_usdc
+if default_price == cjson.null then default_price = nil end
+local price = default_price or 0
+
+local default_scheme = tenant_config.default_scheme
+if default_scheme == cjson.null then default_scheme = nil end
+local scheme = default_scheme or "exact"
 local matched_endpoint_id = nil
 if tenant_config.endpoints then
     for _, endpoint in ipairs(tenant_config.endpoints) do
@@ -181,10 +195,10 @@ if tenant_config.endpoints then
 
         if matched then
             matched_endpoint_id = endpoint.id
-            if endpoint.price_usdc then
+            if endpoint.price_usdc and endpoint.price_usdc ~= cjson.null then
                 price = endpoint.price_usdc
             end
-            if endpoint.scheme then
+            if endpoint.scheme and endpoint.scheme ~= cjson.null then
                 scheme = endpoint.scheme
             end
             break
@@ -250,7 +264,7 @@ local accepts_body = {
     accepts = {}
 }
 
-if wallet.solana and wallet.solana["mainnet-beta"] and wallet.solana["mainnet-beta"].address and wallet.solana["mainnet-beta"].address ~= "" then
+if wallet.solana and wallet.solana["mainnet-beta"] and wallet.solana["mainnet-beta"].address and wallet.solana["mainnet-beta"].address ~= "" and wallet.solana["mainnet-beta"].address ~= cjson.null then
     table.insert(accepts_body.accepts, {
         network = "solana-mainnet-beta",
         scheme = scheme,
@@ -275,7 +289,7 @@ if wallet.solana and wallet.solana["mainnet-beta"] and wallet.solana["mainnet-be
     })
 end
 
-if wallet.evm and wallet.evm.base and wallet.evm.base.address and wallet.evm.base.address ~= "" then
+if wallet.evm and wallet.evm.base and wallet.evm.base.address and wallet.evm.base.address ~= "" and wallet.evm.base.address ~= cjson.null then
     table.insert(accepts_body.accepts, {
         scheme = scheme,
         network = "base",
@@ -289,7 +303,7 @@ if wallet.evm and wallet.evm.base and wallet.evm.base.address and wallet.evm.bas
     })
 end
 
-if wallet.evm and wallet.evm.polygon and wallet.evm.polygon.address and wallet.evm.polygon.address ~= "" then
+if wallet.evm and wallet.evm.polygon and wallet.evm.polygon.address and wallet.evm.polygon.address ~= "" and wallet.evm.polygon.address ~= cjson.null then
     table.insert(accepts_body.accepts, {
         scheme = scheme,
         network = "polygon",
@@ -314,7 +328,7 @@ if wallet.evm and wallet.evm.polygon and wallet.evm.polygon.address and wallet.e
     })
 end
 
-if wallet.evm and wallet.evm.monad and wallet.evm.monad.address and wallet.evm.monad.address ~= "" then
+if wallet.evm and wallet.evm.monad and wallet.evm.monad.address and wallet.evm.monad.address ~= "" and wallet.evm.monad.address ~= cjson.null then
     table.insert(accepts_body.accepts, {
         scheme = scheme,
         network = "eip155:143",
