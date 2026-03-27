@@ -2,7 +2,14 @@
 
 import { useState } from "react";
 import * as Dialog from "@radix-ui/react-dialog";
-import { Cross2Icon, PlusIcon, MinusIcon } from "@radix-ui/react-icons";
+import * as Select from "@radix-ui/react-select";
+import {
+  Cross2Icon,
+  PlusIcon,
+  MinusIcon,
+  ChevronDownIcon,
+  CheckIcon,
+} from "@radix-ui/react-icons";
 import { api } from "@/lib/api/client";
 import { useToast } from "@/components/ui/toast";
 import { SCHEME_OPTIONS } from "@/lib/types/api";
@@ -164,17 +171,37 @@ export function AdminEditEndpointDialog({
                 <label className="mb-1.5 block text-sm text-gray-11">
                   Scheme
                 </label>
-                <select
-                  value={scheme}
-                  onChange={(e) => setScheme(e.target.value)}
-                  className="w-full h-9 rounded-md border border-gray-6 bg-gray-3 px-3 text-sm text-gray-12 focus:border-accent-8 focus:outline-none focus:ring-1 focus:ring-accent-8"
-                >
-                  {SCHEME_OPTIONS.map((opt) => (
-                    <option key={opt.value} value={opt.value}>
-                      {opt.label}
-                    </option>
-                  ))}
-                </select>
+                <Select.Root value={scheme} onValueChange={setScheme}>
+                  <Select.Trigger className="flex w-full h-9 items-center justify-between rounded-md border border-gray-6 bg-gray-3 px-3 text-sm text-gray-12 focus:border-accent-8 focus:outline-none focus:ring-1 focus:ring-accent-8">
+                    <Select.Value />
+                    <Select.Icon>
+                      <ChevronDownIcon className="h-3.5 w-3.5 text-gray-11" />
+                    </Select.Icon>
+                  </Select.Trigger>
+                  <Select.Portal>
+                    <Select.Content
+                      className="overflow-hidden rounded border border-gray-6 bg-gray-2 shadow-lg"
+                      position="popper"
+                      sideOffset={4}
+                    >
+                      <Select.Viewport className="p-1">
+                        {SCHEME_OPTIONS.map((opt) => (
+                          <Select.Item
+                            key={opt.value}
+                            value={opt.value}
+                            disabled={opt.disabled}
+                            className="relative flex cursor-pointer select-none items-center rounded px-6 py-1.5 text-sm outline-none hover:bg-gray-4 data-[highlighted]:bg-gray-4 data-[disabled]:text-gray-8 data-[disabled]:cursor-not-allowed data-[disabled]:hover:bg-transparent"
+                          >
+                            <Select.ItemIndicator className="absolute left-1 inline-flex items-center">
+                              <CheckIcon className="h-3 w-3 text-accent-11" />
+                            </Select.ItemIndicator>
+                            <Select.ItemText>{opt.label}</Select.ItemText>
+                          </Select.Item>
+                        ))}
+                      </Select.Viewport>
+                    </Select.Content>
+                  </Select.Portal>
+                </Select.Root>
               </div>
             </div>
 

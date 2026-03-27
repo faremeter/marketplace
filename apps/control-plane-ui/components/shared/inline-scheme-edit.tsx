@@ -88,11 +88,16 @@ export function InlineSchemeEdit({
                   <button
                     key={option.value}
                     type="button"
+                    disabled={option.disabled}
                     onClick={() => setSelectedScheme(option.value)}
                     className={`w-full rounded px-3 py-1.5 text-left text-sm transition-colors ${
-                      selectedScheme === option.value
-                        ? "bg-accent-9 text-white"
-                        : "text-gray-12 hover:bg-gray-4"
+                      option.disabled && selectedScheme === option.value
+                        ? "bg-gray-6 text-gray-11 cursor-not-allowed"
+                        : option.disabled
+                          ? "text-gray-8 cursor-not-allowed"
+                          : selectedScheme === option.value
+                            ? "bg-accent-9 text-white"
+                            : "text-gray-12 hover:bg-gray-4"
                     }`}
                   >
                     {option.label}
