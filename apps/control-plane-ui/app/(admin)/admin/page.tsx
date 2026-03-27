@@ -1,6 +1,7 @@
 "use client";
 
 import useSWR from "swr";
+import { InfoCircledIcon } from "@radix-ui/react-icons";
 import { api } from "@/lib/api/client";
 import {
   type EarningsAnalytics,
@@ -46,6 +47,7 @@ export default function AdminDashboardPage() {
           valueColor={getValueColor(analytics?.current_month_earned)}
           change={formatChange(analytics?.percent_change)}
           changeColor={getChangeColor(analytics?.percent_change)}
+          tooltip={buildTokenTooltip(analytics?.token_breakdown)}
         />
       </div>
 
@@ -109,8 +111,8 @@ function EarningsStatCard({
       <div className="mt-1 flex items-baseline gap-2">
         <p className={`text-2xl font-medium ${valueColor}`}>{value}</p>
         {tooltip && (
-          <span className="cursor-help text-[10px] text-gray-9" title={tooltip}>
-            [i]
+          <span className="cursor-help text-gray-9" title={tooltip}>
+            <InfoCircledIcon className="h-3 w-3" />
           </span>
         )}
         {change && change !== "-" && (

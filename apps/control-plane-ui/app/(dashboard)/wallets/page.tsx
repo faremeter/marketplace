@@ -53,7 +53,7 @@ interface Wallet {
 interface ChainBalances {
   native: string;
   usdc: string;
-  tokens?: { symbol: string; amount: string }[];
+  tokens?: { symbol: string; amount: string; usdEquivalent?: number }[];
 }
 
 interface WalletBalances {
@@ -718,9 +718,16 @@ function WalletCard({
                     className="flex items-center justify-between"
                   >
                     <span className="text-xs text-gray-11">{t.symbol}</span>
-                    <span className="font-mono text-xs text-gray-12">
-                      {t.amount}
-                    </span>
+                    <div className="text-right">
+                      <span className="font-mono text-xs text-gray-12">
+                        {t.amount}
+                      </span>
+                      {t.usdEquivalent !== undefined && (
+                        <span className="ml-1 text-[10px] text-gray-9">
+                          (~${t.usdEquivalent.toFixed(2)})
+                        </span>
+                      )}
+                    </div>
                   </div>
                 ))}
               </div>

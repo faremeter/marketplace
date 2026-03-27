@@ -12,6 +12,7 @@ import {
   CheckIcon,
   ExternalLinkIcon,
   Cross2Icon,
+  InfoCircledIcon,
 } from "@radix-ui/react-icons";
 import * as Dialog from "@radix-ui/react-dialog";
 import * as Tabs from "@radix-ui/react-tabs";
@@ -341,12 +342,12 @@ export default function ProxyDetailPage() {
       <div>
         {activeTab === "overview" && (
           <div className="space-y-6">
-            <div className="grid gap-4 sm:grid-cols-2">
-              {(() => {
-                const tokenTooltip = buildTokenTooltip(
-                  analytics?.token_breakdown,
-                );
-                return (
+            {(() => {
+              const tokenTooltip = buildTokenTooltip(
+                analytics?.token_breakdown,
+              );
+              return (
+                <div className="grid gap-4 sm:grid-cols-2">
                   <div className="rounded-lg border border-gray-6 bg-gray-2 p-4">
                     <p className="text-[12px] text-gray-9">Total Earned</p>
                     <div className="mt-1 flex items-baseline gap-1.5">
@@ -357,34 +358,42 @@ export default function ProxyDetailPage() {
                       </p>
                       {tokenTooltip && (
                         <span
-                          className="cursor-help text-[10px] text-gray-9"
+                          className="cursor-help text-gray-9"
                           title={tokenTooltip}
                         >
-                          [i]
+                          <InfoCircledIcon className="h-3 w-3" />
                         </span>
                       )}
                     </div>
                   </div>
-                );
-              })()}
-              <div className="rounded-lg border border-gray-6 bg-gray-2 p-4">
-                <p className="text-[12px] text-gray-9">This Month</p>
-                <div className="mt-1 flex items-baseline gap-2">
-                  <p
-                    className={`text-[15px] font-medium ${getValueColor(analytics?.current_month_earned)}`}
-                  >
-                    {formatUSDC(analytics?.current_month_earned)}
-                  </p>
-                  {formatChange(analytics?.percent_change) !== "-" && (
-                    <span
-                      className={`text-[12px] font-medium ${getChangeColor(analytics?.percent_change)}`}
-                    >
-                      {formatChange(analytics?.percent_change)}
-                    </span>
-                  )}
+                  <div className="rounded-lg border border-gray-6 bg-gray-2 p-4">
+                    <p className="text-[12px] text-gray-9">This Month</p>
+                    <div className="mt-1 flex items-baseline gap-2">
+                      <p
+                        className={`text-[15px] font-medium ${getValueColor(analytics?.current_month_earned)}`}
+                      >
+                        {formatUSDC(analytics?.current_month_earned)}
+                      </p>
+                      {tokenTooltip && (
+                        <span
+                          className="cursor-help text-gray-9"
+                          title={tokenTooltip}
+                        >
+                          <InfoCircledIcon className="h-3 w-3" />
+                        </span>
+                      )}
+                      {formatChange(analytics?.percent_change) !== "-" && (
+                        <span
+                          className={`text-[12px] font-medium ${getChangeColor(analytics?.percent_change)}`}
+                        >
+                          {formatChange(analytics?.percent_change)}
+                        </span>
+                      )}
+                    </div>
+                  </div>
                 </div>
-              </div>
-            </div>
+              );
+            })()}
 
             <Tabs.Root
               defaultValue="revenue"

@@ -123,3 +123,12 @@ export async function getTokenRates(): Promise<Record<string, TokenRate>> {
     return {};
   }
 }
+
+export async function getSymbolToUsdRate(): Promise<Record<string, number>> {
+  const rates = await getTokenRates();
+  const result: Record<string, number> = {};
+  for (const info of Object.values(rates)) {
+    result[info.symbol] = info.usdPrice;
+  }
+  return result;
+}

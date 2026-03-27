@@ -4,6 +4,7 @@ import { createPublicClient, http, formatUnits, erc20Abi } from "viem";
 import { base, polygon } from "viem/chains";
 import { evm, solana } from "@faremeter/info";
 import { logger } from "../logger.js";
+import { getSymbolToUsdRate } from "./jupiter-prices.js";
 
 const USDC_DECIMALS = 6;
 const SOLANA_DECIMALS = 9;
@@ -55,6 +56,7 @@ const monad = {
 export interface TokenBalance {
   symbol: string;
   amount: string;
+  usdEquivalent?: number;
 }
 
 interface ChainBalances {
@@ -146,14 +148,32 @@ async function getSolanaBalances(addr: string): Promise<ChainBalances> {
         usdc = usdcAmount.toFixed(2);
       }
 
-      // Extract other known stablecoin balances
-      const tokens: TokenBalance[] = [];
+      // Extract other known stablecoin balances with USD equivalents
+      const tokensWithBalance: { symbol: string; amount: number }[] = [];
       for (const [mint, symbol] of KNOWN_SOLANA_MINTS) {
         const amount = mintBalances.get(mint) ?? 0;
         if (amount > 0) {
-          tokens.push({ symbol, amount: amount.toFixed(2) });
+          tokensWithBalance.push({ symbol, amount });
         }
       }
+
+      let rates: Record<string, number> = {};
+      if (tokensWithBalance.length > 0) {
+        try {
+          rates = await getSymbolToUsdRate();
+        } catch {
+          // Jupiter rates unavailable - show raw amounts without USD equivalent
+        }
+      }
+
+      const tokens: TokenBalance[] = tokensWithBalance.map(
+        ({ symbol, amount }) => {
+          const rate = rates[symbol];
+          const tb: TokenBalance = { symbol, amount: amount.toFixed(2) };
+          if (rate) tb.usdEquivalent = amount * rate;
+          return tb;
+        },
+      );
 
       return { native, usdc, tokens };
     },

@@ -1,13 +1,57 @@
-// All SUM(amount) queries assume amounts are stored in micro-USD-equivalent units.
-// This works because all supported tokens are USD-pegged stablecoins (1:1).
-// If non-USD tokens like EURC are added, amounts would need conversion before summing.
-
 import { db } from "../db/instance.js";
 import { sql } from "kysely";
+import { getSymbolToUsdRate } from "./jupiter-prices.js";
+import { USD_PEGGED_SYMBOLS } from "./schemas.js";
+
+const usdPeggedSet = new Set<string>(USD_PEGGED_SYMBOLS);
 
 export interface TokenBreakdown {
   symbol: string;
   total: number;
+  usdTotal: number;
+}
+
+// Adjusts a raw SUM(amount) by converting non-USD token amounts to USD using Jupiter rates.
+// For non-USD tokens (e.g. EURC): subtracts raw amount, adds back amount * jupiterRate.
+function hasNonUsdTokens(
+  tokenSubtotals: { symbol: string; total: number }[],
+): boolean {
+  return tokenSubtotals.some((t) => !usdPeggedSet.has(t.symbol));
+}
+
+function adjustWithRates(
+  rawTotal: number,
+  tokenSubtotals: { symbol: string; total: number }[],
+  rates: Record<string, number>,
+): { adjusted: number; breakdown: TokenBreakdown[] } {
+  let adjusted = rawTotal;
+  const breakdown: TokenBreakdown[] = [];
+
+  for (const { symbol, total } of tokenSubtotals) {
+    if (!usdPeggedSet.has(symbol)) {
+      // Non-USD token: convert using Jupiter rate
+      const rate = rates[symbol];
+      const usdTotal = rate ? Math.round(total * rate) : total;
+      adjusted = adjusted - total + usdTotal;
+      breakdown.push({ symbol, total, usdTotal });
+    } else {
+      // USD-pegged non-USDC token: no conversion needed, but include in breakdown
+      breakdown.push({ symbol, total, usdTotal: total });
+    }
+  }
+
+  return { adjusted, breakdown };
+}
+
+async function getRatesIfNeeded(
+  ...subtotalArrays: { symbol: string; total: number }[][]
+): Promise<Record<string, number>> {
+  for (const arr of subtotalArrays) {
+    if (hasNonUsdTokens(arr)) {
+      return getSymbolToUsdRate();
+    }
+  }
+  return {};
 }
 
 export interface EarningsAnalytics {
@@ -42,33 +86,47 @@ function calculatePercentChange(
   return ((current - previous) / previous) * 100;
 }
 
-export async function getPlatformEarnings(): Promise<EarningsAnalytics> {
+type QueryFilter = (
+  qb: ReturnType<typeof db.selectFrom<"transactions">>,
+) => ReturnType<typeof db.selectFrom<"transactions">>;
+
+async function getFilteredEarnings(
+  filter: QueryFilter,
+): Promise<EarningsAnalytics> {
   const { currentMonthStart, previousMonthStart } = getMonthBoundaries();
 
-  const [totals, currentMonth, previousMonth, breakdown] = await Promise.all([
-    db
-      .selectFrom("transactions")
+  const toSubs = (rows: { symbol: string; total: number }[]) =>
+    rows.map((r) => ({ symbol: r.symbol, total: Number(r.total) }));
+
+  const base = () => filter(db.selectFrom("transactions"));
+
+  const [
+    totals,
+    currentMonth,
+    previousMonth,
+    breakdown,
+    currentBreakdown,
+    previousBreakdown,
+  ] = await Promise.all([
+    base()
       .select([
         sql<number>`COALESCE(SUM(amount), 0)`.as("total"),
         sql<number>`COUNT(*)`.as("count"),
       ])
       .executeTakeFirst(),
 
-    db
-      .selectFrom("transactions")
+    base()
       .select(sql<number>`COALESCE(SUM(amount), 0)`.as("total"))
       .where("created_at", ">=", currentMonthStart)
       .executeTakeFirst(),
 
-    db
-      .selectFrom("transactions")
+    base()
       .select(sql<number>`COALESCE(SUM(amount), 0)`.as("total"))
       .where("created_at", ">=", previousMonthStart)
       .where("created_at", "<", currentMonthStart)
       .executeTakeFirst(),
 
-    db
-      .selectFrom("transactions")
+    base()
       .select([
         sql<string>`token_symbol`.as("symbol"),
         sql<number>`COALESCE(SUM(amount), 0)`.as("total"),
@@ -77,239 +135,93 @@ export async function getPlatformEarnings(): Promise<EarningsAnalytics> {
       .where("token_symbol", "!=", "USDC")
       .groupBy("token_symbol")
       .execute(),
+
+    base()
+      .select([
+        sql<string>`token_symbol`.as("symbol"),
+        sql<number>`COALESCE(SUM(amount), 0)`.as("total"),
+      ])
+      .where("created_at", ">=", currentMonthStart)
+      .where("token_symbol", "is not", null)
+      .where("token_symbol", "!=", "USDC")
+      .groupBy("token_symbol")
+      .execute(),
+
+    base()
+      .select([
+        sql<string>`token_symbol`.as("symbol"),
+        sql<number>`COALESCE(SUM(amount), 0)`.as("total"),
+      ])
+      .where("created_at", ">=", previousMonthStart)
+      .where("created_at", "<", currentMonthStart)
+      .where("token_symbol", "is not", null)
+      .where("token_symbol", "!=", "USDC")
+      .groupBy("token_symbol")
+      .execute(),
   ]);
 
-  const totalEarned = Number(totals?.total ?? 0);
-  const totalTransactions = Number(totals?.count ?? 0);
-  const currentEarned = Number(currentMonth?.total ?? 0);
-  const previousEarned = Number(previousMonth?.total ?? 0);
+  const rates = await getRatesIfNeeded(
+    toSubs(breakdown),
+    toSubs(currentBreakdown),
+    toSubs(previousBreakdown),
+  );
+
+  const { adjusted: totalEarned, breakdown: tokenBreakdown } = adjustWithRates(
+    Number(totals?.total ?? 0),
+    toSubs(breakdown),
+    rates,
+  );
+  const { adjusted: currentEarned } = adjustWithRates(
+    Number(currentMonth?.total ?? 0),
+    toSubs(currentBreakdown),
+    rates,
+  );
+  const { adjusted: previousEarned } = adjustWithRates(
+    Number(previousMonth?.total ?? 0),
+    toSubs(previousBreakdown),
+    rates,
+  );
 
   return {
     total_earned: totalEarned,
     current_month_earned: currentEarned,
     previous_month_earned: previousEarned,
     percent_change: calculatePercentChange(currentEarned, previousEarned),
-    total_transactions: totalTransactions,
-    token_breakdown: breakdown.map((r) => ({
-      symbol: r.symbol,
-      total: Number(r.total),
-    })),
+    total_transactions: Number(totals?.count ?? 0),
+    token_breakdown: tokenBreakdown,
   };
 }
 
-export async function getOrganizationEarnings(
+export function getPlatformEarnings(): Promise<EarningsAnalytics> {
+  return getFilteredEarnings((qb) => qb);
+}
+
+export function getOrganizationEarnings(
   organizationId: number,
 ): Promise<EarningsAnalytics> {
-  const { currentMonthStart, previousMonthStart } = getMonthBoundaries();
-
-  const [totals, currentMonth, previousMonth, breakdown] = await Promise.all([
-    db
-      .selectFrom("transactions")
-      .select([
-        sql<number>`COALESCE(SUM(amount), 0)`.as("total"),
-        sql<number>`COUNT(*)`.as("count"),
-      ])
-      .where("organization_id", "=", organizationId)
-      .executeTakeFirst(),
-
-    db
-      .selectFrom("transactions")
-      .select(sql<number>`COALESCE(SUM(amount), 0)`.as("total"))
-      .where("organization_id", "=", organizationId)
-      .where("created_at", ">=", currentMonthStart)
-      .executeTakeFirst(),
-
-    db
-      .selectFrom("transactions")
-      .select(sql<number>`COALESCE(SUM(amount), 0)`.as("total"))
-      .where("organization_id", "=", organizationId)
-      .where("created_at", ">=", previousMonthStart)
-      .where("created_at", "<", currentMonthStart)
-      .executeTakeFirst(),
-
-    db
-      .selectFrom("transactions")
-      .select([
-        sql<string>`token_symbol`.as("symbol"),
-        sql<number>`COALESCE(SUM(amount), 0)`.as("total"),
-      ])
-      .where("organization_id", "=", organizationId)
-      .where("token_symbol", "is not", null)
-      .where("token_symbol", "!=", "USDC")
-      .groupBy("token_symbol")
-      .execute(),
-  ]);
-
-  const totalEarned = Number(totals?.total ?? 0);
-  const totalTransactions = Number(totals?.count ?? 0);
-  const currentEarned = Number(currentMonth?.total ?? 0);
-  const previousEarned = Number(previousMonth?.total ?? 0);
-
-  return {
-    total_earned: totalEarned,
-    current_month_earned: currentEarned,
-    previous_month_earned: previousEarned,
-    percent_change: calculatePercentChange(currentEarned, previousEarned),
-    total_transactions: totalTransactions,
-    token_breakdown: breakdown.map((r) => ({
-      symbol: r.symbol,
-      total: Number(r.total),
-    })),
-  };
+  return getFilteredEarnings((qb) =>
+    qb.where("organization_id", "=", organizationId),
+  );
 }
 
-export async function getTenantEarnings(
+export function getTenantEarnings(
   tenantId: number,
 ): Promise<EarningsAnalytics> {
-  const { currentMonthStart, previousMonthStart } = getMonthBoundaries();
-
-  const [totals, currentMonth, previousMonth, breakdown] = await Promise.all([
-    db
-      .selectFrom("transactions")
-      .select([
-        sql<number>`COALESCE(SUM(amount), 0)`.as("total"),
-        sql<number>`COUNT(*)`.as("count"),
-      ])
-      .where("tenant_id", "=", tenantId)
-      .executeTakeFirst(),
-
-    db
-      .selectFrom("transactions")
-      .select(sql<number>`COALESCE(SUM(amount), 0)`.as("total"))
-      .where("tenant_id", "=", tenantId)
-      .where("created_at", ">=", currentMonthStart)
-      .executeTakeFirst(),
-
-    db
-      .selectFrom("transactions")
-      .select(sql<number>`COALESCE(SUM(amount), 0)`.as("total"))
-      .where("tenant_id", "=", tenantId)
-      .where("created_at", ">=", previousMonthStart)
-      .where("created_at", "<", currentMonthStart)
-      .executeTakeFirst(),
-
-    db
-      .selectFrom("transactions")
-      .select([
-        sql<string>`token_symbol`.as("symbol"),
-        sql<number>`COALESCE(SUM(amount), 0)`.as("total"),
-      ])
-      .where("tenant_id", "=", tenantId)
-      .where("token_symbol", "is not", null)
-      .where("token_symbol", "!=", "USDC")
-      .groupBy("token_symbol")
-      .execute(),
-  ]);
-
-  const totalEarned = Number(totals?.total ?? 0);
-  const totalTransactions = Number(totals?.count ?? 0);
-  const currentEarned = Number(currentMonth?.total ?? 0);
-  const previousEarned = Number(previousMonth?.total ?? 0);
-
-  return {
-    total_earned: totalEarned,
-    current_month_earned: currentEarned,
-    previous_month_earned: previousEarned,
-    percent_change: calculatePercentChange(currentEarned, previousEarned),
-    total_transactions: totalTransactions,
-    token_breakdown: breakdown.map((r) => ({
-      symbol: r.symbol,
-      total: Number(r.total),
-    })),
-  };
+  return getFilteredEarnings((qb) => qb.where("tenant_id", "=", tenantId));
 }
 
-export async function getCatchAllEarnings(
+export function getCatchAllEarnings(
   tenantId: number,
 ): Promise<EarningsAnalytics> {
-  const { currentMonthStart, previousMonthStart } = getMonthBoundaries();
-
-  const [totals, currentMonth, previousMonth] = await Promise.all([
-    db
-      .selectFrom("transactions")
-      .select([
-        sql<number>`COALESCE(SUM(amount), 0)`.as("total"),
-        sql<number>`COUNT(*)`.as("count"),
-      ])
-      .where("tenant_id", "=", tenantId)
-      .where("endpoint_id", "is", null)
-      .executeTakeFirst(),
-
-    db
-      .selectFrom("transactions")
-      .select(sql<number>`COALESCE(SUM(amount), 0)`.as("total"))
-      .where("tenant_id", "=", tenantId)
-      .where("endpoint_id", "is", null)
-      .where("created_at", ">=", currentMonthStart)
-      .executeTakeFirst(),
-
-    db
-      .selectFrom("transactions")
-      .select(sql<number>`COALESCE(SUM(amount), 0)`.as("total"))
-      .where("tenant_id", "=", tenantId)
-      .where("endpoint_id", "is", null)
-      .where("created_at", ">=", previousMonthStart)
-      .where("created_at", "<", currentMonthStart)
-      .executeTakeFirst(),
-  ]);
-
-  const totalEarned = Number(totals?.total ?? 0);
-  const totalTransactions = Number(totals?.count ?? 0);
-  const currentEarned = Number(currentMonth?.total ?? 0);
-  const previousEarned = Number(previousMonth?.total ?? 0);
-
-  return {
-    total_earned: totalEarned,
-    current_month_earned: currentEarned,
-    previous_month_earned: previousEarned,
-    percent_change: calculatePercentChange(currentEarned, previousEarned),
-    total_transactions: totalTransactions,
-  };
+  return getFilteredEarnings((qb) =>
+    qb.where("tenant_id", "=", tenantId).where("endpoint_id", "is", null),
+  );
 }
 
-export async function getEndpointEarnings(
+export function getEndpointEarnings(
   endpointId: number,
 ): Promise<EarningsAnalytics> {
-  const { currentMonthStart, previousMonthStart } = getMonthBoundaries();
-
-  const [totals, currentMonth, previousMonth] = await Promise.all([
-    db
-      .selectFrom("transactions")
-      .select([
-        sql<number>`COALESCE(SUM(amount), 0)`.as("total"),
-        sql<number>`COUNT(*)`.as("count"),
-      ])
-      .where("endpoint_id", "=", endpointId)
-      .executeTakeFirst(),
-
-    db
-      .selectFrom("transactions")
-      .select(sql<number>`COALESCE(SUM(amount), 0)`.as("total"))
-      .where("endpoint_id", "=", endpointId)
-      .where("created_at", ">=", currentMonthStart)
-      .executeTakeFirst(),
-
-    db
-      .selectFrom("transactions")
-      .select(sql<number>`COALESCE(SUM(amount), 0)`.as("total"))
-      .where("endpoint_id", "=", endpointId)
-      .where("created_at", ">=", previousMonthStart)
-      .where("created_at", "<", currentMonthStart)
-      .executeTakeFirst(),
-  ]);
-
-  const totalEarned = Number(totals?.total ?? 0);
-  const totalTransactions = Number(totals?.count ?? 0);
-  const currentEarned = Number(currentMonth?.total ?? 0);
-  const previousEarned = Number(previousMonth?.total ?? 0);
-
-  return {
-    total_earned: totalEarned,
-    current_month_earned: currentEarned,
-    previous_month_earned: previousEarned,
-    percent_change: calculatePercentChange(currentEarned, previousEarned),
-    total_transactions: totalTransactions,
-  };
+  return getFilteredEarnings((qb) => qb.where("endpoint_id", "=", endpointId));
 }
 
 export type Granularity = "day" | "week" | "month";
@@ -350,22 +262,59 @@ export async function getEarningsByPeriod(
     startDate.setMonth(startDate.getMonth() - periods);
   }
 
-  const result = await db
-    .selectFrom("transactions")
-    .select([
-      sql<string>`TO_CHAR(created_at, ${sql.lit(format)})`.as("period"),
-      sql<number>`COALESCE(SUM(amount), 0)`.as("total"),
-      sql<number>`COUNT(*)`.as("call_count"),
-    ])
-    .where(column, "=", id)
-    .where("created_at", ">=", startDate)
-    .groupBy(sql`1`)
-    .orderBy(sql`1`, "asc")
-    .execute();
+  const [result, nonUsdByPeriod] = await Promise.all([
+    db
+      .selectFrom("transactions")
+      .select([
+        sql<string>`TO_CHAR(created_at, ${sql.lit(format)})`.as("period"),
+        sql<number>`COALESCE(SUM(amount), 0)`.as("total"),
+        sql<number>`COUNT(*)`.as("call_count"),
+      ])
+      .where(column, "=", id)
+      .where("created_at", ">=", startDate)
+      .groupBy(sql`1`)
+      .orderBy(sql`1`, "asc")
+      .execute(),
+
+    db
+      .selectFrom("transactions")
+      .select([
+        sql<string>`TO_CHAR(created_at, ${sql.lit(format)})`.as("period"),
+        sql<string>`token_symbol`.as("symbol"),
+        sql<number>`COALESCE(SUM(amount), 0)`.as("total"),
+      ])
+      .where(column, "=", id)
+      .where("created_at", ">=", startDate)
+      .where("token_symbol", "is not", null)
+      .where("token_symbol", "!=", "USDC")
+      .groupBy(sql`1`)
+      .groupBy("token_symbol")
+      .execute(),
+  ]);
+
+  // Build per-period adjustment map
+  const nonUsdSubs = nonUsdByPeriod.filter((r) => !usdPeggedSet.has(r.symbol));
+
+  let rates: Record<string, number> = {};
+  if (nonUsdSubs.length > 0) {
+    rates = await getSymbolToUsdRate();
+  }
+
+  const periodAdjustments = new Map<string, number>();
+  for (const r of nonUsdSubs) {
+    const raw = Number(r.total);
+    const rate = rates[r.symbol];
+    const converted = rate ? Math.round(raw * rate) : raw;
+    const diff = converted - raw;
+    periodAdjustments.set(
+      r.period,
+      (periodAdjustments.get(r.period) ?? 0) + diff,
+    );
+  }
 
   return result.map((r) => ({
     period: r.period,
-    total: Number(r.total),
+    total: Number(r.total) + (periodAdjustments.get(r.period) ?? 0),
     call_count: Number(r.call_count),
   }));
 }

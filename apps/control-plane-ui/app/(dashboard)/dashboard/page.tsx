@@ -14,6 +14,7 @@ import {
   CaretDownIcon,
   CaretSortIcon,
   Pencil1Icon,
+  InfoCircledIcon,
 } from "@radix-ui/react-icons";
 import Link from "next/link";
 import {
@@ -178,6 +179,7 @@ export default function DashboardPage() {
               title="This Month"
               value={analytics?.current_month_earned}
               percentChange={analytics?.percent_change}
+              tooltip={buildTokenTooltip(analytics?.token_breakdown)}
             />
             <StatCard title="Total Proxies" value={tenantStats.total} />
             <StatCard title="Active Proxies" value={tenantStats.active} />
@@ -401,8 +403,8 @@ function StatCard({
           {value}
         </p>
         {tooltip && (
-          <span className="cursor-help text-[10px] text-gray-9" title={tooltip}>
-            [i]
+          <span className="cursor-help text-gray-9" title={tooltip}>
+            <InfoCircledIcon className="h-3 w-3" />
           </span>
         )}
       </div>
@@ -431,8 +433,8 @@ function EarningsCard({
           {formatUSDC(value)}
         </p>
         {tooltip && (
-          <span className="cursor-help text-[10px] text-gray-9" title={tooltip}>
-            [i]
+          <span className="cursor-help text-gray-9" title={tooltip}>
+            <InfoCircledIcon className="h-3 w-3" />
           </span>
         )}
         {changeText !== "-" && (
@@ -615,12 +617,32 @@ function TenantEarningsRow({
       <td
         className={`py-3 ${isLoading ? "text-gray-9" : getValueColor(analytics?.total_earned)}`}
       >
-        {isLoading ? "..." : formatUSDC(analytics?.total_earned)}
+        <span className="inline-flex items-center gap-1">
+          {isLoading ? "..." : formatUSDC(analytics?.total_earned)}
+          {!isLoading && buildTokenTooltip(analytics?.token_breakdown) && (
+            <span
+              className="cursor-help text-gray-9"
+              title={buildTokenTooltip(analytics?.token_breakdown)}
+            >
+              <InfoCircledIcon className="h-3 w-3" />
+            </span>
+          )}
+        </span>
       </td>
       <td
         className={`py-3 ${isLoading ? "text-gray-9" : getValueColor(analytics?.current_month_earned)}`}
       >
-        {isLoading ? "..." : formatUSDC(analytics?.current_month_earned)}
+        <span className="inline-flex items-center gap-1">
+          {isLoading ? "..." : formatUSDC(analytics?.current_month_earned)}
+          {!isLoading && buildTokenTooltip(analytics?.token_breakdown) && (
+            <span
+              className="cursor-help text-gray-9"
+              title={buildTokenTooltip(analytics?.token_breakdown)}
+            >
+              <InfoCircledIcon className="h-3 w-3" />
+            </span>
+          )}
+        </span>
       </td>
       <td
         className={`py-3 ${isLoading ? "text-gray-9" : getChangeColor(analytics?.percent_change)}`}
@@ -749,12 +771,32 @@ function EndpointEarningsRow({
       <td
         className={`py-3 ${isLoading ? "text-gray-9" : getValueColor(analytics?.total_earned)}`}
       >
-        {isLoading ? "..." : formatUSDC(analytics?.total_earned)}
+        <span className="inline-flex items-center gap-1">
+          {isLoading ? "..." : formatUSDC(analytics?.total_earned)}
+          {!isLoading && buildTokenTooltip(analytics?.token_breakdown) && (
+            <span
+              className="cursor-help text-gray-9"
+              title={buildTokenTooltip(analytics?.token_breakdown)}
+            >
+              <InfoCircledIcon className="h-3 w-3" />
+            </span>
+          )}
+        </span>
       </td>
       <td
         className={`py-3 ${isLoading ? "text-gray-9" : getValueColor(analytics?.current_month_earned)}`}
       >
-        {isLoading ? "..." : formatUSDC(analytics?.current_month_earned)}
+        <span className="inline-flex items-center gap-1">
+          {isLoading ? "..." : formatUSDC(analytics?.current_month_earned)}
+          {!isLoading && buildTokenTooltip(analytics?.token_breakdown) && (
+            <span
+              className="cursor-help text-gray-9"
+              title={buildTokenTooltip(analytics?.token_breakdown)}
+            >
+              <InfoCircledIcon className="h-3 w-3" />
+            </span>
+          )}
+        </span>
       </td>
       <td
         className={`py-3 ${isLoading ? "text-gray-9" : getChangeColor(analytics?.percent_change)}`}
@@ -793,12 +835,32 @@ function CatchAllEarningsRow({
       <td
         className={`py-3 ${isLoading ? "text-gray-9" : getValueColor(analytics?.total_earned)}`}
       >
-        {isLoading ? "..." : formatUSDC(analytics?.total_earned)}
+        <span className="inline-flex items-center gap-1">
+          {isLoading ? "..." : formatUSDC(analytics?.total_earned)}
+          {!isLoading && buildTokenTooltip(analytics?.token_breakdown) && (
+            <span
+              className="cursor-help text-gray-9"
+              title={buildTokenTooltip(analytics?.token_breakdown)}
+            >
+              <InfoCircledIcon className="h-3 w-3" />
+            </span>
+          )}
+        </span>
       </td>
       <td
         className={`py-3 ${isLoading ? "text-gray-9" : getValueColor(analytics?.current_month_earned)}`}
       >
-        {isLoading ? "..." : formatUSDC(analytics?.current_month_earned)}
+        <span className="inline-flex items-center gap-1">
+          {isLoading ? "..." : formatUSDC(analytics?.current_month_earned)}
+          {!isLoading && buildTokenTooltip(analytics?.token_breakdown) && (
+            <span
+              className="cursor-help text-gray-9"
+              title={buildTokenTooltip(analytics?.token_breakdown)}
+            >
+              <InfoCircledIcon className="h-3 w-3" />
+            </span>
+          )}
+        </span>
       </td>
       <td
         className={`py-3 ${isLoading ? "text-gray-9" : getChangeColor(analytics?.percent_change)}`}

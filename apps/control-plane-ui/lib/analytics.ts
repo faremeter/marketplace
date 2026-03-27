@@ -1,6 +1,7 @@
 export interface TokenBreakdown {
   symbol: string;
   total: number;
+  usdTotal: number;
 }
 
 export interface EarningsAnalytics {
@@ -16,8 +17,10 @@ export function buildTokenTooltip(
   breakdown?: TokenBreakdown[],
 ): string | undefined {
   if (!breakdown || breakdown.length === 0) return undefined;
-  const symbols = breakdown.map((t) => t.symbol);
-  return `Also includes payments in ${symbols.join(", ")}`;
+  const parts = breakdown.map(
+    (t) => `~$${(t.usdTotal / 1_000_000).toFixed(2)} from ${t.symbol}`,
+  );
+  return `Also includes ${parts.join(", ")}`;
 }
 
 export function formatUSDC(amount?: number): string {

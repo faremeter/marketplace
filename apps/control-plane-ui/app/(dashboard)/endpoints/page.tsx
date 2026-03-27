@@ -16,6 +16,7 @@ import {
   EyeOpenIcon,
   ChevronDownIcon,
   ExternalLinkIcon,
+  InfoCircledIcon,
 } from "@radix-ui/react-icons";
 import { useState, useEffect } from "react";
 import { useToast } from "@/components/ui/toast";
@@ -25,6 +26,7 @@ import {
   getValueColor,
   getChangeColor,
   formatChange,
+  buildTokenTooltip,
 } from "@/lib/analytics";
 
 interface Tenant {
@@ -383,12 +385,32 @@ function CatchAllRow({
       <td
         className={`whitespace-nowrap py-2 text-right align-middle text-xs ${isLoading ? "text-gray-9" : getValueColor(analytics?.total_earned)}`}
       >
-        {isLoading ? "..." : formatUSDC(analytics?.total_earned)}
+        <span className="inline-flex items-center gap-1">
+          {isLoading ? "..." : formatUSDC(analytics?.total_earned)}
+          {!isLoading && buildTokenTooltip(analytics?.token_breakdown) && (
+            <span
+              className="cursor-help text-gray-9"
+              title={buildTokenTooltip(analytics?.token_breakdown)}
+            >
+              <InfoCircledIcon className="h-3 w-3" />
+            </span>
+          )}
+        </span>
       </td>
       <td
         className={`whitespace-nowrap py-2 text-right align-middle text-xs ${isLoading ? "text-gray-9" : getValueColor(analytics?.current_month_earned)}`}
       >
-        {isLoading ? "..." : formatUSDC(analytics?.current_month_earned)}
+        <span className="inline-flex items-center gap-1">
+          {isLoading ? "..." : formatUSDC(analytics?.current_month_earned)}
+          {!isLoading && buildTokenTooltip(analytics?.token_breakdown) && (
+            <span
+              className="cursor-help text-gray-9"
+              title={buildTokenTooltip(analytics?.token_breakdown)}
+            >
+              <InfoCircledIcon className="h-3 w-3" />
+            </span>
+          )}
+        </span>
       </td>
       <td
         className={`whitespace-nowrap py-2 text-right align-middle text-xs ${isLoading ? "text-gray-9" : getChangeColor(analytics?.percent_change)}`}
@@ -487,12 +509,32 @@ function EndpointRow({
       <td
         className={`whitespace-nowrap py-2 text-right align-middle text-xs ${isLoading ? "text-gray-9" : getValueColor(analytics?.total_earned)}`}
       >
-        {isLoading ? "..." : formatUSDC(analytics?.total_earned)}
+        <span className="inline-flex items-center gap-1">
+          {isLoading ? "..." : formatUSDC(analytics?.total_earned)}
+          {!isLoading && buildTokenTooltip(analytics?.token_breakdown) && (
+            <span
+              className="cursor-help text-gray-9"
+              title={buildTokenTooltip(analytics?.token_breakdown)}
+            >
+              <InfoCircledIcon className="h-3 w-3" />
+            </span>
+          )}
+        </span>
       </td>
       <td
         className={`whitespace-nowrap py-2 text-right align-middle text-xs ${isLoading ? "text-gray-9" : getValueColor(analytics?.current_month_earned)}`}
       >
-        {isLoading ? "..." : formatUSDC(analytics?.current_month_earned)}
+        <span className="inline-flex items-center gap-1">
+          {isLoading ? "..." : formatUSDC(analytics?.current_month_earned)}
+          {!isLoading && buildTokenTooltip(analytics?.token_breakdown) && (
+            <span
+              className="cursor-help text-gray-9"
+              title={buildTokenTooltip(analytics?.token_breakdown)}
+            >
+              <InfoCircledIcon className="h-3 w-3" />
+            </span>
+          )}
+        </span>
       </td>
       <td
         className={`whitespace-nowrap py-2 text-right align-middle text-xs ${isLoading ? "text-gray-9" : getChangeColor(analytics?.percent_change)}`}
