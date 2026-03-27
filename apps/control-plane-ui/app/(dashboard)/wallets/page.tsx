@@ -824,6 +824,9 @@ export default function WalletsPage() {
   );
 
   const isSolanaFunded = fundingModalBalances?.isFunded ?? false;
+  const hasSol =
+    parseFloat(fundingModalBalances?.solana?.native ?? "0") >= 0.001;
+  const hasUsdc = parseFloat(fundingModalBalances?.solana?.usdc ?? "0") >= 0.01;
 
   const handleFundingEditSave = async (data: {
     name: string;
@@ -1213,9 +1216,47 @@ export default function WalletsPage() {
                                   )}
                                 </button>
                               </div>
-                              <p className="mt-2 text-xs text-gray-9">
-                                Send SOL and USDC to this address
-                              </p>
+                              <div className="mt-3 space-y-1">
+                                <p className="text-xs font-medium text-gray-11">
+                                  Send both to this address:
+                                </p>
+                                <div className="flex items-center gap-2 text-sm">
+                                  <div className="flex h-4 w-4 items-center justify-center flex-shrink-0">
+                                    {hasSol ? (
+                                      <CheckCircledIcon className="h-4 w-4 text-green-400" />
+                                    ) : (
+                                      <div className="h-2 w-2 rounded-full bg-corbits-orange" />
+                                    )}
+                                  </div>
+                                  <span
+                                    className={
+                                      hasSol
+                                        ? "text-green-400"
+                                        : "text-corbits-orange font-medium"
+                                    }
+                                  >
+                                    SOL — for transaction fees
+                                  </span>
+                                </div>
+                                <div className="flex items-center gap-2 text-sm">
+                                  <div className="flex h-4 w-4 items-center justify-center flex-shrink-0">
+                                    {hasUsdc ? (
+                                      <CheckCircledIcon className="h-4 w-4 text-green-400" />
+                                    ) : (
+                                      <div className="h-2 w-2 rounded-full bg-corbits-orange" />
+                                    )}
+                                  </div>
+                                  <span
+                                    className={
+                                      hasUsdc
+                                        ? "text-green-400"
+                                        : "text-corbits-orange font-medium"
+                                    }
+                                  >
+                                    USDC — for proxy payments
+                                  </span>
+                                </div>
+                              </div>
                             </div>
                           </div>
                         </div>
@@ -1252,7 +1293,13 @@ export default function WalletsPage() {
                     <>
                       <div className="h-4 w-4 animate-spin rounded-full border-2 border-gray-6 border-t-corbits-orange" />
                       <span className="text-sm text-gray-11">
-                        Waiting for funds...
+                        {!hasSol && !hasUsdc
+                          ? "Waiting for SOL and USDC..."
+                          : !hasUsdc
+                            ? "Waiting for USDC..."
+                            : !hasSol
+                              ? "Waiting for SOL..."
+                              : "Confirming..."}
                       </span>
                     </>
                   )}
