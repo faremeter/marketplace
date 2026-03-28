@@ -29,6 +29,7 @@ export interface Database {
   password_reset_tokens: PasswordResetTokensTable;
   discovery_telemetry: DiscoveryTelemetryTable;
   token_prices: TokenPricesTable;
+  supported_tokens: SupportedTokensTable;
 }
 
 export interface OrganizationsTable {
@@ -198,6 +199,16 @@ export interface TokenPricesTable {
   decimals: ColumnType<number, number | undefined, number>;
   created_at: AutoDateColumn;
   updated_at: OptionalDateColumn;
+}
+
+export interface SupportedTokensTable {
+  id: ColumnType<number, never, never>;
+  symbol: string;
+  mint_address: string;
+  network: string;
+  is_usd_pegged: ColumnType<boolean, boolean | undefined, boolean>;
+  decimals: ColumnType<number, number | undefined, number>;
+  created_at: AutoDateColumn;
 }
 
 export interface DiscoveryTelemetryTable {

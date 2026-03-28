@@ -18,9 +18,11 @@ import {
   CreateTenantSchema,
   UpdateTenantSchema,
   AssignNodeSchema,
-  USD_PEGGED_SYMBOLS,
 } from "../lib/schemas.js";
-import { seedTokenPricesForTenant } from "../lib/token-seed.js";
+import {
+  seedTokenPricesForTenant,
+  getUsdPeggedSymbols,
+} from "../lib/token-seed.js";
 
 export const tenantsRoutes = new Hono();
 
@@ -187,13 +189,16 @@ tenantsRoutes.put(
 
     // Propagate default_price to USD-pegged tenant-level token_prices only
     if (body.default_price !== undefined) {
-      await db
-        .updateTable("token_prices")
-        .set({ amount: body.default_price, updated_at: new Date() })
-        .where("tenant_id", "=", id)
-        .where("endpoint_id", "is", null)
-        .where("token_symbol", "in", [...USD_PEGGED_SYMBOLS])
-        .execute();
+      const usdSymbols = await getUsdPeggedSymbols(db);
+      if (usdSymbols.length > 0) {
+        await db
+          .updateTable("token_prices")
+          .set({ amount: body.default_price, updated_at: new Date() })
+          .where("tenant_id", "=", id)
+          .where("endpoint_id", "is", null)
+          .where("token_symbol", "in", usdSymbols)
+          .execute();
+      }
     }
 
     const assignedNodes = await db

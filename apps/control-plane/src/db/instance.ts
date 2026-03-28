@@ -309,6 +309,51 @@ export async function setupTestSchema(): Promise<void> {
     .execute();
 
   await db.schema
+    .createTable("supported_tokens")
+    .ifNotExists()
+    .addColumn("id", "integer", (col) => col.primaryKey().autoIncrement())
+    .addColumn("symbol", "text", (col) => col.notNull())
+    .addColumn("mint_address", "text", (col) => col.notNull())
+    .addColumn("network", "text", (col) => col.notNull())
+    .addColumn("is_usd_pegged", "integer", (col) => col.defaultTo(1))
+    .addColumn("decimals", "integer", (col) => col.defaultTo(6))
+    .addColumn("created_at", "text", (col) =>
+      col.defaultTo(sql`CURRENT_TIMESTAMP`).notNull(),
+    )
+    .execute();
+
+  // Seed reference data — supported_tokens is not cleared between tests
+  await db
+    .insertInto("supported_tokens")
+    .values([
+      {
+        symbol: "USDC",
+        mint_address: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+        network: "solana-mainnet-beta",
+        is_usd_pegged: 1,
+      },
+      {
+        symbol: "USDT",
+        mint_address: "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB",
+        network: "solana-mainnet-beta",
+        is_usd_pegged: 1,
+      },
+      {
+        symbol: "EURC",
+        mint_address: "HzwqbKZw8HxMN6bF2yFZNrht3c2iXXzpKcFu7uBEDKtr",
+        network: "solana-mainnet-beta",
+        is_usd_pegged: 0,
+      },
+      {
+        symbol: "USDC",
+        mint_address: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+        network: "base",
+        is_usd_pegged: 1,
+      },
+    ])
+    .execute();
+
+  await db.schema
     .createTable("discovery_telemetry")
     .ifNotExists()
     .addColumn("id", "integer", (col) => col.primaryKey().autoIncrement())

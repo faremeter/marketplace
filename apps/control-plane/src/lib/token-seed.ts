@@ -1,53 +1,5 @@
-import { solana, evm } from "@faremeter/info";
-import { USD_PEGGED_SYMBOLS } from "./schemas.js";
 import type { Kysely } from "kysely";
 import type { Database } from "../db/schema.js";
-
-interface TokenSeedEntry {
-  symbol: string;
-  mint: string;
-  network: string;
-}
-
-function getUsdTokenSeedList(): TokenSeedEntry[] {
-  const entries: TokenSeedEntry[] = [];
-
-  // Solana USD-pegged tokens
-  for (const symbol of USD_PEGGED_SYMBOLS) {
-    const info = solana.lookupKnownSPLToken("mainnet-beta", symbol);
-    if (info) {
-      entries.push({
-        symbol,
-        mint: info.address,
-        network: "solana-mainnet-beta",
-      });
-    }
-  }
-
-  // EVM USDC
-  const evmTokens = [
-    { network: "base", lookup: () => evm.lookupKnownAsset("base", "USDC") },
-    {
-      network: "polygon",
-      lookup: () => evm.lookupKnownAsset("eip155:137", "USDC"),
-    },
-    {
-      network: "eip155:143",
-      lookup: () => evm.lookupKnownAsset("eip155:143", "USDC"),
-    },
-  ];
-
-  for (const { network, lookup } of evmTokens) {
-    const info = lookup();
-    if (info) {
-      entries.push({ symbol: "USDC", mint: info.address, network });
-    }
-  }
-
-  return entries;
-}
-
-const USD_TOKEN_SEED_LIST = getUsdTokenSeedList();
 
 export async function seedTokenPricesForTenant(
   db: Kysely<Database>,
@@ -57,17 +9,35 @@ export async function seedTokenPricesForTenant(
 ): Promise<void> {
   if (amount <= 0) return;
 
-  const values = USD_TOKEN_SEED_LIST.map((t) => ({
+  const tokens = await db
+    .selectFrom("supported_tokens")
+    .select(["symbol", "mint_address", "network"])
+    .where("is_usd_pegged", "=", true)
+    .execute();
+
+  if (tokens.length === 0) return;
+
+  const values = tokens.map((t) => ({
     tenant_id: tenantId,
     endpoint_id: endpointId ?? null,
     token_symbol: t.symbol,
-    mint_address: t.mint,
+    mint_address: t.mint_address,
     network: t.network,
     amount,
     decimals: 6,
   }));
 
-  if (values.length > 0) {
-    await db.insertInto("token_prices").values(values).execute();
-  }
+  await db.insertInto("token_prices").values(values).execute();
+}
+
+export async function getUsdPeggedSymbols(
+  db: Kysely<Database>,
+): Promise<string[]> {
+  const rows = await db
+    .selectFrom("supported_tokens")
+    .select("symbol")
+    .where("is_usd_pegged", "=", true)
+    .execute();
+
+  return [...new Set(rows.map((r) => r.symbol))];
 }

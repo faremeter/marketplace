@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import useSWR from "swr";
 import {
   Cross2Icon,
   PlusIcon,
@@ -9,11 +10,7 @@ import {
 } from "@radix-ui/react-icons";
 import { api } from "@/lib/api/client";
 import { useToast } from "@/components/ui/toast";
-import {
-  SUPPORTED_TOKENS,
-  type TokenPrice,
-  type SupportedToken,
-} from "@/lib/types/api";
+import { type TokenPrice, type SupportedToken } from "@/lib/types/api";
 
 interface TokenPricesSectionProps {
   tenantId: number;
@@ -47,6 +44,11 @@ export function TokenPricesSection({
       setInitialLoaded(true);
     }
   };
+
+  const { data: supportedTokensData } = useSWR<{
+    data: SupportedToken[];
+  }>("/api/token-rates/supported-tokens", api.get);
+  const supportedTokens = supportedTokensData?.data ?? [];
 
   // Fetch on mount to show count in collapsed state
   useEffect(() => {
@@ -95,7 +97,7 @@ export function TokenPricesSection({
         mint_address: token.mint,
         network: token.network,
         amount: 0,
-        decimals: 6,
+        decimals: token.decimals ?? 6,
         endpoint_id: endpointId ?? null,
       });
       toast({ title: `${token.symbol} added`, variant: "default" });
@@ -109,7 +111,7 @@ export function TokenPricesSection({
   const existingKeys = new Set(
     prices.map((p) => `${p.token_symbol}:${p.network}`),
   );
-  const availableTokens = SUPPORTED_TOKENS.filter(
+  const availableTokens = supportedTokens.filter(
     (t) => !existingKeys.has(`${t.symbol}:${t.network}`),
   );
 

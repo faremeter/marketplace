@@ -42,9 +42,11 @@ import {
   AdminAssignNodeSchema,
   AdminImportOrgsSchema,
   AdminUpdateEmailConfigSchema,
-  USD_PEGGED_SYMBOLS,
 } from "../lib/schemas.js";
-import { seedTokenPricesForTenant } from "../lib/token-seed.js";
+import {
+  seedTokenPricesForTenant,
+  getUsdPeggedSymbols,
+} from "../lib/token-seed.js";
 import { slugify, generateSlugSuffix } from "../lib/slug.js";
 import {
   getPlatformEarnings,
@@ -1119,13 +1121,16 @@ adminRoutes.put(
 
     // Propagate default_price to USD-pegged tenant-level token_prices
     if (body.default_price !== undefined) {
-      await db
-        .updateTable("token_prices")
-        .set({ amount: body.default_price, updated_at: new Date() })
-        .where("tenant_id", "=", id)
-        .where("endpoint_id", "is", null)
-        .where("token_symbol", "in", [...USD_PEGGED_SYMBOLS])
-        .execute();
+      const usdSymbols = await getUsdPeggedSymbols(db);
+      if (usdSymbols.length > 0) {
+        await db
+          .updateTable("token_prices")
+          .set({ amount: body.default_price, updated_at: new Date() })
+          .where("tenant_id", "=", id)
+          .where("endpoint_id", "is", null)
+          .where("token_symbol", "in", usdSymbols)
+          .execute();
+      }
     }
 
     const tenantNodes = await db

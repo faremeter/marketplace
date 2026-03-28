@@ -14,6 +14,7 @@ const BOOLEAN_COLUMNS = new Set([
   "is_admin",
   "is_active",
   "is_primary",
+  "is_usd_pegged",
   "email_verified",
   "onboarding_completed",
 ]);
