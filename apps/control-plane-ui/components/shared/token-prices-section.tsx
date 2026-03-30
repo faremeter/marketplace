@@ -33,7 +33,7 @@ export function TokenPricesSection({
     setLoading(true);
     try {
       const query = endpointId ? `?endpoint_id=${endpointId}` : "";
-      const res = await api.get(
+      const res = await api.get<{ data: TokenPrice[] }>(
         `/api/tenants/${tenantId}/token-prices${query}`,
       );
       setPrices(res.data ?? []);
