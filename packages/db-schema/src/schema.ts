@@ -211,6 +211,14 @@ export interface SupportedTokensTable {
   created_at: AutoDateColumn;
 }
 
+export interface SupportedToken {
+  symbol: string;
+  mint: string;
+  network: string;
+  isUsdPegged: boolean;
+  decimals: number;
+}
+
 export interface DiscoveryTelemetryTable {
   id: ColumnType<number, never, never>;
   event_type: string;

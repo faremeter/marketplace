@@ -1,5 +1,6 @@
 import { db } from "../db/instance.js";
-import { sql } from "kysely";
+import { sql, type SelectQueryBuilder } from "kysely";
+import type { Database } from "../db/schema.js";
 import { getSymbolToUsdRate } from "./jupiter-prices.js";
 import { USD_PEGGED_SYMBOLS } from "./schemas.js";
 
@@ -86,9 +87,8 @@ function calculatePercentChange(
   return ((current - previous) / previous) * 100;
 }
 
-type QueryFilter = (
-  qb: ReturnType<typeof db.selectFrom<"transactions">>,
-) => ReturnType<typeof db.selectFrom<"transactions">>;
+type TransactionsQuery = SelectQueryBuilder<Database, "transactions", object>;
+type QueryFilter = (qb: TransactionsQuery) => TransactionsQuery;
 
 async function getFilteredEarnings(
   filter: QueryFilter,

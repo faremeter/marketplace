@@ -330,25 +330,25 @@ export async function setupTestSchema(): Promise<void> {
         symbol: "USDC",
         mint_address: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
         network: "solana-mainnet-beta",
-        is_usd_pegged: 1,
+        is_usd_pegged: true,
       },
       {
         symbol: "USDT",
         mint_address: "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB",
         network: "solana-mainnet-beta",
-        is_usd_pegged: 1,
+        is_usd_pegged: true,
       },
       {
         symbol: "EURC",
         mint_address: "HzwqbKZw8HxMN6bF2yFZNrht3c2iXXzpKcFu7uBEDKtr",
         network: "solana-mainnet-beta",
-        is_usd_pegged: 0,
+        is_usd_pegged: false,
       },
       {
         symbol: "USDC",
         mint_address: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
         network: "base",
-        is_usd_pegged: 1,
+        is_usd_pegged: true,
       },
     ])
     .execute();

@@ -4,6 +4,7 @@ import { Hono } from "hono";
 import { db, setupTestSchema, clearTestData } from "../db/instance.js";
 import { tokenRatesRoutes } from "./token-rates.js";
 import { seedTokenPricesForTenant } from "../lib/token-seed.js";
+import type { SupportedToken } from "../db/schema.js";
 
 const app = new Hono();
 app.route("/api/token-rates", tokenRatesRoutes);
@@ -52,7 +53,7 @@ t.test("GET /api/token-rates/supported-tokens", async (t) => {
   t.test("returns all supported tokens", async (t) => {
     const res = await app.request("/api/token-rates/supported-tokens");
     t.equal(res.status, 200);
-    const body = await res.json();
+    const body = (await res.json()) as { data: SupportedToken[] };
     t.equal(body.data.length, 4);
     t.ok(body.data.find((t: { symbol: string }) => t.symbol === "USDC"));
     t.ok(body.data.find((t: { symbol: string }) => t.symbol === "USDT"));
@@ -61,30 +62,28 @@ t.test("GET /api/token-rates/supported-tokens", async (t) => {
 
   t.test("returns correct shape", async (t) => {
     const res = await app.request("/api/token-rates/supported-tokens");
-    const body = await res.json();
-    const usdc = body.data.find(
-      (t: { symbol: string; network: string }) =>
-        t.symbol === "USDC" && t.network === "solana-mainnet-beta",
+    const body = (await res.json()) as { data: SupportedToken[] };
+    const [usdc] = body.data.filter(
+      (tok) => tok.symbol === "USDC" && tok.network === "solana-mainnet-beta",
     );
-    t.ok(usdc);
-    t.equal(usdc.symbol, "USDC");
-    t.equal(usdc.mint, "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v");
-    t.equal(usdc.network, "solana-mainnet-beta");
-    t.equal(usdc.isUsdPegged, true);
+    t.ok(usdc, "USDC solana entry exists");
+    t.equal(usdc?.mint, "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v");
+    t.equal(usdc?.network, "solana-mainnet-beta");
+    t.equal(usdc?.isUsdPegged, true);
   });
 
   t.test("returns isUsdPegged=false for non-USD tokens", async (t) => {
     const res = await app.request("/api/token-rates/supported-tokens");
-    const body = await res.json();
-    const eurc = body.data.find((t: { symbol: string }) => t.symbol === "EURC");
-    t.ok(eurc);
-    t.equal(eurc.isUsdPegged, false);
+    const body = (await res.json()) as { data: SupportedToken[] };
+    const [eurc] = body.data.filter((tok) => tok.symbol === "EURC");
+    t.ok(eurc, "EURC entry exists");
+    t.equal(eurc?.isUsdPegged, false);
   });
 
   t.test("returns empty when no tokens seeded", async (t) => {
     await db.deleteFrom("supported_tokens").execute();
     const res = await app.request("/api/token-rates/supported-tokens");
-    const body = await res.json();
+    const body = (await res.json()) as { data: SupportedToken[] };
     t.equal(body.data.length, 0);
     await reseedSupportedTokens();
   });
