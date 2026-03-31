@@ -12,9 +12,14 @@ BLUE_DIR="/home/admin/control-plane-blue"
 GREEN_DIR="/home/admin/control-plane-green"
 SYMLINK_DIR="/home/admin/control-plane"
 
-CONTROL_PLANE_STACKS=("production-1" "production-2")
+# shellcheck source=/dev/null
+[ -f "$SCRIPT_DIR/.env" ] && source "$SCRIPT_DIR/.env"
+if [ -z "${PULUMI_STACKS:-}" ]; then
+    log::fatal "PULUMI_STACKS is not set. Add it to .env or export it."
+fi
+IFS=',' read -ra DEPLOY_STACKS <<<"$PULUMI_STACKS"
 
-log::warn "This script will deploy to stacks: $(printf '%s, ' "${CONTROL_PLANE_STACKS[@]}" | sed 's/, $//')"
+log::warn "This script will deploy to stacks: $(printf '%s, ' "${DEPLOY_STACKS[@]}" | sed 's/, $//')"
 log::warn "Current stack will be restored after completion."
 read -rp "Continue? [y/N] " confirm
 [[ "$confirm" =~ ^[Yy]$ ]] || exit 0
@@ -76,7 +81,7 @@ remote::sync() {
 for_each_stack() {
     local original_stack
     original_stack=$(pulumi stack --show-name 2>/dev/null)
-    for stack in "${CONTROL_PLANE_STACKS[@]}"; do
+    for stack in "${DEPLOY_STACKS[@]}"; do
         log::info "[$stack] $1"
         pulumi stack select "$stack" >/dev/null 2>&1
         get_ssh_details $SERVER_INDEX
@@ -92,7 +97,7 @@ for_each_stack() {
 first_stack_only() {
     local original_stack
     original_stack=$(pulumi stack --show-name 2>/dev/null)
-    local stack="${CONTROL_PLANE_STACKS[0]}"
+    local stack="${DEPLOY_STACKS[0]}"
     log::info "[$stack] $1"
     pulumi stack select "$stack" >/dev/null 2>&1
     get_ssh_details $SERVER_INDEX
