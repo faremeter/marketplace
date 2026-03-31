@@ -1,0 +1,12 @@
+config:
+  aws:region: us-west-2 # AWS region
+
+  # RDS configuration
+  rds:dbName: control_plane # Database name
+  rds:masterUsername: rds_admin # Master username
+  rds:masterPassword: <set-with-pulumi-config-set-secret> # Use: pulumi config set --secret rds:masterPassword
+  rds:instanceClass: db.t3.medium # Instance type
+  rds:allocatedStorage: "20" # Storage in GB
+
+  # VPC
+  rds:vpcStackRef: <org>/vpc/<stack-name> # Pulumi stack reference for the VPC stack

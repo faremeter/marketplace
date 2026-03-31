@@ -1,0 +1,26 @@
+config:
+  aws:region: us-west-2
+
+  # EC2
+  node:ami: ami-0123456789abcdef0 # Ubuntu AMI ID for the region
+
+  # Control plane connection
+  controlPlane:addresses: "10.12.0.1:1337" # Comma-separated control-plane addresses (wg1-ip:port)
+
+  # WireGuard (wg0 -- logging/monitoring network, connects to Grafana/Loki dashboard)
+  wireguard:privateKey: <set-with-pulumi-config-set-secret> # Use: pulumi config set --secret wireguard:privateKey
+  wireguard:publicKey: <your-wireguard-public-key>
+  wireguard:address: 10.11.0.2 # wg0 IP address
+
+  # WireGuard (wg1 -- internal service mesh, control-plane <-> API nodes)
+  wireguard:multiAddress: 10.12.0.2 # wg1 IP address
+
+  # WireGuard peers (control-plane nodes)
+  controlPlane:wgPeers: <pubkey>:<wg1-ip>:<public-ip> # Comma-separated: pubkey:wg1-ip:public-ip per control-plane node
+
+  # DNS
+  dns:rootZoneName: example.com # Primary domain for proxy subdomains
+
+  # Node identity
+  api-node:nodeName: api-node-1 # Human-readable node name
+  api-node:nodeId: "1" # This node's ID in the database

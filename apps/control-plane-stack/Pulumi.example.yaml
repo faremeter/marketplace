@@ -1,0 +1,41 @@
+config:
+  aws:region: us-west-2
+
+  # DNS
+  dns:rootZoneName: example.com # Primary domain for proxy subdomains
+  dns:alternateZoneNames: '["example.io"]' # JSON array of alternate domains
+
+  # EC2
+  node:ami: ami-0123456789abcdef0 # Ubuntu AMI ID for the region
+
+  # WireGuard (wg0 -- logging/monitoring network, connects to Grafana/Loki dashboard)
+  wireguard:privateKey: <set-with-pulumi-config-set-secret> # Use: pulumi config set --secret wireguard:privateKey
+  wireguard:publicKey: <your-wireguard-public-key>
+  wireguard:address: 10.11.0.1 # wg0 IP address
+
+  # WireGuard (wg1 -- internal service mesh, control-plane <-> API nodes)
+  wireguard:multiAddress: 10.12.0.1 # wg1 IP address
+
+  # Database
+  database:host: <your-rds-endpoint> # RDS endpoint (from database-stack output)
+  database:port: "5432"
+  database:name: control_plane
+  database:user: control_plane_1
+  database:password: <set-with-pulumi-config-set-secret> # Use: pulumi config set --secret database:password
+
+  # Wallet encryption
+  wallet:encryptionKey: <set-with-pulumi-config-set-secret> # 64-char hex key. Use: pulumi config set --secret wallet:encryptionKey
+
+  # Service ports
+  ui:port: "1338" # Control-plane UI port
+  controlPlane:port: "1337" # Control-plane API port
+  controlPlane:nodeId: "1" # This node's ID in the database
+
+  # VPC
+  vpc:stackRef: <org>/vpc/<stack-name> # Pulumi stack reference for the VPC stack
+
+
+  # Optional integrations
+  # corbitsDashboard:apiKey: <set-with-pulumi-config-set-secret>  # Use: pulumi config set --secret corbitsDashboard:apiKey
+  # attio:apiKey: <set-with-pulumi-config-set-secret>             # Use: pulumi config set --secret attio:apiKey
+  # attio:listId: <your-attio-list-id>
