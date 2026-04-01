@@ -16,4 +16,5 @@ keypairs
 plans/
 backups/
 tickets/
-Pulumi.production*.yaml
+Pulumi.*.yaml
+!Pulumi.example.yaml
