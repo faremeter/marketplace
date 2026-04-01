@@ -81,9 +81,9 @@ new runner.SSHDeployer(
       ROUTE53_ZONE_ID: rootZone.zoneId,
       WIREGUARD_DASHBOARD_PUBKEY: wgConfig.require("dashboardPublicKey"),
       WIREGUARD_DASHBOARD_ENDPOINT: wgConfig.require("dashboardEndpoint"),
-      CORBITS_DASH_API_KEY: corbitsDashConfig.requireSecret("apiKey"),
-      ATTIO_API_KEY: attioConfig.requireSecret("apiKey"),
-      ATTIO_LIST_ID: attioConfig.require("listId"),
+      CORBITS_DASH_API_KEY: corbitsDashConfig.getSecret("apiKey") ?? "",
+      ATTIO_API_KEY: attioConfig.getSecret("apiKey") ?? "",
+      ATTIO_LIST_ID: attioConfig.get("listId") ?? "",
     },
     update: {
       payload: [
