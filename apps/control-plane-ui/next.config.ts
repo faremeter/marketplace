@@ -19,7 +19,7 @@ export default withSentryConfig(nextConfig, {
 
   org: process.env.SENTRY_ORG || "",
 
-  project: "1-click-deploy",
+  project: "faremeter-marketplace",
 
   // Only print logs for uploading source maps in CI
   silent: !process.env.CI,

@@ -1,9 +1,9 @@
 openapi: "3.0.3"
 info:
-  title: Corbits Discovery API
+  title: Faremeter Discovery API
   version: "1.0.0"
   description: >
-    API for discovering available API proxies and endpoints on the Corbits
+    API for discovering available API proxies and endpoints on the Faremeter
     platform. Supports full-text search, proxy listing with cursor-based
     pagination, and per-proxy OpenAPI spec retrieval.
   license:
