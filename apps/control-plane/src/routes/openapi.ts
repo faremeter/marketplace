@@ -131,10 +131,10 @@ function extractPathsFromSpec(spec: OpenApiSpec): ExtractedPath[] {
     }
 
     const raw = item as Record<string, unknown>;
-    const pricing = raw["x-corbits-pricing"] as
+    const pricing = raw["x-faremeter-pricing"] as
       | Record<string, unknown>
       | undefined;
-    const rawTags = raw["x-corbits-tags"];
+    const rawTags = raw["x-faremeter-tags"];
 
     const extInput: Record<string, unknown> = {};
     if (pricing?.price !== undefined) extInput.price = pricing.price;
@@ -143,10 +143,10 @@ function extractPathsFromSpec(spec: OpenApiSpec): ExtractedPath[] {
 
     const ext = OpenApiExtensionsSchema(extInput);
 
-    const isOrphan = raw["x-corbits-orphan"] === true;
+    const isOrphan = raw["x-faremeter-orphan"] === true;
     const originalPattern =
-      typeof raw["x-corbits-original-pattern"] === "string"
-        ? raw["x-corbits-original-pattern"]
+      typeof raw["x-faremeter-original-pattern"] === "string"
+        ? raw["x-faremeter-original-pattern"]
         : null;
     const pattern =
       isOrphan && originalPattern ? originalPattern : openApiPathToRegex(path);
@@ -412,14 +412,14 @@ openapiRoutes.get("/export", async (c) => {
           pathObj["description"] = endpoint.description;
         }
 
-        pathObj["x-corbits-pricing"] = {
+        pathObj["x-faremeter-pricing"] = {
           price: endpoint.price ?? tenant.default_price,
           scheme: endpoint.scheme ?? tenant.default_scheme,
         };
 
         const tags = endpoint.tags as string[] | null;
         if (tags && tags.length > 0) {
-          pathObj["x-corbits-tags"] = tags;
+          pathObj["x-faremeter-tags"] = tags;
         }
       }
     } else {
@@ -440,9 +440,9 @@ openapiRoutes.get("/export", async (c) => {
           exportedSpec.paths = {};
         }
         const orphanPath: Record<string, unknown> = {
-          "x-corbits-orphan": true,
-          "x-corbits-original-pattern": endpoint.path_pattern,
-          "x-corbits-pricing": {
+          "x-faremeter-orphan": true,
+          "x-faremeter-original-pattern": endpoint.path_pattern,
+          "x-faremeter-pricing": {
             price: endpoint.price ?? tenant.default_price,
             scheme: endpoint.scheme ?? tenant.default_scheme,
           },
@@ -454,7 +454,7 @@ openapiRoutes.get("/export", async (c) => {
 
         const orphanTags = endpoint.tags as string[] | null;
         if (orphanTags && orphanTags.length > 0) {
-          orphanPath["x-corbits-tags"] = orphanTags;
+          orphanPath["x-faremeter-tags"] = orphanTags;
         }
 
         exportedSpec.paths[displayPath] = orphanPath;

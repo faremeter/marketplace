@@ -1113,7 +1113,7 @@ async function setupTenant() {
 
 await t.test("x-402 export extensions", async (t) => {
   await t.test(
-    "exports x-corbits-pricing with correct values on lineage endpoints",
+    "exports x-faremeter-pricing with correct values on lineage endpoints",
     async (t) => {
       const { user, tenant } = await setupTenant();
 
@@ -1140,26 +1140,26 @@ await t.test("x-402 export extensions", async (t) => {
 
       const { data } = await exportSpec(tenant.id, user.token);
 
-      t.equal(data.spec.paths["/api/users"]["x-corbits-pricing"].price, 500);
+      t.equal(data.spec.paths["/api/users"]["x-faremeter-pricing"].price, 500);
       t.equal(
-        data.spec.paths["/api/users"]["x-corbits-pricing"].scheme,
+        data.spec.paths["/api/users"]["x-faremeter-pricing"].scheme,
         "exact",
       );
       t.notOk(
-        data.spec.paths["/api/users"]["x-corbits-pricing"].endpoint_id,
+        data.spec.paths["/api/users"]["x-faremeter-pricing"].endpoint_id,
         "endpoint_id should not be exported",
       );
 
-      t.equal(data.spec.paths["/api/posts"]["x-corbits-pricing"].price, 0);
+      t.equal(data.spec.paths["/api/posts"]["x-faremeter-pricing"].price, 0);
       t.equal(
-        data.spec.paths["/api/posts"]["x-corbits-pricing"].scheme,
+        data.spec.paths["/api/posts"]["x-faremeter-pricing"].scheme,
         "exact",
       );
-      t.notOk(data.spec.paths["/api/posts"]["x-corbits-pricing"].endpoint_id);
+      t.notOk(data.spec.paths["/api/posts"]["x-faremeter-pricing"].endpoint_id);
     },
   );
 
-  await t.test("exports x-corbits-tags on lineage endpoints", async (t) => {
+  await t.test("exports x-faremeter-tags on lineage endpoints", async (t) => {
     const { user, tenant } = await setupTenant();
 
     await importSpec(
@@ -1178,13 +1178,13 @@ await t.test("x-402 export extensions", async (t) => {
 
     const { data } = await exportSpec(tenant.id, user.token);
 
-    t.same(data.spec.paths["/api/users"]["x-corbits-tags"], [
+    t.same(data.spec.paths["/api/users"]["x-faremeter-tags"], [
       "production",
       "v2",
     ]);
   });
 
-  await t.test("omits x-corbits-tags when tags are empty", async (t) => {
+  await t.test("omits x-faremeter-tags when tags are empty", async (t) => {
     const { user, tenant } = await setupTenant();
 
     await importSpec(
@@ -1198,8 +1198,8 @@ await t.test("x-402 export extensions", async (t) => {
     const { data } = await exportSpec(tenant.id, user.token);
 
     t.notOk(
-      data.spec.paths["/api/users"]["x-corbits-tags"],
-      "x-corbits-tags should be absent when no tags",
+      data.spec.paths["/api/users"]["x-faremeter-tags"],
+      "x-faremeter-tags should be absent when no tags",
     );
   });
 
@@ -1218,16 +1218,16 @@ await t.test("x-402 export extensions", async (t) => {
 
       const { data } = await exportSpec(tenant.id, user.token);
 
-      t.equal(data.spec.paths["/api/users"]["x-corbits-pricing"].price, 0.01);
+      t.equal(data.spec.paths["/api/users"]["x-faremeter-pricing"].price, 0.01);
       t.equal(
-        data.spec.paths["/api/users"]["x-corbits-pricing"].scheme,
+        data.spec.paths["/api/users"]["x-faremeter-pricing"].scheme,
         "exact",
       );
     },
   );
 
   await t.test(
-    "orphan export includes x-corbits-pricing, x-corbits-tags, and x-corbits-orphan",
+    "orphan export includes x-faremeter-pricing, x-faremeter-tags, and x-faremeter-orphan",
     async (t) => {
       const { user, tenant } = await setupTenant();
 
@@ -1249,24 +1249,24 @@ await t.test("x-402 export extensions", async (t) => {
 
       const orphanPath = data.spec.paths["/manual/endpoint"];
       t.ok(orphanPath, "orphan path should exist");
-      t.equal(orphanPath["x-corbits-orphan"], true);
-      t.equal(orphanPath["x-corbits-pricing"].price, 250);
-      t.equal(orphanPath["x-corbits-pricing"].scheme, "exact");
-      t.same(orphanPath["x-corbits-tags"], ["internal"]);
+      t.equal(orphanPath["x-faremeter-orphan"], true);
+      t.equal(orphanPath["x-faremeter-pricing"].price, 250);
+      t.equal(orphanPath["x-faremeter-pricing"].scheme, "exact");
+      t.same(orphanPath["x-faremeter-tags"], ["internal"]);
     },
   );
 });
 
 await t.test("x-402 import extensions", async (t) => {
   await t.test(
-    "imports x-corbits-pricing and applies to created endpoints",
+    "imports x-faremeter-pricing and applies to created endpoints",
     async (t) => {
       const { user, tenant } = await setupTenant();
 
       const spec = makeSpec({
         "/api/users": {
           get: { summary: "List users" },
-          "x-corbits-pricing": { price: 500, scheme: "exact" },
+          "x-faremeter-pricing": { price: 500, scheme: "exact" },
         },
       });
 
@@ -1286,14 +1286,14 @@ await t.test("x-402 import extensions", async (t) => {
   );
 
   await t.test(
-    "imports x-corbits-tags and applies to created endpoints",
+    "imports x-faremeter-tags and applies to created endpoints",
     async (t) => {
       const { user, tenant } = await setupTenant();
 
       const spec = makeSpec({
         "/api/users": {
           get: {},
-          "x-corbits-tags": ["api", "v2"],
+          "x-faremeter-tags": ["api", "v2"],
         },
       });
 
@@ -1312,14 +1312,14 @@ await t.test("x-402 import extensions", async (t) => {
   );
 
   await t.test(
-    "ignores x-corbits-pricing with out-of-range price",
+    "ignores x-faremeter-pricing with out-of-range price",
     async (t) => {
       const { user, tenant } = await setupTenant();
 
       const spec = makeSpec({
         "/api/users": {
           get: {},
-          "x-corbits-pricing": { price: 999999999 },
+          "x-faremeter-pricing": { price: 999999999 },
         },
       });
 
@@ -1341,13 +1341,13 @@ await t.test("x-402 import extensions", async (t) => {
     },
   );
 
-  await t.test("ignores x-corbits-pricing with invalid scheme", async (t) => {
+  await t.test("ignores x-faremeter-pricing with invalid scheme", async (t) => {
     const { user, tenant } = await setupTenant();
 
     const spec = makeSpec({
       "/api/users": {
         get: {},
-        "x-corbits-pricing": { price: 100, scheme: "bogus" },
+        "x-faremeter-pricing": { price: 100, scheme: "bogus" },
       },
     });
 
@@ -1369,36 +1369,39 @@ await t.test("x-402 import extensions", async (t) => {
     t.equal(endpoint.scheme, null);
   });
 
-  await t.test("ignores x-corbits-tags with invalid tag values", async (t) => {
+  await t.test(
+    "ignores x-faremeter-tags with invalid tag values",
+    async (t) => {
+      const { user, tenant } = await setupTenant();
+
+      const spec = makeSpec({
+        "/api/users": {
+          get: {},
+          "x-faremeter-tags": ["UPPERCASE", "invalid tag!"],
+        },
+      });
+
+      const res = await importSpec(tenant.id, user.token, spec);
+      t.equal(res.status, 200);
+
+      const endpoint = await db
+        .selectFrom("endpoints")
+        .selectAll()
+        .where("tenant_id", "=", tenant.id)
+        .where("path", "=", "/api/users")
+        .executeTakeFirstOrThrow();
+
+      t.same(endpoint.tags, [], "invalid tags should fall back to empty");
+    },
+  );
+
+  await t.test("ignores x-faremeter-pricing with negative price", async (t) => {
     const { user, tenant } = await setupTenant();
 
     const spec = makeSpec({
       "/api/users": {
         get: {},
-        "x-corbits-tags": ["UPPERCASE", "invalid tag!"],
-      },
-    });
-
-    const res = await importSpec(tenant.id, user.token, spec);
-    t.equal(res.status, 200);
-
-    const endpoint = await db
-      .selectFrom("endpoints")
-      .selectAll()
-      .where("tenant_id", "=", tenant.id)
-      .where("path", "=", "/api/users")
-      .executeTakeFirstOrThrow();
-
-    t.same(endpoint.tags, [], "invalid tags should fall back to empty");
-  });
-
-  await t.test("ignores x-corbits-pricing with negative price", async (t) => {
-    const { user, tenant } = await setupTenant();
-
-    const spec = makeSpec({
-      "/api/users": {
-        get: {},
-        "x-corbits-pricing": { price: -5 },
+        "x-faremeter-pricing": { price: -5 },
       },
     });
 
@@ -1520,12 +1523,12 @@ await t.test("x-402 round-trip and deduplication", async (t) => {
       const specWithExtensions = makeSpec({
         "/api/users": {
           get: { summary: "List users" },
-          "x-corbits-pricing": { price: 1000, scheme: "exact" },
-          "x-corbits-tags": ["updated"],
+          "x-faremeter-pricing": { price: 1000, scheme: "exact" },
+          "x-faremeter-tags": ["updated"],
         },
         "/api/posts": {
           get: { summary: "List posts" },
-          "x-corbits-pricing": { price: 0, scheme: "exact" },
+          "x-faremeter-pricing": { price: 0, scheme: "exact" },
         },
       });
 
@@ -1579,7 +1582,7 @@ await t.test("x-402 round-trip and deduplication", async (t) => {
       makeSpec({
         "/api/alpha": {
           get: {},
-          "x-corbits-pricing": { price: 100 },
+          "x-faremeter-pricing": { price: 100 },
         },
       }),
     );
@@ -1590,7 +1593,7 @@ await t.test("x-402 round-trip and deduplication", async (t) => {
       makeSpec({
         "/api/beta": {
           get: {},
-          "x-corbits-pricing": { price: 200 },
+          "x-faremeter-pricing": { price: 200 },
         },
       }),
     );
@@ -1610,8 +1613,8 @@ await t.test("x-402 round-trip and deduplication", async (t) => {
       "tenant B does not have tenant A's path",
     );
 
-    t.equal(exportA.spec.paths["/api/alpha"]["x-corbits-pricing"].price, 100);
-    t.equal(exportB.spec.paths["/api/beta"]["x-corbits-pricing"].price, 200);
+    t.equal(exportA.spec.paths["/api/alpha"]["x-faremeter-pricing"].price, 100);
+    t.equal(exportB.spec.paths["/api/beta"]["x-faremeter-pricing"].price, 200);
   });
 
   await t.test(
@@ -1658,7 +1661,7 @@ await t.test("x-402 round-trip and deduplication", async (t) => {
       );
       t.equal(exportData.stats.orphans, 1, "should have 1 orphan");
 
-      // Re-import the exported spec (which contains orphans with x-corbits-original-pattern)
+      // Re-import the exported spec (which contains orphans with x-faremeter-original-pattern)
       const reimportRes = await importSpec(
         tenant.id,
         user.token,
@@ -1696,8 +1699,8 @@ await t.test("x-402 import edge cases", async (t) => {
       const specWithExt = makeSpec({
         "/api/users": {
           get: {},
-          "x-corbits-pricing": { price: 999, scheme: "exact" },
-          "x-corbits-tags": ["premium"],
+          "x-faremeter-pricing": { price: 999, scheme: "exact" },
+          "x-faremeter-tags": ["premium"],
         },
       });
       await importSpec(tenant.id, user.token, specWithExt);
@@ -1737,14 +1740,14 @@ await t.test("x-402 import edge cases", async (t) => {
   );
 
   await t.test(
-    "partial x-corbits-pricing: only price, no scheme",
+    "partial x-faremeter-pricing: only price, no scheme",
     async (t) => {
       const { user, tenant } = await setupTenant();
 
       const spec = makeSpec({
         "/api/users": {
           get: {},
-          "x-corbits-pricing": { price: 42 },
+          "x-faremeter-pricing": { price: 42 },
         },
       });
       await importSpec(tenant.id, user.token, spec);
@@ -1765,14 +1768,14 @@ await t.test("x-402 import edge cases", async (t) => {
   );
 
   await t.test(
-    "partial x-corbits-pricing: only scheme, no price",
+    "partial x-faremeter-pricing: only scheme, no price",
     async (t) => {
       const { user, tenant } = await setupTenant();
 
       const spec = makeSpec({
         "/api/users": {
           get: {},
-          "x-corbits-pricing": { scheme: "exact" },
+          "x-faremeter-pricing": { scheme: "exact" },
         },
       });
       await importSpec(tenant.id, user.token, spec);
@@ -1798,7 +1801,7 @@ await t.test("x-402 import edge cases", async (t) => {
     const spec = makeSpec({
       "/api/free": {
         get: {},
-        "x-corbits-pricing": { price: 0 },
+        "x-faremeter-pricing": { price: 0 },
       },
     });
     await importSpec(tenant.id, user.token, spec);
@@ -1818,7 +1821,7 @@ await t.test("x-402 import edge cases", async (t) => {
     const spec = makeSpec({
       "/api/max": {
         get: {},
-        "x-corbits-pricing": { price: 100000000 },
+        "x-faremeter-pricing": { price: 100000000 },
       },
     });
     await importSpec(tenant.id, user.token, spec);
@@ -1838,7 +1841,7 @@ await t.test("x-402 import edge cases", async (t) => {
     const spec = makeSpec({
       "/api/users": {
         get: {},
-        "x-corbits-tags": ["t1", "t2", "t3", "t4", "t5"],
+        "x-faremeter-tags": ["t1", "t2", "t3", "t4", "t5"],
       },
     });
     await importSpec(tenant.id, user.token, spec);
@@ -1858,7 +1861,7 @@ await t.test("x-402 import edge cases", async (t) => {
     const spec = makeSpec({
       "/api/users": {
         get: {},
-        "x-corbits-tags": ["t1", "t2", "t3", "t4", "t5", "t6"],
+        "x-faremeter-tags": ["t1", "t2", "t3", "t4", "t5", "t6"],
       },
     });
     await importSpec(tenant.id, user.token, spec);
@@ -1879,7 +1882,7 @@ await t.test("x-402 import edge cases", async (t) => {
     const spec = makeSpec({
       "/api/users": {
         get: {},
-        "x-corbits-tags": [longTag],
+        "x-faremeter-tags": [longTag],
       },
     });
     await importSpec(tenant.id, user.token, spec);
@@ -1900,7 +1903,7 @@ await t.test("x-402 import edge cases", async (t) => {
     const spec = makeSpec({
       "/api/users": {
         get: {},
-        "x-corbits-tags": [tooLong],
+        "x-faremeter-tags": [tooLong],
       },
     });
     await importSpec(tenant.id, user.token, spec);
@@ -1920,7 +1923,7 @@ await t.test("x-402 import edge cases", async (t) => {
     const spec = makeSpec({
       "/api/users": {
         get: {},
-        "x-corbits-pricing": { price: "500" },
+        "x-faremeter-pricing": { price: "500" },
       },
     });
     await importSpec(tenant.id, user.token, spec);
@@ -1935,14 +1938,14 @@ await t.test("x-402 import edge cases", async (t) => {
   });
 
   await t.test(
-    "type mismatch: x-corbits-tags as string instead of array",
+    "type mismatch: x-faremeter-tags as string instead of array",
     async (t) => {
       const { user, tenant } = await setupTenant();
 
       const spec = makeSpec({
         "/api/users": {
           get: {},
-          "x-corbits-tags": "api",
+          "x-faremeter-tags": "api",
         },
       });
       await importSpec(tenant.id, user.token, spec);
@@ -1957,13 +1960,13 @@ await t.test("x-402 import edge cases", async (t) => {
     },
   );
 
-  await t.test("type mismatch: x-corbits-pricing as string", async (t) => {
+  await t.test("type mismatch: x-faremeter-pricing as string", async (t) => {
     const { user, tenant } = await setupTenant();
 
     const spec = makeSpec({
       "/api/users": {
         get: {},
-        "x-corbits-pricing": "invalid",
+        "x-faremeter-pricing": "invalid",
       },
     });
     await importSpec(tenant.id, user.token, spec);
@@ -1984,7 +1987,7 @@ await t.test("x-402 import edge cases", async (t) => {
     const spec = makeSpec({
       "/api/users": {
         get: {},
-        "x-corbits-pricing": { price: true, scheme: 123 },
+        "x-faremeter-pricing": { price: true, scheme: 123 },
       },
     });
     await importSpec(tenant.id, user.token, spec);
@@ -2007,7 +2010,7 @@ await t.test("x-402 import edge cases", async (t) => {
       const spec = makeSpec({
         "/api/users": {
           get: {},
-          "x-corbits-tags": [123, null, true],
+          "x-faremeter-tags": [123, null, true],
         },
       });
       await importSpec(tenant.id, user.token, spec);
@@ -2030,16 +2033,16 @@ await t.test("x-402 import edge cases", async (t) => {
       const spec = makeSpec({
         "/api/valid": {
           get: {},
-          "x-corbits-pricing": { price: 100, scheme: "exact" },
-          "x-corbits-tags": ["production"],
+          "x-faremeter-pricing": { price: 100, scheme: "exact" },
+          "x-faremeter-tags": ["production"],
         },
         "/api/none": {
           get: {},
         },
         "/api/invalid": {
           get: {},
-          "x-corbits-pricing": { price: -1, scheme: "fake" },
-          "x-corbits-tags": ["UPPERCASE!"],
+          "x-faremeter-pricing": { price: -1, scheme: "fake" },
+          "x-faremeter-tags": ["UPPERCASE!"],
         },
       });
 
@@ -2074,13 +2077,13 @@ await t.test("x-402 import edge cases", async (t) => {
     },
   );
 
-  await t.test("price as null in x-corbits-pricing", async (t) => {
+  await t.test("price as null in x-faremeter-pricing", async (t) => {
     const { user, tenant } = await setupTenant();
 
     const spec = makeSpec({
       "/api/users": {
         get: {},
-        "x-corbits-pricing": { price: null, scheme: "exact" },
+        "x-faremeter-pricing": { price: null, scheme: "exact" },
       },
     });
     await importSpec(tenant.id, user.token, spec);

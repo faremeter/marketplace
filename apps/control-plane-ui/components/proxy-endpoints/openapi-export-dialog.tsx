@@ -78,7 +78,7 @@ export function OpenApiExportDialog({
     if (!paths) return spec;
     const filtered: Record<string, unknown> = {};
     for (const [path, value] of Object.entries(paths)) {
-      if (!value["x-corbits-orphan"]) filtered[path] = value;
+      if (!value["x-faremeter-orphan"]) filtered[path] = value;
     }
     return { ...spec, paths: filtered };
   };
