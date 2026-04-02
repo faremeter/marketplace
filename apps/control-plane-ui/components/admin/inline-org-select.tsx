@@ -13,6 +13,7 @@ import {
 import useSWR from "swr";
 import { api } from "@/lib/api/client";
 import { useToast } from "@/components/ui/toast";
+import { getProxyUrlPattern } from "@/lib/format";
 
 const PAGE_SIZE = 10;
 
@@ -209,10 +210,7 @@ export function InlineOrgSelect({
   };
 
   const formatDomain = (slug: string | null) => {
-    if (slug) {
-      return `${tenantName}.${slug}.api.corbits.dev`;
-    }
-    return `${tenantName}.api.corbits.dev`;
+    return getProxyUrlPattern({ proxyName: tenantName, orgSlug: slug });
   };
 
   const availableWallets = [...(masterWallets ?? []), ...(newOrgWallets ?? [])];

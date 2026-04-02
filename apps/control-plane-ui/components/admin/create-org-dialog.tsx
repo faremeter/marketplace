@@ -213,11 +213,7 @@ export function CreateOrgDialog({
                     <span>
                       Proxy URLs will be:{" "}
                       <code className="text-gray-11">
-                        *.
-                        {slugTaken && suggestedSlug
-                          ? suggestedSlug
-                          : slugify(name)}
-                        .api.corbits.dev
+                        {`*.${slugTaken && suggestedSlug ? suggestedSlug : slugify(name)}.${process.env.NEXT_PUBLIC_PROXY_BASE_DOMAIN}`}
                       </code>
                     </span>
                   </p>

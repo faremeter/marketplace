@@ -1,8 +1,12 @@
+import { type } from "arktype";
+
 export function titleCase(str: string): string {
   return str.replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
-const PROXY_BASE_DOMAIN = "api.corbits.dev";
+const envType = type({ NEXT_PUBLIC_PROXY_BASE_DOMAIN: "string > 0" });
+const env = envType.assert(process.env);
+const PROXY_BASE_DOMAIN = env.NEXT_PUBLIC_PROXY_BASE_DOMAIN;
 
 export interface ProxyUrlOptions {
   proxyName: string;

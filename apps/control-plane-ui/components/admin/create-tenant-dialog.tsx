@@ -401,9 +401,10 @@ export function CreateTenantDialog({
                       <>
                         <span className="text-gray-9">&lt;name&gt;</span>
                         <span className="text-gray-12">
-                          {isLegacyMode
-                            ? ".api.corbits.dev"
-                            : `.${selectedOrg?.slug}.api.corbits.dev`}
+                          {getProxyUrlPattern({
+                            proxyName: "",
+                            orgSlug: isLegacyMode ? null : selectedOrg?.slug,
+                          })}
                         </span>
                       </>
                     )}

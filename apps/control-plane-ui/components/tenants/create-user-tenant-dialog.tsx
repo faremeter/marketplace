@@ -971,14 +971,13 @@ export function CreateUserTenantDialog({
                   <code className="font-mono text-sm">
                     {name.trim() ? (
                       <span className="text-gray-12">
-                        {sanitizeProxyName(name) || "<name>"}.{organizationSlug}
-                        .api.corbits.dev
+                        {`${sanitizeProxyName(name) || "<name>"}.${organizationSlug}.${process.env.NEXT_PUBLIC_PROXY_BASE_DOMAIN}`}
                       </span>
                     ) : (
                       <>
                         <span className="text-gray-9">&lt;name&gt;</span>
                         <span className="text-gray-12">
-                          .{organizationSlug}.api.corbits.dev
+                          {`.${organizationSlug}.${process.env.NEXT_PUBLIC_PROXY_BASE_DOMAIN}`}
                         </span>
                       </>
                     )}

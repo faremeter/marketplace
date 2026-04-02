@@ -116,7 +116,7 @@ export default function LandingPage() {
                     <span className="text-accent-11">fetch</span>
                     <span className="text-white">(</span>
                     <span className="text-green-400">
-                      &quot;http://weather.api.corbits.dev&quot;
+                      {`"http://weather.${process.env.NEXT_PUBLIC_PROXY_BASE_DOMAIN}"`}
                     </span>
                     <span className="text-white">);</span>
                   </code>

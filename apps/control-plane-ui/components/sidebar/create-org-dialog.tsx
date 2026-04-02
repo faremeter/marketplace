@@ -214,11 +214,7 @@ export function CreateOrgDialog({ open, onOpenChange }: CreateOrgDialogProps) {
                     <span>
                       Your proxy URLs will be:{" "}
                       <code className="text-gray-11">
-                        *.
-                        {slugTaken && suggestedSlug
-                          ? suggestedSlug
-                          : slugify(name)}
-                        .api.corbits.dev
+                        {`*.${slugTaken && suggestedSlug ? suggestedSlug : slugify(name)}.${process.env.NEXT_PUBLIC_PROXY_BASE_DOMAIN}`}
                       </code>
                     </span>
                   </p>
