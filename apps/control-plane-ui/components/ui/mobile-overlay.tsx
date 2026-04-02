@@ -9,7 +9,7 @@ export function MobileOverlay() {
     <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-black md:hidden">
       <div className="flex flex-col items-center px-6 text-center">
         <Image
-          src="/corbits-wordmark-orange.svg"
+          src="/logo.svg"
           alt={SITE_NAME}
           width={160}
           height={40}

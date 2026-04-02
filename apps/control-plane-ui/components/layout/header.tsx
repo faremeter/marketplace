@@ -2,8 +2,8 @@
 
 import Link from "next/link";
 import Image from "next/image";
-import { SITE_NAME } from "@/lib/brand";
 import { useAuth } from "@/lib/auth/context";
+import { SITE_NAME } from "@/lib/brand";
 
 export function Header() {
   const { user } = useAuth();
@@ -13,7 +13,7 @@ export function Header() {
       <div className="mx-auto flex h-14 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
         <Link href="/" className="flex items-center">
           <Image
-            src="/corbits-wordmark-orange.svg"
+            src="/logo.svg"
             alt={SITE_NAME}
             width={100}
             height={24}

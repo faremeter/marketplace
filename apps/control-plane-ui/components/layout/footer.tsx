@@ -10,12 +10,7 @@ export function Footer() {
       <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
         <div className="flex flex-col items-center justify-between gap-4 sm:flex-row">
           <div className="flex items-center">
-            <Image
-              src="/corbits-wordmark-orange.svg"
-              alt={SITE_NAME}
-              width={100}
-              height={24}
-            />
+            <Image src="/logo.svg" alt={SITE_NAME} width={100} height={24} />
           </div>
 
           <nav className="flex items-center gap-6">
