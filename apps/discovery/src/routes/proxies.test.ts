@@ -208,7 +208,7 @@ await t.test("GET /api/v1/proxies", async (t) => {
     t.ok(proxy.id);
     t.equal(proxy.name, "test-api");
     t.equal(proxy.org_slug, "test-org");
-    t.equal(proxy.url, "https://test-api.test-org.api.corbits.dev");
+    t.equal(proxy.url, "https://test-api.test-org.api.example.test");
     t.equal(proxy.default_price, 0.05);
     t.equal(proxy.default_scheme, "exact");
   });
@@ -220,7 +220,7 @@ await t.test("GET /api/v1/proxies", async (t) => {
     t.equal(res.status, 200);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const data = (await res.json()) as any;
-    t.equal(data.data[0].url, "https://weather.api.corbits.dev");
+    t.equal(data.data[0].url, "https://weather.api.example.test");
   });
 
   await t.test("returns tags in proxy list", async (t) => {
@@ -300,7 +300,7 @@ await t.test("GET /api/v1/proxies/:id", async (t) => {
       data: { name: string; url: string; endpoint_count: number };
     };
     t.equal(data.data.name, "detailed-api");
-    t.equal(data.data.url, "https://detailed-api.api.corbits.dev");
+    t.equal(data.data.url, "https://detailed-api.api.example.test");
     t.equal(data.data.endpoint_count, 2);
   });
 

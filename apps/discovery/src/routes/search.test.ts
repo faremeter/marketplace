@@ -100,12 +100,12 @@ await t.test("GET /api/v1/search", async (t) => {
     const res = await app.request("/api/v1/search?q=weather");
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const data = (await res.json()) as any;
-    t.equal(data.proxies[0].url, "https://weather.api.corbits.dev");
+    t.equal(data.proxies[0].url, "https://weather.api.example.test");
 
     const res2 = await app.request("/api/v1/search?q=legiscan");
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const data2 = (await res2.json()) as any;
-    t.equal(data2.proxies[0].url, "https://legiscan.acme.api.corbits.dev");
+    t.equal(data2.proxies[0].url, "https://legiscan.acme.api.example.test");
   });
 
   await t.test("searches tenants by org_slug", async (t) => {

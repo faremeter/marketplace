@@ -15,7 +15,7 @@ await t.test("buildTenantDomain", async (t) => {
         proxyName: "weather",
         orgSlug: null,
       });
-      t.equal(result, "weather.api.corbits.dev");
+      t.equal(result, "weather.api.example.test");
     },
   );
 
@@ -24,7 +24,7 @@ await t.test("buildTenantDomain", async (t) => {
       proxyName: "weather",
       orgSlug: "acme",
     });
-    t.equal(result, "weather.acme.api.corbits.dev");
+    t.equal(result, "weather.acme.api.example.test");
   });
 
   await t.test("handles proxy name with hyphens", async (t) => {
@@ -32,7 +32,7 @@ await t.test("buildTenantDomain", async (t) => {
       proxyName: "my-api-service",
       orgSlug: "acme-corp",
     });
-    t.equal(result, "my-api-service.acme-corp.api.corbits.dev");
+    t.equal(result, "my-api-service.acme-corp.api.example.test");
   });
 });
 
@@ -68,7 +68,7 @@ await t.test("buildSetIdentifier", async (t) => {
 await t.test("getBaseDomain", async (t) => {
   await t.test("returns correct base domain", async (t) => {
     const result = getBaseDomain();
-    t.equal(result, "api.corbits.dev");
+    t.equal(result, "api.example.test");
   });
 });
 

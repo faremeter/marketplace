@@ -998,7 +998,7 @@ await t.test("POST /internal/transactions", async (t) => {
           client_ip: "192.168.1.1",
           request_method: "GET",
           metadata: {
-            host: "myapi.api.corbits.dev",
+            host: "myapi.api.example.test",
             query_string: "param=value&other=123",
             user_agent: "curl/7.68.0",
             x_forwarded_for: "10.0.0.1, 172.16.0.1",
@@ -1027,7 +1027,7 @@ await t.test("POST /internal/transactions", async (t) => {
             client_ip: "203.0.113.50",
             request_method: "POST",
             metadata: {
-              host: "myapi.api.corbits.dev",
+              host: "myapi.api.example.test",
               query_string: null,
               user_agent: "MyApp/1.0",
               x_forwarded_for: null,
@@ -1074,7 +1074,7 @@ await t.test("POST /internal/transactions", async (t) => {
             client_ip: "198.51.100.25",
             request_method: "GET",
             metadata: {
-              host: "myapi.api.corbits.dev",
+              host: "myapi.api.example.test",
               query_string: "key=value",
               user_agent: "SolanaWallet/2.0",
               x_forwarded_for: null,
@@ -1150,7 +1150,7 @@ await t.test("POST /internal/transactions", async (t) => {
             client_ip: "10.0.0.1",
             request_method: "GET",
             metadata: {
-              host: "myapi.api.corbits.dev",
+              host: "myapi.api.example.test",
               query_string: null,
               user_agent: "TestClient/1.0",
               x_forwarded_for: null,
@@ -1181,7 +1181,7 @@ await t.test("POST /internal/transactions", async (t) => {
             client_ip: "2001:db8::1",
             request_method: "POST",
             metadata: {
-              host: "myapi.api.corbits.dev",
+              host: "myapi.api.example.test",
               query_string: "action=test",
               user_agent: "PaymentSDK/2.0",
               x_forwarded_for: "192.168.1.1",
@@ -1296,8 +1296,8 @@ await t.test("GET /internal/nodes/:id/sync", async (t) => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const data = (await res.json()) as any;
       t.equal(data.tenant_count, 1);
-      t.ok(data.config["my-tenant.api.corbits.dev"]);
-      t.equal(data.config["my-tenant.api.corbits.dev"].endpoints.length, 1);
+      t.ok(data.config["my-tenant.api.example.test"]);
+      t.equal(data.config["my-tenant.api.example.test"].endpoints.length, 1);
     },
   );
 
@@ -1372,9 +1372,9 @@ await t.test("GET /internal/nodes/:id/sync", async (t) => {
     t.equal(res.status, 200);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const data = (await res.json()) as any;
-    t.equal(data.config["my-tenant.api.corbits.dev"].endpoints.length, 1);
+    t.equal(data.config["my-tenant.api.example.test"].endpoints.length, 1);
     t.equal(
-      data.config["my-tenant.api.corbits.dev"].endpoints[0].path_pattern,
+      data.config["my-tenant.api.example.test"].endpoints[0].path_pattern,
       "^/api/active$",
     );
   });
@@ -1421,7 +1421,7 @@ await t.test("GET /internal/nodes/:id/sync", async (t) => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const data = (await res.json()) as any;
 
-    const tenantConfig = data.config["configured-tenant.api.corbits.dev"];
+    const tenantConfig = data.config["configured-tenant.api.example.test"];
     t.ok(tenantConfig, "tenant config exists");
     t.equal(tenantConfig.backend_url, "http://backend.example.com");
     t.equal(tenantConfig.default_price, 0.05);
@@ -1481,7 +1481,7 @@ await t.test("GET /internal/nodes/:id/sync", async (t) => {
     t.equal(res.status, 200);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const data = (await res.json()) as any;
-    const endpoints = data.config["my-tenant.api.corbits.dev"].endpoints;
+    const endpoints = data.config["my-tenant.api.example.test"].endpoints;
     t.equal(endpoints.length, 3);
     t.equal(endpoints[0].priority, 1);
     t.equal(endpoints[1].priority, 50);
@@ -1511,8 +1511,8 @@ await t.test("GET /internal/nodes/:id/sync", async (t) => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const data = (await res.json()) as any;
       t.equal(data.tenant_count, 1);
-      t.ok(data.config["my-api.acme.api.corbits.dev"]);
-      t.notOk(data.config["my-api.api.corbits.dev"]);
+      t.ok(data.config["my-api.acme.api.example.test"]);
+      t.notOk(data.config["my-api.api.example.test"]);
     },
   );
 
@@ -1533,11 +1533,11 @@ await t.test("GET /internal/nodes/:id/sync", async (t) => {
       t.equal(res.status, 200);
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const data = (await res.json()) as any;
-      const tenantConfig = data.config["legacy-api.api.corbits.dev"];
+      const tenantConfig = data.config["legacy-api.api.example.test"];
       t.ok(tenantConfig, "tenant config exists");
       t.equal(tenantConfig.name, "legacy-api");
       t.equal(tenantConfig.proxy_name, "legacy-api");
-      t.equal(tenantConfig.domain, "legacy-api.api.corbits.dev");
+      t.equal(tenantConfig.domain, "legacy-api.api.example.test");
       t.equal(tenantConfig.org_slug, null);
     },
   );
@@ -1559,11 +1559,11 @@ await t.test("GET /internal/nodes/:id/sync", async (t) => {
       t.equal(res.status, 200);
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const data = (await res.json()) as any;
-      const tenantConfig = data.config["org-api.acme.api.corbits.dev"];
+      const tenantConfig = data.config["org-api.acme.api.example.test"];
       t.ok(tenantConfig, "tenant config exists");
       t.equal(tenantConfig.name, "org-api");
       t.equal(tenantConfig.proxy_name, "org-api");
-      t.equal(tenantConfig.domain, "org-api.acme.api.corbits.dev");
+      t.equal(tenantConfig.domain, "org-api.acme.api.example.test");
       t.equal(tenantConfig.org_slug, "acme");
     },
   );
@@ -1598,13 +1598,13 @@ await t.test("GET /internal/nodes/:id/sync", async (t) => {
       t.equal(data.tenant_count, 2);
 
       // Legacy tenant uses simple domain
-      t.ok(data.config["legacy-svc.api.corbits.dev"]);
-      t.equal(data.config["legacy-svc.api.corbits.dev"].org_slug, null);
+      t.ok(data.config["legacy-svc.api.example.test"]);
+      t.equal(data.config["legacy-svc.api.example.test"].org_slug, null);
 
       // org_slug tenant uses org-qualified domain
-      t.ok(data.config["org-svc.org-two.api.corbits.dev"]);
+      t.ok(data.config["org-svc.org-two.api.example.test"]);
       t.equal(
-        data.config["org-svc.org-two.api.corbits.dev"].org_slug,
+        data.config["org-svc.org-two.api.example.test"].org_slug,
         "org-two",
       );
     },
@@ -1640,10 +1640,10 @@ await t.test("GET /internal/nodes/:id/sync", async (t) => {
       t.equal(data.tenant_count, 2);
 
       // Both have same name but different domains
-      t.ok(data.config["api.org-one.api.corbits.dev"]);
-      t.ok(data.config["api.org-two.api.corbits.dev"]);
-      t.equal(data.config["api.org-one.api.corbits.dev"].org_slug, "org-one");
-      t.equal(data.config["api.org-two.api.corbits.dev"].org_slug, "org-two");
+      t.ok(data.config["api.org-one.api.example.test"]);
+      t.ok(data.config["api.org-two.api.example.test"]);
+      t.equal(data.config["api.org-one.api.example.test"].org_slug, "org-one");
+      t.equal(data.config["api.org-two.api.example.test"].org_slug, "org-two");
     },
   );
 

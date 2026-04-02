@@ -10,7 +10,7 @@ process.env.NODE_ENV = "test";
 process.env.FAREMETER_DASH_API_KEY = "test-api-key";
 process.env.FAREMETER_DASH_API_URL = "http://localhost:9999";
 process.env.ROUTE53_ZONE_ID = "test-zone";
-process.env.PROXY_BASE_DOMAIN = "api.corbits.dev";
+process.env.PROXY_BASE_DOMAIN = "api.example.test";
 process.env.FRONTEND_URL = "http://localhost:3000";
 process.env.HTTP_PORT = "0";
 
