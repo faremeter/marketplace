@@ -1,4 +1,4 @@
-# 1-Click Deploy
+# Faremeter Marketplace
 
 A multi-tenant payment proxy for the [x402 protocol](https://www.x402.org/). Publishers register their APIs, set pricing, and the proxy handles payment validation, settlement, and request routing. Clients pay per-request using on-chain escrow accounts.
 
@@ -48,7 +48,7 @@ Nodes communicate over a WireGuard mesh network. wg1 (10.12.0.0/24) handles inte
 
 ```bash
 git clone <repo-url>
-cd 1-click-deploy
+cd faremeter-marketplace
 git submodule update --init
 pnpm install
 ```
@@ -193,8 +193,8 @@ pulumi config set controlPlane:nodeId "1"
 # VPC reference
 pulumi config set vpc:stackRef "<your-pulumi-org>/vpc/test-1"
 
-# Optional integrations (contact support@corbits.dev for access)
-# pulumi config set --secret corbitsDashboard:apiKey "<your-key>"
+# Optional integrations
+# pulumi config set --secret faremeterDashboard:apiKey "<your-key>"
 # pulumi config set --secret attio:apiKey "<your-key>"
 # pulumi config set attio:listId "<your-list-id>"
 ```
