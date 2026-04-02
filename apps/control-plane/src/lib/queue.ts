@@ -13,7 +13,7 @@ import {
 } from "./dns.js";
 import { syncToNode } from "./sync.js";
 import { fetchWalletBalances, extractAddresses } from "./balances.js";
-import { cleanupAccount, renameAccount } from "./corbits-dash.js";
+import { cleanupAccount, renameAccount } from "./faremeter-dash.js";
 import { logger } from "../logger.js";
 import { db } from "../db/instance.js";
 import { toDomainInfo, buildTenantDomain } from "./domain.js";
@@ -465,7 +465,7 @@ export async function startQueue(config: {
           if (oldName !== newName) {
             await renameAccount(oldName, newName).catch((err) =>
               logger.error(
-                `Failed to rename Corbits account from ${oldName} to ${newName}: ${err}`,
+                `Failed to rename Faremeter account from ${oldName} to ${newName}: ${err}`,
               ),
             );
           }

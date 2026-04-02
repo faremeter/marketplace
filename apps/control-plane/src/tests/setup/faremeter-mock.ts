@@ -1,7 +1,7 @@
-import * as fixtures from "../fixtures/corbits.js";
+import * as fixtures from "../fixtures/faremeter.js";
 
-const CORBITS_API_URL =
-  process.env.CORBITS_DASH_API_URL || "http://localhost:9999";
+const FAREMETER_API_URL =
+  process.env.FAREMETER_DASH_API_URL || "http://localhost:9999";
 
 let originalFetch: typeof globalThis.fetch;
 let mockEnabled = false;
@@ -12,11 +12,11 @@ function mockFetch(
 ): Promise<Response> {
   const url = typeof input === "string" ? input : input.toString();
 
-  if (!url.startsWith(CORBITS_API_URL)) {
+  if (!url.startsWith(FAREMETER_API_URL)) {
     return originalFetch(input, init);
   }
 
-  const path = url.slice(CORBITS_API_URL.length);
+  const path = url.slice(FAREMETER_API_URL.length);
 
   const nameMatch = path.match(/\/accounts\?name=([^&]+)/);
   if (nameMatch && nameMatch[1]) {
@@ -77,14 +77,14 @@ function mockFetch(
   );
 }
 
-export function enableCorbitsMock(): void {
+export function enableFaremeterMock(): void {
   if (mockEnabled) return;
   originalFetch = globalThis.fetch;
   globalThis.fetch = mockFetch;
   mockEnabled = true;
 }
 
-export function disableCorbitsMock(): void {
+export function disableFaremeterMock(): void {
   if (!mockEnabled) return;
   globalThis.fetch = originalFetch;
   mockEnabled = false;

@@ -5,16 +5,16 @@ import { db, setupTestSchema, clearTestData } from "../db/instance.js";
 import { signToken } from "../middleware/auth.js";
 import { organizationsRoutes } from "./organizations.js";
 import {
-  enableCorbitsMock,
-  disableCorbitsMock,
-} from "../tests/setup/corbits-mock.js";
+  enableFaremeterMock,
+  disableFaremeterMock,
+} from "../tests/setup/faremeter-mock.js";
 
 const app = new Hono();
 app.route("/api/organizations", organizationsRoutes);
 
 await setupTestSchema();
-enableCorbitsMock();
-t.teardown(() => disableCorbitsMock());
+enableFaremeterMock();
+t.teardown(() => disableFaremeterMock());
 
 async function createUser(email: string, isAdmin = false) {
   const user = await db

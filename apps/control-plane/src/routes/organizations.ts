@@ -27,7 +27,7 @@ import { getSiteUrl } from "../lib/email.js";
 import {
   setupAccountWithAddresses,
   updateAccountAddresses,
-} from "../lib/corbits-dash.js";
+} from "../lib/faremeter-dash.js";
 import { validateProxyName } from "../lib/proxy-name.js";
 import { slugify, generateSlugSuffix } from "../lib/slug.js";
 import { toDomainInfo } from "../lib/domain.js";
@@ -695,7 +695,7 @@ organizationsRoutes.put(
 
         updateAccountAddresses(tenant.name, addresses).catch((err) =>
           logger.error(
-            `Failed to update corbits dash addresses for ${tenant.name}: ${err}`,
+            `Failed to update faremeter dash addresses for ${tenant.name}: ${err}`,
           ),
         );
       }
@@ -871,7 +871,7 @@ organizationsRoutes.post(
       setupAccountWithAddresses(tenant.name, accessToken, addresses).catch(
         (err) =>
           logger.error(
-            `Failed to setup corbits dash account for ${tenant.name}: ${err}`,
+            `Failed to setup faremeter dash account for ${tenant.name}: ${err}`,
           ),
       );
     }
@@ -1293,7 +1293,7 @@ organizationsRoutes.post(
       );
     }
 
-    // Skip corbits dash setup for registered tenants
+    // Skip faremeter dash setup for registered tenants
     if (!isRegisterOnly && wallet) {
       const walletConfig = wallet.wallet_config as WalletConfig | null;
       if (walletConfig) {
@@ -1308,7 +1308,7 @@ organizationsRoutes.post(
         setupAccountWithAddresses(tenant.name, accessToken, addresses).catch(
           (err) =>
             logger.error(
-              `Failed to setup corbits dash account for ${tenant.name}: ${err}`,
+              `Failed to setup faremeter dash account for ${tenant.name}: ${err}`,
             ),
         );
       }

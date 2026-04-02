@@ -28,8 +28,8 @@ const KNOWN_STABLECOIN_ADDRESSES = new Set<string>(
   ].filter((addr): addr is string => addr !== undefined),
 );
 
-const CORBITS_DASH_API_URL = process.env.CORBITS_DASH_API_URL;
-const CORBITS_DASH_API_KEY = process.env.CORBITS_DASH_API_KEY;
+const FAREMETER_DASH_API_URL = process.env.FAREMETER_DASH_API_URL;
+const FAREMETER_DASH_API_KEY = process.env.FAREMETER_DASH_API_KEY;
 
 interface Account {
   id: number;
@@ -49,7 +49,7 @@ interface TrackedAddress {
   created_at: string;
 }
 
-export interface CorbitsTransaction {
+export interface FaremeterTransaction {
   id: number;
   chain: string;
   signature: string;
@@ -83,18 +83,18 @@ async function apiRequest<T>(
   path: string,
   body?: unknown,
 ): Promise<T> {
-  if (!CORBITS_DASH_API_KEY) {
-    throw new Error("CORBITS_DASH_API_KEY is not configured");
+  if (!FAREMETER_DASH_API_KEY) {
+    throw new Error("FAREMETER_DASH_API_KEY is not configured");
   }
-  if (!CORBITS_DASH_API_URL) {
-    throw new Error("CORBITS_DASH_API_URL is not configured");
+  if (!FAREMETER_DASH_API_URL) {
+    throw new Error("FAREMETER_DASH_API_URL is not configured");
   }
 
-  const url = `${CORBITS_DASH_API_URL}${path}`;
+  const url = `${FAREMETER_DASH_API_URL}${path}`;
   const options: RequestInit = {
     method,
     headers: {
-      Authorization: `Bearer ${CORBITS_DASH_API_KEY}`,
+      Authorization: `Bearer ${FAREMETER_DASH_API_KEY}`,
       "Content-Type": "application/json",
     },
   };
@@ -105,7 +105,7 @@ async function apiRequest<T>(
 
   if (!response.ok) {
     const error = await response.text();
-    throw new Error(`Corbits dash API error: ${response.status} ${error}`);
+    throw new Error(`Faremeter dash API error: ${response.status} ${error}`);
   }
 
   return response.json() as Promise<T>;
@@ -115,14 +115,14 @@ export async function createAccount(
   name: string,
   accessToken: string,
 ): Promise<Account> {
-  logger.info(`Creating corbits dash account: ${name}`);
+  logger.info(`Creating faremeter dash account: ${name}`);
   const response = await apiRequest<ApiResponse<Account>>("POST", "/accounts", {
     name,
     access_token: accessToken,
     is_active: true,
   });
   logger.info(
-    `Created corbits dash account: ${name} (id: ${response.data.id})`,
+    `Created faremeter dash account: ${name} (id: ${response.data.id})`,
   );
   return response.data;
 }
@@ -170,7 +170,7 @@ export async function getTrackedAddressesForAccount(
   return response.data;
 }
 
-function isStablecoinTransaction(tx: CorbitsTransaction): boolean {
+function isStablecoinTransaction(tx: FaremeterTransaction): boolean {
   if (!tx.mint_address) return false;
   const mintLower = tx.mint_address.toLowerCase();
   return (
@@ -190,7 +190,7 @@ function formatTokenAmount(rawAmount: string): string {
 export async function getTransactionsForAccount(
   accountId: number,
   options?: { limit?: number; offset?: number },
-): Promise<ListResponse<CorbitsTransaction>> {
+): Promise<ListResponse<FaremeterTransaction>> {
   const addresses = await getTrackedAddressesForAccount(accountId);
   if (addresses.length === 0) {
     return {
@@ -212,7 +212,7 @@ export async function getTransactionsForAccount(
   params.set("sort", "block_time");
   params.set("order", "desc");
 
-  const response = await apiRequest<ListResponse<CorbitsTransaction>>(
+  const response = await apiRequest<ListResponse<FaremeterTransaction>>(
     "GET",
     `/transactions?${params}`,
   );
@@ -256,7 +256,7 @@ export async function setupAccountWithAddresses(
   accessToken: string,
   addresses: WalletAddresses,
 ): Promise<Account> {
-  logger.info(`Setting up corbits dash account for tenant: ${tenantName}`);
+  logger.info(`Setting up faremeter dash account for tenant: ${tenantName}`);
   const account = await createAccount(tenantName, accessToken);
 
   const trackingPromises: Promise<TrackedAddress>[] = [];
@@ -287,7 +287,7 @@ export async function setupAccountWithAddresses(
 
   await Promise.all(trackingPromises);
 
-  logger.info(`Corbits dash setup complete for tenant: ${tenantName}`);
+  logger.info(`Faremeter dash setup complete for tenant: ${tenantName}`);
   return account;
 }
 
@@ -295,7 +295,7 @@ export async function updateAccountAddresses(
   tenantName: string,
   addresses: WalletAddresses,
 ): Promise<void> {
-  logger.info(`Updating corbits dash addresses for tenant: ${tenantName}`);
+  logger.info(`Updating faremeter dash addresses for tenant: ${tenantName}`);
   const account = await findAccountByName(tenantName);
   if (!account) {
     logger.error(`Cannot update addresses: account ${tenantName} not found`);
@@ -337,33 +337,33 @@ export async function updateAccountAddresses(
   }
 
   await Promise.all(trackingPromises);
-  logger.info(`Corbits dash addresses updated for tenant: ${tenantName}`);
+  logger.info(`Faremeter dash addresses updated for tenant: ${tenantName}`);
 }
 
 export async function renameAccount(
   oldName: string,
   newName: string,
 ): Promise<void> {
-  logger.info(`Renaming corbits dash account: ${oldName} -> ${newName}`);
+  logger.info(`Renaming faremeter dash account: ${oldName} -> ${newName}`);
   try {
     const account = await findAccountByName(oldName);
     if (account) {
       await apiRequest<ApiResponse<Account>>("PUT", `/accounts/${account.id}`, {
         name: newName,
       });
-      logger.info(`Corbits dash account renamed: ${oldName} -> ${newName}`);
+      logger.info(`Faremeter dash account renamed: ${oldName} -> ${newName}`);
     } else {
-      logger.info(`No corbits dash account found for tenant: ${oldName}`);
+      logger.info(`No faremeter dash account found for tenant: ${oldName}`);
     }
   } catch (err) {
     logger.error(
-      `Failed to rename corbits dash account ${oldName} -> ${newName}: ${err}`,
+      `Failed to rename faremeter dash account ${oldName} -> ${newName}: ${err}`,
     );
   }
 }
 
 export async function cleanupAccount(tenantName: string): Promise<void> {
-  logger.info(`Cleaning up corbits dash account for tenant: ${tenantName}`);
+  logger.info(`Cleaning up faremeter dash account for tenant: ${tenantName}`);
   try {
     const account = await findAccountByName(tenantName);
     if (account) {
@@ -372,13 +372,15 @@ export async function cleanupAccount(tenantName: string): Promise<void> {
         await deactivateTrackedAddress(addr.id);
       }
       await deactivateAccount(account.id);
-      logger.info(`Corbits dash account cleaned up for tenant: ${tenantName}`);
+      logger.info(
+        `Faremeter dash account cleaned up for tenant: ${tenantName}`,
+      );
     } else {
-      logger.info(`No corbits dash account found for tenant: ${tenantName}`);
+      logger.info(`No faremeter dash account found for tenant: ${tenantName}`);
     }
   } catch (err) {
     logger.error(
-      `Failed to cleanup corbits dash account ${tenantName}: ${err}`,
+      `Failed to cleanup faremeter dash account ${tenantName}: ${err}`,
     );
   }
 }

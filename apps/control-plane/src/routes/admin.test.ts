@@ -6,16 +6,16 @@ import { db, setupTestSchema, clearTestData } from "../db/instance.js";
 import { signToken } from "../middleware/auth.js";
 import { adminRoutes } from "./admin.js";
 import {
-  enableCorbitsMock,
-  disableCorbitsMock,
-} from "../tests/setup/corbits-mock.js";
+  enableFaremeterMock,
+  disableFaremeterMock,
+} from "../tests/setup/faremeter-mock.js";
 
 const app = new Hono();
 app.route("/api/admin", adminRoutes);
 
 await setupTestSchema();
-enableCorbitsMock();
-t.teardown(() => disableCorbitsMock());
+enableFaremeterMock();
+t.teardown(() => disableFaremeterMock());
 
 interface TestUser {
   id: number;
@@ -3458,11 +3458,11 @@ await t.test("GET /api/admin/analytics", async (t) => {
   });
 });
 
-await t.test("GET /api/admin/tenants/:id/corbits-transactions", async (t) => {
+await t.test("GET /api/admin/tenants/:id/faremeter-transactions", async (t) => {
   await t.test("returns 404 for non-existent tenant", async (t) => {
     const admin = await createUser("admin@example.com", true);
     const res = await app.request(
-      "/api/admin/tenants/999/corbits-transactions",
+      "/api/admin/tenants/999/faremeter-transactions",
       {
         headers: { Cookie: `auth_token=${admin.token}` },
       },
@@ -3471,14 +3471,14 @@ await t.test("GET /api/admin/tenants/:id/corbits-transactions", async (t) => {
   });
 
   await t.test(
-    "returns empty transactions when no corbits account",
+    "returns empty transactions when no faremeter account",
     async (t) => {
       const admin = await createUser("admin@example.com", true);
       const org = await createOrg("Team", "team");
       const tenant = await createTenant(org.id, "unknown-tenant");
 
       const res = await app.request(
-        `/api/admin/tenants/${tenant.id}/corbits-transactions`,
+        `/api/admin/tenants/${tenant.id}/faremeter-transactions`,
         {
           headers: { Cookie: `auth_token=${admin.token}` },
         },
@@ -3487,19 +3487,19 @@ await t.test("GET /api/admin/tenants/:id/corbits-transactions", async (t) => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const data = (await res.json()) as any;
       t.equal(data.transactions.length, 0);
-      t.equal(data.error, "No Corbits account");
+      t.equal(data.error, "No Faremeter account");
     },
   );
 
   await t.test(
-    "returns transactions for tenant with corbits account",
+    "returns transactions for tenant with faremeter account",
     async (t) => {
       const admin = await createUser("admin@example.com", true);
       const org = await createOrg("Team", "team");
       const tenant = await createTenant(org.id, "elon");
 
       const res = await app.request(
-        `/api/admin/tenants/${tenant.id}/corbits-transactions`,
+        `/api/admin/tenants/${tenant.id}/faremeter-transactions`,
         {
           headers: { Cookie: `auth_token=${admin.token}` },
         },
@@ -3518,7 +3518,7 @@ await t.test("GET /api/admin/tenants/:id/corbits-transactions", async (t) => {
     const tenant = await createTenant(org.id, "elon");
 
     const res = await app.request(
-      `/api/admin/tenants/${tenant.id}/corbits-transactions?limit=5&offset=0`,
+      `/api/admin/tenants/${tenant.id}/faremeter-transactions?limit=5&offset=0`,
       {
         headers: { Cookie: `auth_token=${admin.token}` },
       },
@@ -3536,7 +3536,7 @@ await t.test("GET /api/admin/tenants/:id/corbits-transactions", async (t) => {
     const tenant = await createTenant(org.id, "elon");
 
     const res = await app.request(
-      `/api/admin/tenants/${tenant.id}/corbits-transactions?refresh=true`,
+      `/api/admin/tenants/${tenant.id}/faremeter-transactions?refresh=true`,
       {
         headers: { Cookie: `auth_token=${admin.token}` },
       },

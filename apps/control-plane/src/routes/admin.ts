@@ -28,8 +28,8 @@ import {
   updateAccountAddresses,
   findAccountByName,
   getTransactionsForAccount,
-  type CorbitsTransaction,
-} from "../lib/corbits-dash.js";
+  type FaremeterTransaction,
+} from "../lib/faremeter-dash.js";
 import { validateProxyName } from "../lib/proxy-name.js";
 import { parsePagination } from "../lib/validation.js";
 import { arktypeValidator } from "@hono/arktype-validator";
@@ -60,9 +60,9 @@ import {
 
 export const adminRoutes = new Hono();
 
-// In-memory cache for Corbits transactions
+// In-memory cache for Faremeter transactions
 interface TransactionCacheEntry {
-  transactions: CorbitsTransaction[];
+  transactions: FaremeterTransaction[];
   cachedAt: number;
 }
 const transactionCache = new Map<number, TransactionCacheEntry>();
@@ -859,7 +859,7 @@ adminRoutes.post(
       await checkAndUpdateTenantStatus(tenant.id);
     }
 
-    // Skip corbits dash setup for registered tenants
+    // Skip faremeter dash setup for registered tenants
     if (!isRegisterOnly && walletId) {
       const wallet = await db
         .selectFrom("wallets")
@@ -880,7 +880,7 @@ adminRoutes.post(
         setupAccountWithAddresses(tenant.name, accessToken, addresses).catch(
           (err) =>
             logger.error(
-              `Failed to setup corbits dash account for ${tenant.name}: ${err}`,
+              `Failed to setup faremeter dash account for ${tenant.name}: ${err}`,
             ),
         );
       }
@@ -1153,7 +1153,7 @@ adminRoutes.put(
 
       updateAccountAddresses(tenant.name, addresses).catch((err) =>
         logger.error(
-          `Failed to update corbits dash addresses for ${tenant.name}: ${err}`,
+          `Failed to update faremeter dash addresses for ${tenant.name}: ${err}`,
         ),
       );
     }
@@ -1298,7 +1298,7 @@ adminRoutes.post("/tenants/:id/activate", async (c) => {
     setupAccountWithAddresses(tenant.name, accessToken, addresses).catch(
       (err) =>
         logger.error(
-          `Failed to setup corbits dash account for ${tenant.name}: ${err}`,
+          `Failed to setup faremeter dash account for ${tenant.name}: ${err}`,
         ),
     );
   }
@@ -1784,7 +1784,7 @@ adminRoutes.get("/tenants/:id/transactions", async (c) => {
   });
 });
 
-adminRoutes.get("/tenants/:id/corbits-transactions", async (c) => {
+adminRoutes.get("/tenants/:id/faremeter-transactions", async (c) => {
   const tenantId = parseInt(c.req.param("id"));
   const { limit, offset } = parsePagination(
     c.req.query("limit"),
@@ -1832,7 +1832,7 @@ adminRoutes.get("/tenants/:id/corbits-transactions", async (c) => {
         total: 0,
         limit,
         offset,
-        error: "No Corbits account",
+        error: "No Faremeter account",
       });
     }
 
@@ -1855,7 +1855,7 @@ adminRoutes.get("/tenants/:id/corbits-transactions", async (c) => {
     });
   } catch (err) {
     logger.error(
-      `Failed to fetch Corbits transactions for ${tenant.name}: ${err}`,
+      `Failed to fetch Faremeter transactions for ${tenant.name}: ${err}`,
     );
     // Return cached data if available, even if stale
     if (cached) {
