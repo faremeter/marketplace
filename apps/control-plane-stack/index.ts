@@ -85,6 +85,7 @@ new runner.SSHDeployer(
       WIREGUARD_DASHBOARD_PUBKEY: wgConfig.require("dashboardPublicKey"),
       WIREGUARD_DASHBOARD_ENDPOINT: wgConfig.require("dashboardEndpoint"),
       CORBITS_DASH_API_KEY: corbitsDashConfig.getSecret("apiKey") ?? "",
+      CORBITS_DASH_API_URL: corbitsDashConfig.get("apiUrl") ?? "",
       ATTIO_API_KEY: attioConfig.getSecret("apiKey") ?? "",
       ATTIO_LIST_ID: attioConfig.get("listId") ?? "",
       PROXY_BASE_DOMAIN: proxyBaseDomain,

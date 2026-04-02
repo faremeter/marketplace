@@ -41,5 +41,6 @@ config:
 
   # Optional integrations
   # corbitsDashboard:apiKey: <set-with-pulumi-config-set-secret>  # Use: pulumi config set --secret corbitsDashboard:apiKey
+  # corbitsDashboard:apiUrl: https://dashboard.example.com/api/v1  # Dashboard API URL (required if apiKey is set)
   # attio:apiKey: <set-with-pulumi-config-set-secret>             # Use: pulumi config set --secret attio:apiKey
   # attio:listId: <your-attio-list-id>
