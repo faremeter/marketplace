@@ -2,5 +2,6 @@
 process.env.NODE_ENV = "test";
 process.env.DATABASE_PASSWORD = "test";
 process.env.HTTP_PORT = "0";
+process.env.PROXY_BASE_DOMAIN = "api.corbits.dev";
 
 export {};

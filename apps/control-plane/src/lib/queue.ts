@@ -935,12 +935,14 @@ export async function enqueueTenantRename(
     );
   }
 
-  const oldDomain = oldOrgSlug
-    ? `${oldName}.${oldOrgSlug}.api.corbits.dev`
-    : `${oldName}.api.corbits.dev`;
-  const newDomain = newOrgSlug
-    ? `${newName}.${newOrgSlug}.api.corbits.dev`
-    : `${newName}.api.corbits.dev`;
+  const oldDomain = buildTenantDomain({
+    proxyName: oldName,
+    orgSlug: oldOrgSlug ?? null,
+  });
+  const newDomain = buildTenantDomain({
+    proxyName: newName,
+    orgSlug: newOrgSlug ?? null,
+  });
   logger.info(
     `Enqueued tenant rename job ${jobId}: ${oldDomain} -> ${newDomain}`,
   );

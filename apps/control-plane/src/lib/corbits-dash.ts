@@ -28,8 +28,7 @@ const KNOWN_STABLECOIN_ADDRESSES = new Set<string>(
   ].filter((addr): addr is string => addr !== undefined),
 );
 
-const CORBITS_DASH_API_URL =
-  process.env.CORBITS_DASH_API_URL || "https://dashboard.corbits.dev/api/v1";
+const CORBITS_DASH_API_URL = process.env.CORBITS_DASH_API_URL;
 const CORBITS_DASH_API_KEY = process.env.CORBITS_DASH_API_KEY;
 
 interface Account {
@@ -86,6 +85,9 @@ async function apiRequest<T>(
 ): Promise<T> {
   if (!CORBITS_DASH_API_KEY) {
     throw new Error("CORBITS_DASH_API_KEY is not configured");
+  }
+  if (!CORBITS_DASH_API_URL) {
+    throw new Error("CORBITS_DASH_API_URL is not configured");
   }
 
   const url = `${CORBITS_DASH_API_URL}${path}`;

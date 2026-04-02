@@ -1,3 +1,4 @@
+import "../tests/setup/env.js";
 import t from "tap";
 import {
   buildTenantDomain,

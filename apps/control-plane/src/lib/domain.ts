@@ -1,4 +1,8 @@
-const BASE_DOMAIN = "api.corbits.dev";
+import { type } from "arktype";
+
+const envType = type({ PROXY_BASE_DOMAIN: "string > 0" });
+const env = envType.assert(process.env);
+const BASE_DOMAIN = env.PROXY_BASE_DOMAIN;
 
 export interface TenantDomainInfo {
   proxyName: string;
