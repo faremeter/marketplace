@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import Image from "next/image";
+import { SITE_NAME } from "@/lib/brand";
 import { useAuth } from "@/lib/auth/context";
 
 export function Header() {
@@ -13,7 +14,7 @@ export function Header() {
         <Link href="/" className="flex items-center">
           <Image
             src="/corbits-wordmark-orange.svg"
-            alt="Corbits"
+            alt={SITE_NAME}
             width={100}
             height={24}
             priority

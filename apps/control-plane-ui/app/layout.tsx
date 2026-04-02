@@ -1,11 +1,12 @@
 import type { Metadata } from "next";
 import { GeistSans } from "geist/font/sans";
 import { GeistMono } from "geist/font/mono";
+import { SITE_NAME } from "@/lib/brand";
 import { Providers } from "./providers";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Corbits API",
+  title: `${SITE_NAME} API`,
   description: "Turn any API into a paid x402 service",
 };
 

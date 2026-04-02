@@ -3,6 +3,7 @@
 import { useRef, useMemo } from "react";
 import { useFrame } from "@react-three/fiber";
 import { Text, RoundedBox, Environment, Line } from "@react-three/drei";
+import { SITE_NAME } from "@/lib/brand";
 
 import * as THREE from "three";
 
@@ -310,7 +311,7 @@ export function ProxyScene() {
         <MetallicBlock position={clientPos} label="Client" offset={0} />
         <MetallicBlock
           position={proxyPos}
-          label="Corbits"
+          label={SITE_NAME.split(" ")[0]}
           highlight
           offset={1.5}
         />

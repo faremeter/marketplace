@@ -23,6 +23,7 @@ const uiConfig = new pulumi.Config("ui");
 const facilitatorConfig = new pulumi.Config("facilitator");
 const corbitsDashConfig = new pulumi.Config("corbitsDashboard");
 const attioConfig = new pulumi.Config("attio");
+const siteConfig = new pulumi.Config("site");
 
 const vpcStack = new pulumi.StackReference(vpcConfig.require("stackRef"));
 const publicSubnetIds = vpcStack.getOutput("publicSubnetIds") as pulumi.Output<
@@ -90,6 +91,11 @@ new runner.SSHDeployer(
       ATTIO_LIST_ID: attioConfig.get("listId") ?? "",
       PROXY_BASE_DOMAIN: proxyBaseDomain,
       PROXY_ALT_DOMAINS: proxyAltDomains,
+      SITE_NAME: siteConfig.get("name") ?? "Corbits",
+      DOCS_URL: siteConfig.get("docsUrl") ?? "https://docs.corbits.dev",
+      SALES_EMAIL: siteConfig.get("salesEmail") ?? "sales@corbits.dev",
+      SUPPORT_URL: siteConfig.get("supportUrl") ?? "",
+      LETSENCRYPT_EMAIL: siteConfig.require("letsencryptEmail"),
       FACILITATOR_URL: facilitatorConfig.require("url"),
     },
     update: {

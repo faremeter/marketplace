@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { SITE_NAME } from "@/lib/brand";
 import { useAuth } from "@/lib/auth/context";
 import { GuestRoute } from "@/lib/auth/guard";
 import { ApiError } from "@/lib/api/client";
@@ -64,7 +65,7 @@ function SignupForm() {
         Create your account
       </h1>
       <p className="mb-6 text-[14px] text-gray-9">
-        Get started with Corbits API
+        Get started with {SITE_NAME} API
       </p>
 
       {error && (

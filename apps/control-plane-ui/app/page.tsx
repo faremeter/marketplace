@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import dynamic from "next/dynamic";
+import { SITE_NAME, DOCS_URL } from "@/lib/brand";
 import { Header } from "@/components/layout/header";
 import { Footer } from "@/components/layout/footer";
 
@@ -50,7 +51,7 @@ export default function LandingPage() {
                   Sign Up
                 </Link>
                 <Link
-                  href="https://docs.corbits.dev"
+                  href={DOCS_URL}
                   className="inline-flex h-11 items-center justify-center rounded-md border border-white/10 bg-white/5 px-6 text-[14px] font-medium text-white transition-colors hover:bg-white/10"
                 >
                   Documentation
@@ -192,7 +193,7 @@ export default function LandingPage() {
               />
               <FeatureCard
                 title="No integration needed"
-                description="Proxy your existing API through Corbits. Zero code changes to your backend."
+                description={`Proxy your existing API through ${SITE_NAME}. Zero code changes to your backend.`}
               />
               <FeatureCard
                 title="Global by default"

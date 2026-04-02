@@ -19,6 +19,7 @@ import {
   UploadIcon,
 } from "@radix-ui/react-icons";
 import { api, ApiError } from "@/lib/api/client";
+import { DOCS_URL } from "@/lib/brand";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { SCHEME_OPTIONS, MIN_PRICE_USD, MAX_PRICE_USD } from "@/lib/types/api";
@@ -663,7 +664,7 @@ export function CreateUserTenantDialog({
               </p>
               <div className="mt-6 flex justify-center gap-3">
                 <a
-                  href="https://docs.corbits.dev"
+                  href={DOCS_URL}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="rounded-md border border-gray-6 px-4 py-2 text-sm text-gray-11 transition-colors hover:bg-gray-3 hover:text-gray-12"

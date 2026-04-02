@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { SITE_NAME } from "@/lib/brand";
 import { useAuth } from "@/lib/auth/context";
 import { GuestRoute } from "@/lib/auth/guard";
 import { ApiError } from "@/lib/api/client";
@@ -49,7 +50,7 @@ function LoginForm() {
   return (
     <div className="rounded-lg border border-white/10 bg-gray-2 p-8">
       <h1 className="mb-2 text-xl font-medium text-white">
-        Sign in to Corbits
+        Sign in to {SITE_NAME}
       </h1>
       <p className="mb-6 text-[14px] text-gray-9">
         Enter your credentials to continue

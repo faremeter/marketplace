@@ -1,5 +1,6 @@
 import Link from "next/link";
 import Image from "next/image";
+import { SITE_NAME, DOCS_URL, SUPPORT_URL } from "@/lib/brand";
 
 export function Footer() {
   const currentYear = new Date().getFullYear();
@@ -11,7 +12,7 @@ export function Footer() {
           <div className="flex items-center">
             <Image
               src="/corbits-wordmark-orange.svg"
-              alt="Corbits"
+              alt={SITE_NAME}
               width={100}
               height={24}
             />
@@ -19,7 +20,7 @@ export function Footer() {
 
           <nav className="flex items-center gap-6">
             <Link
-              href="https://docs.corbits.dev"
+              href={DOCS_URL}
               className="text-[13px] text-gray-9 transition-colors hover:text-white"
               target="_blank"
               rel="noopener noreferrer"
@@ -34,18 +35,20 @@ export function Footer() {
             >
               GitHub
             </Link>
-            <Link
-              href="https://t.me/+r80b_8WkFJ45NjM5"
-              className="text-[13px] text-gray-9 transition-colors hover:text-white"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              Support
-            </Link>
+            {SUPPORT_URL && (
+              <Link
+                href={SUPPORT_URL}
+                className="text-[13px] text-gray-9 transition-colors hover:text-white"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                Support
+              </Link>
+            )}
           </nav>
 
           <p className="text-[13px] text-gray-9">
-            &copy; {currentYear} Corbits. All rights reserved.
+            &copy; {currentYear} {SITE_NAME}. All rights reserved.
           </p>
         </div>
       </div>

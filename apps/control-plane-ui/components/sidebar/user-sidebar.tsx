@@ -1,5 +1,6 @@
 "use client";
 
+import { SALES_EMAIL, SUPPORT_URL } from "@/lib/brand";
 import * as Separator from "@radix-ui/react-separator";
 import {
   DashboardIcon,
@@ -44,21 +45,23 @@ export function UserSidebar() {
       </nav>
 
       <div className="px-4 pb-6">
-        <div className="mb-4 flex items-center gap-1 px-3">
-          <a
-            href="https://t.me/+r80b_8WkFJ45NjM5"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-1 text-xs text-corbits-orange hover:underline"
-          >
-            Support
-            <ExternalLinkIcon className="h-3 w-3" />
-          </a>
-        </div>
+        {SUPPORT_URL && (
+          <div className="mb-4 flex items-center gap-1 px-3">
+            <a
+              href={SUPPORT_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1 text-xs text-corbits-orange hover:underline"
+            >
+              Support
+              <ExternalLinkIcon className="h-3 w-3" />
+            </a>
+          </div>
+        )}
         <div className="flex items-center gap-1 px-3">
           <p className="text-xs text-gray-11">Need more?</p>
           <a
-            href="mailto:sales@corbits.dev"
+            href={`mailto:${SALES_EMAIL}`}
             className="text-xs text-corbits-orange hover:underline"
           >
             Contact Sales

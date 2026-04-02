@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useMemo } from "react";
+import { SITE_NAME } from "@/lib/brand";
 import { useAuth } from "@/lib/auth/context";
 import { titleCase } from "@/lib/format";
 import useSWR from "swr";
@@ -318,8 +319,8 @@ export default function DashboardPage() {
                     </h2>
                     <p className="mt-1 text-[13px] text-gray-11">
                       Missing out on earnings and analytics from registered
-                      proxies? Go live with Corbits and we&apos;ll take care of
-                      every last detail.
+                      proxies? Go live with {SITE_NAME} and we&apos;ll take care
+                      of every last detail.
                     </p>
                   </div>
                   <RegisteredProxiesTable

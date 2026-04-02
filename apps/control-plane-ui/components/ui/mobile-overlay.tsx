@@ -2,6 +2,7 @@
 
 import Image from "next/image";
 import { ExternalLinkIcon } from "@radix-ui/react-icons";
+import { SITE_NAME, SUPPORT_URL } from "@/lib/brand";
 
 export function MobileOverlay() {
   return (
@@ -9,7 +10,7 @@ export function MobileOverlay() {
       <div className="flex flex-col items-center px-6 text-center">
         <Image
           src="/corbits-wordmark-orange.svg"
-          alt="Corbits"
+          alt={SITE_NAME}
           width={160}
           height={40}
           className="mb-8"
@@ -21,15 +22,17 @@ export function MobileOverlay() {
           To view this page, open it on desktop.
         </p>
       </div>
-      <a
-        href="https://t.me/+r80b_8WkFJ45NjM5"
-        target="_blank"
-        rel="noopener noreferrer"
-        className="absolute bottom-8 inline-flex items-center gap-1.5 text-sm text-gray-11 hover:text-gray-12"
-      >
-        Chat with us on Telegram
-        <ExternalLinkIcon className="h-3 w-3" />
-      </a>
+      {SUPPORT_URL && (
+        <a
+          href={SUPPORT_URL}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="absolute bottom-8 inline-flex items-center gap-1.5 text-sm text-gray-11 hover:text-gray-12"
+        >
+          Support
+          <ExternalLinkIcon className="h-3 w-3" />
+        </a>
+      )}
     </div>
   );
 }

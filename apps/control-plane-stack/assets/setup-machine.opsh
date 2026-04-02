@@ -96,6 +96,10 @@ step::23::setup-control-plane-ui-env() {
     cat <<EOF >/home/admin/control-plane-ui/.env
 NEXT_PUBLIC_CONTROL_PLANE_API_URL=http://localhost:${CONTROL_PLANE_PORT}
 NEXT_PUBLIC_PROXY_BASE_DOMAIN=${PROXY_BASE_DOMAIN}
+NEXT_PUBLIC_SITE_NAME=${SITE_NAME}
+NEXT_PUBLIC_DOCS_URL=${DOCS_URL}
+NEXT_PUBLIC_SALES_EMAIL=${SALES_EMAIL}
+NEXT_PUBLIC_SUPPORT_URL=${SUPPORT_URL}
 PORT=${UI_PORT}
 EOF
     chown admin:admin /home/admin/control-plane-ui/.env

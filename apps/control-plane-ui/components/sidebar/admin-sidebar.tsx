@@ -1,5 +1,6 @@
 "use client";
 
+import { SITE_NAME } from "@/lib/brand";
 import * as Separator from "@radix-ui/react-separator";
 import {
   DashboardIcon,
@@ -24,7 +25,7 @@ export function AdminSidebar() {
     <aside className="flex h-screen w-64 flex-col border-r border-white/5 bg-black">
       <div className="p-4">
         <h1 className="text-[15px] font-medium text-white">Admin Panel</h1>
-        <p className="text-[12px] text-gray-9">Corbits API</p>
+        <p className="text-[12px] text-gray-9">{SITE_NAME} API</p>
       </div>
 
       <Separator.Root className="h-px bg-white/5" />
