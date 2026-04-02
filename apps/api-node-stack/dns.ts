@@ -4,7 +4,7 @@ import { RecordType } from "@pulumi/aws/route53";
 
 const config = new pulumi.Config("dns");
 
-const rootZoneName = config.require("rootZoneName");
+export const rootZoneName = config.require("rootZoneName");
 
 export const rootZone = await aws.route53.getZone({ name: rootZoneName });
 
@@ -14,9 +14,11 @@ type Zoneish = {
   nameServers: pulumi.Input<pulumi.Input<string>[]>;
 };
 
-const alternateZoneNames = config.getObject("alternateZoneNames") as
-  | string[]
-  | undefined;
+export const alternateZoneNamesList =
+  (config.getObject("alternateZoneNames") as string[] | undefined) ?? [];
+
+const alternateZoneNames: string[] | undefined =
+  alternateZoneNamesList.length > 0 ? alternateZoneNamesList : undefined;
 
 export const alternateZones: Zoneish[] = [];
 
@@ -44,6 +46,19 @@ if (config.getBoolean("useStackSubdomain")) {
 } else {
   stackZones = [rootZone, ...alternateZones];
 }
+
+const [primaryZone] = stackZones;
+if (!primaryZone) {
+  throw new Error("No DNS zones configured");
+}
+
+export const proxyBaseDomain: pulumi.Output<string> = pulumi.interpolate`api.${primaryZone.name}`;
+export const proxyAltDomains: pulumi.Output<string> =
+  stackZones.length > 1
+    ? pulumi
+        .all(stackZones.slice(1).map((z) => z.name))
+        .apply((names) => names.map((n) => `api.${n}`).join(" "))
+    : pulumi.output("");
 
 export function addRecord(
   zones: Zoneish[],

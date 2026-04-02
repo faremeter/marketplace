@@ -1,4 +1,5 @@
 import { EC2 } from "./aws";
+import { proxyBaseDomain, proxyAltDomains } from "./dns";
 import { runner } from "@svmkit/pulumi-runner";
 import * as pulumi from "@pulumi/pulumi";
 
@@ -8,6 +9,7 @@ const nodeId = config.require("nodeId");
 
 const wgConfig = new pulumi.Config("wireguard");
 const cpConfig = new pulumi.Config("controlPlane");
+const facilitatorConfig = new pulumi.Config("facilitator");
 
 const allNodes = [];
 
@@ -34,6 +36,9 @@ new runner.SSHDeployer(
       WIREGUARD_DASHBOARD_ENDPOINT: wgConfig.require("dashboardEndpoint"),
       CONTROL_PLANE_ADDRS: cpConfig.require("addresses"),
       CONTROL_PLANE_WG_PEERS: cpConfig.require("wgPeers"),
+      PROXY_BASE_DOMAIN: proxyBaseDomain,
+      PROXY_ALT_DOMAINS: proxyAltDomains,
+      FACILITATOR_URL: facilitatorConfig.require("url"),
     },
     update: {
       payload: [

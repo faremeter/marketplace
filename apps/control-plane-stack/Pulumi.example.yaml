@@ -34,6 +34,10 @@ config:
   # VPC
   vpc:stackRef: <org>/vpc/<stack-name> # Pulumi stack reference for the VPC stack
 
+  # External services
+  facilitator:url: https://facilitator.example.com # x402 payment facilitator URL
+  wireguard:dashboardEndpoint: dashboard.ops.example.com:51820 # WireGuard monitoring hub endpoint
+
 
   # Optional integrations
   # corbitsDashboard:apiKey: <set-with-pulumi-config-set-secret>  # Use: pulumi config set --secret corbitsDashboard:apiKey

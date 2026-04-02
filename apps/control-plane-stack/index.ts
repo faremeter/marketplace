@@ -2,6 +2,8 @@ import { EC2 } from "./aws";
 import {
   stackZones,
   rootZone,
+  proxyBaseDomain,
+  proxyAltDomains,
   createHealthCheck,
   addWeightedRecord,
 } from "./dns";
@@ -18,6 +20,7 @@ const dbConfig = new pulumi.Config("database");
 const walletConfig = new pulumi.Config("wallet");
 const controlPlaneConfig = new pulumi.Config("controlPlane");
 const uiConfig = new pulumi.Config("ui");
+const facilitatorConfig = new pulumi.Config("facilitator");
 const corbitsDashConfig = new pulumi.Config("corbitsDashboard");
 const attioConfig = new pulumi.Config("attio");
 
@@ -84,6 +87,10 @@ new runner.SSHDeployer(
       CORBITS_DASH_API_KEY: corbitsDashConfig.getSecret("apiKey") ?? "",
       ATTIO_API_KEY: attioConfig.getSecret("apiKey") ?? "",
       ATTIO_LIST_ID: attioConfig.get("listId") ?? "",
+      PROXY_BASE_DOMAIN: proxyBaseDomain,
+      PROXY_ALT_DOMAINS: proxyAltDomains,
+      FACILITATOR_URL: facilitatorConfig.require("url"),
+      WIREGUARD_DASHBOARD_ENDPOINT: wgConfig.require("dashboardEndpoint"),
     },
     update: {
       payload: [

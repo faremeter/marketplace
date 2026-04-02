@@ -20,6 +20,11 @@ config:
 
   # DNS
   dns:rootZoneName: example.com # Primary domain for proxy subdomains
+  dns:alternateZoneNames: '["example.io"]' # JSON array of alternate domains
+
+  # External services
+  facilitator:url: https://facilitator.example.com # x402 payment facilitator URL
+  wireguard:dashboardEndpoint: dashboard.ops.example.com:51820 # WireGuard monitoring hub endpoint
 
   # Node identity
   api-node:nodeName: api-node-1 # Human-readable node name
