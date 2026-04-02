@@ -10,9 +10,7 @@ info:
     name: LGPL-3.0-only
     url: https://www.gnu.org/licenses/lgpl-3.0.html
 
-servers:
-  - url: https://api.corbits.dev
-    description: Production
+servers: []
 
 security: []
 
@@ -263,7 +261,7 @@ components:
             type: string
         url:
           type: string
-          description: "Proxy base URL, e.g. https://name.org.api.corbits.dev"
+          description: "Proxy base URL, e.g. https://name.org.api.example.com"
 
     TokenPrice:
       type: object
