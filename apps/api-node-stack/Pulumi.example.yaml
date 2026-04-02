@@ -24,6 +24,7 @@ config:
 
   # External services
   facilitator:url: https://facilitator.example.com # x402 payment facilitator URL
+  wireguard:dashboardPublicKey: <your-dashboard-wireguard-public-key> # WireGuard monitoring hub public key
   wireguard:dashboardEndpoint: dashboard.ops.example.com:51820 # WireGuard monitoring hub endpoint
 
   # Node identity

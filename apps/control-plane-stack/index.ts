@@ -91,7 +91,6 @@ new runner.SSHDeployer(
       PROXY_BASE_DOMAIN: proxyBaseDomain,
       PROXY_ALT_DOMAINS: proxyAltDomains,
       FACILITATOR_URL: facilitatorConfig.require("url"),
-      WIREGUARD_DASHBOARD_ENDPOINT: wgConfig.require("dashboardEndpoint"),
     },
     update: {
       payload: [
