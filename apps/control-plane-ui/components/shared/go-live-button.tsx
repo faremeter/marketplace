@@ -75,7 +75,7 @@ export function GoLiveButton({ tenant, orgId, onActivate }: GoLiveButtonProps) {
     <>
       <button
         onClick={() => setDialogOpen(true)}
-        className="rounded-md border border-corbits-orange bg-gray-2 px-3 py-1.5 text-sm font-semibold text-corbits-orange transition-colors hover:bg-corbits-orange hover:text-white"
+        className="rounded-md border border-brand-orange bg-gray-2 px-3 py-1.5 text-sm font-semibold text-brand-orange transition-colors hover:bg-brand-orange hover:text-white"
       >
         Go Live
       </button>
@@ -106,7 +106,7 @@ export function GoLiveButton({ tenant, orgId, onActivate }: GoLiveButtonProps) {
                         A backend URL must be configured before going live.{" "}
                         <Link
                           href={`/proxies/${tenant.id}?tab=settings`}
-                          className="text-corbits-orange hover:underline"
+                          className="text-brand-orange hover:underline"
                         >
                           Go to Settings
                         </Link>{" "}
@@ -127,7 +127,7 @@ export function GoLiveButton({ tenant, orgId, onActivate }: GoLiveButtonProps) {
                         A wallet must be assigned before going live.{" "}
                         <Link
                           href={`/proxies/${tenant.id}?tab=settings`}
-                          className="text-corbits-orange hover:underline"
+                          className="text-brand-orange hover:underline"
                         >
                           Go to Settings
                         </Link>{" "}
@@ -148,7 +148,7 @@ export function GoLiveButton({ tenant, orgId, onActivate }: GoLiveButtonProps) {
                         Your wallet must be funded before going live.{" "}
                         <Link
                           href="/wallets"
-                          className="text-corbits-orange hover:underline"
+                          className="text-brand-orange hover:underline"
                         >
                           Fund your wallet
                         </Link>
@@ -186,7 +186,7 @@ export function GoLiveButton({ tenant, orgId, onActivate }: GoLiveButtonProps) {
                   <button
                     onClick={handleActivate}
                     disabled={isActivating}
-                    className="inline-flex items-center gap-2 rounded-md bg-corbits-orange px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-corbits-orange/90 disabled:opacity-50"
+                    className="inline-flex items-center gap-2 rounded-md bg-brand-orange px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-brand-orange/90 disabled:opacity-50"
                   >
                     Go Live
                     {isActivating ? (

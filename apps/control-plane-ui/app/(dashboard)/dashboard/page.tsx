@@ -160,7 +160,7 @@ export default function DashboardPage() {
         <h1 className="text-xl font-medium text-white">Dashboard</h1>
         <p className="text-[13px] text-gray-11">
           Welcome back,{" "}
-          <span className="text-corbits-orange">
+          <span className="text-brand-orange">
             {titleCase(user?.email.split("@")[0] ?? "")}
           </span>
         </p>
@@ -332,9 +332,9 @@ export default function DashboardPage() {
               )}
             </>
           ) : (
-            <div className="relative overflow-hidden rounded-xl border border-corbits-orange bg-gradient-to-br from-corbits-orange/10 via-gray-2 to-gray-2 p-8">
-              <div className="absolute -right-16 -top-16 h-48 w-48 rounded-full bg-corbits-orange/10 blur-3xl" />
-              <div className="absolute -bottom-8 -left-8 h-32 w-32 rounded-full bg-corbits-orange/5 blur-2xl" />
+            <div className="relative overflow-hidden rounded-xl border border-brand-orange bg-gradient-to-br from-brand-orange/10 via-gray-2 to-gray-2 p-8">
+              <div className="absolute -right-16 -top-16 h-48 w-48 rounded-full bg-brand-orange/10 blur-3xl" />
+              <div className="absolute -bottom-8 -left-8 h-32 w-32 rounded-full bg-brand-orange/5 blur-2xl" />
               <div className="relative">
                 <h2 className="mb-3 text-2xl font-semibold text-white">
                   Create your first proxy
@@ -345,7 +345,7 @@ export default function DashboardPage() {
                 </p>
                 <Link
                   href={hasFundedWallet ? "/proxies" : "/wallets"}
-                  className="inline-flex items-center gap-2 rounded-lg bg-corbits-orange px-5 py-2.5 text-sm font-semibold text-black shadow-lg shadow-corbits-orange/25 transition-all hover:bg-corbits-orange/90 hover:shadow-corbits-orange/40"
+                  className="inline-flex items-center gap-2 rounded-lg bg-brand-orange px-5 py-2.5 text-sm font-semibold text-black shadow-lg shadow-brand-orange/25 transition-all hover:bg-brand-orange/90 hover:shadow-brand-orange/40"
                 >
                   Get Started
                   <svg

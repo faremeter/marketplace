@@ -83,7 +83,7 @@ export default function EndpointsPage() {
         <h1 className="text-2xl font-semibold text-gray-12">Endpoints</h1>
         <p className="text-sm text-gray-11">
           API endpoints for{" "}
-          <span className="text-corbits-orange">{currentOrg.name}</span>
+          <span className="text-brand-orange">{currentOrg.name}</span>
         </p>
       </div>
 

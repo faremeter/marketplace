@@ -6,9 +6,9 @@ import { api } from "@/lib/api/client";
 
 type TimeRange = "24h" | "7d" | "30d" | "all";
 
-const CORBITS_ORANGE = "var(--corbits-orange)";
-const CORBITS_ORANGE_50 =
-  "color-mix(in srgb, var(--corbits-orange) 50%, transparent)";
+const BRAND_ORANGE = "var(--brand-orange)";
+const BRAND_ORANGE_50 =
+  "color-mix(in srgb, var(--brand-orange) 50%, transparent)";
 
 interface TopSearch {
   event_key: string;
@@ -53,9 +53,7 @@ function TimeRangeSelector({
           className={`rounded px-3 py-1 text-xs font-medium transition-colors ${
             value === opt ? "text-white" : "text-gray-11 hover:text-gray-12"
           }`}
-          style={
-            value === opt ? { backgroundColor: CORBITS_ORANGE } : undefined
-          }
+          style={value === opt ? { backgroundColor: BRAND_ORANGE } : undefined}
         >
           {opt}
         </button>
@@ -300,14 +298,14 @@ function ActivityChart({
         <span className="flex items-center gap-1.5">
           <span
             className="inline-block h-2.5 w-2.5 rounded-sm"
-            style={{ backgroundColor: CORBITS_ORANGE }}
+            style={{ backgroundColor: BRAND_ORANGE }}
           />
           Searches
         </span>
         <span className="flex items-center gap-1.5">
           <span
             className="inline-block h-2.5 w-2.5 rounded-sm"
-            style={{ backgroundColor: CORBITS_ORANGE_50 }}
+            style={{ backgroundColor: BRAND_ORANGE_50 }}
           />
           Views
         </span>

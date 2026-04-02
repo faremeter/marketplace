@@ -31,8 +31,8 @@
   --accent-11: #70cbff;
   --accent-12: #c2e6ff;
 
-  /* Corbits brand orange */
-  --corbits-orange: rgb(234, 134, 42);
+  /* Brand orange */
+  --brand-orange: rgb(234, 134, 42);
 
   --background: var(--gray-1);
   --foreground: var(--gray-12);

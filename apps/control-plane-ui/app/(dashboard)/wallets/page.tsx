@@ -1000,7 +1000,7 @@ export default function WalletsPage() {
           <h1 className="text-2xl font-semibold text-gray-12">Wallets</h1>
           <p className="text-sm text-gray-11">
             Manage crypto wallets for{" "}
-            <span className="text-corbits-orange">{currentOrg.name}</span>
+            <span className="text-brand-orange">{currentOrg.name}</span>
           </p>
         </div>
         {isOwner && (
@@ -1163,7 +1163,7 @@ export default function WalletsPage() {
         <Dialog.Portal>
           <Dialog.Overlay className="fixed inset-0 bg-black/60 backdrop-blur-sm" />
           <Dialog.Content
-            className="fixed left-1/2 top-1/2 w-full max-w-lg -translate-x-1/2 -translate-y-1/2 rounded-lg border border-corbits-orange bg-gray-1 p-6 shadow-xl focus:outline-none"
+            className="fixed left-1/2 top-1/2 w-full max-w-lg -translate-x-1/2 -translate-y-1/2 rounded-lg border border-brand-orange bg-gray-1 p-6 shadow-xl focus:outline-none"
             onPointerDownOutside={(e) => e.preventDefault()}
             onEscapeKeyDown={(e) => e.preventDefault()}
           >
@@ -1244,14 +1244,14 @@ export default function WalletsPage() {
                                     {hasSol ? (
                                       <CheckCircledIcon className="h-4 w-4 text-green-400" />
                                     ) : (
-                                      <div className="h-2 w-2 rounded-full bg-corbits-orange" />
+                                      <div className="h-2 w-2 rounded-full bg-brand-orange" />
                                     )}
                                   </div>
                                   <span
                                     className={
                                       hasSol
                                         ? "text-green-400"
-                                        : "text-corbits-orange font-medium"
+                                        : "text-brand-orange font-medium"
                                     }
                                   >
                                     SOL — for transaction fees
@@ -1262,14 +1262,14 @@ export default function WalletsPage() {
                                     {hasUsdc ? (
                                       <CheckCircledIcon className="h-4 w-4 text-green-400" />
                                     ) : (
-                                      <div className="h-2 w-2 rounded-full bg-corbits-orange" />
+                                      <div className="h-2 w-2 rounded-full bg-brand-orange" />
                                     )}
                                   </div>
                                   <span
                                     className={
                                       hasUsdc
                                         ? "text-green-400"
-                                        : "text-corbits-orange font-medium"
+                                        : "text-brand-orange font-medium"
                                     }
                                   >
                                     USDC — for proxy payments
@@ -1310,7 +1310,7 @@ export default function WalletsPage() {
                     </>
                   ) : (
                     <>
-                      <div className="h-4 w-4 animate-spin rounded-full border-2 border-gray-6 border-t-corbits-orange" />
+                      <div className="h-4 w-4 animate-spin rounded-full border-2 border-gray-6 border-t-brand-orange" />
                       <span className="text-sm text-gray-11">
                         {!hasSol && !hasUsdc
                           ? "Waiting for SOL and USDC..."
@@ -1347,7 +1347,7 @@ export default function WalletsPage() {
                     }, 4000);
                   }}
                   disabled={!isSolanaFunded || isContinuing}
-                  className="inline-flex items-center gap-2 rounded-md bg-corbits-orange px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-corbits-orange/90 disabled:opacity-70"
+                  className="inline-flex items-center gap-2 rounded-md bg-brand-orange px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-brand-orange/90 disabled:opacity-70"
                 >
                   Continue
                   {isContinuing ? (

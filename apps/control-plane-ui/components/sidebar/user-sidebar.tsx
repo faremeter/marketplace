@@ -51,7 +51,7 @@ export function UserSidebar() {
               href={SUPPORT_URL}
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex items-center gap-1 text-xs text-corbits-orange hover:underline"
+              className="inline-flex items-center gap-1 text-xs text-brand-orange hover:underline"
             >
               Support
               <ExternalLinkIcon className="h-3 w-3" />
@@ -62,7 +62,7 @@ export function UserSidebar() {
           <p className="text-xs text-gray-11">Need more?</p>
           <a
             href={`mailto:${SALES_EMAIL}`}
-            className="text-xs text-corbits-orange hover:underline"
+            className="text-xs text-brand-orange hover:underline"
           >
             Contact Sales
           </a>

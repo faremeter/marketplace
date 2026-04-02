@@ -164,7 +164,7 @@ export function OnboardingProvider({
         <Dialog.Portal>
           <Dialog.Overlay className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm" />
           <Dialog.Content
-            className="fixed left-1/2 top-1/2 z-50 w-full max-w-md -translate-x-1/2 -translate-y-1/2 rounded-lg border border-corbits-orange bg-gray-1 p-6 shadow-xl"
+            className="fixed left-1/2 top-1/2 z-50 w-full max-w-md -translate-x-1/2 -translate-y-1/2 rounded-lg border border-brand-orange bg-gray-1 p-6 shadow-xl"
             onPointerDownOutside={(e) => e.preventDefault()}
             onEscapeKeyDown={(e) => e.preventDefault()}
           >
@@ -189,7 +189,7 @@ export function OnboardingProvider({
                 <button
                   onClick={handleFinishOnboarding}
                   disabled={isFinishing}
-                  className="inline-flex items-center justify-center gap-2 rounded-md bg-corbits-orange px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-corbits-orange/90 disabled:opacity-70"
+                  className="inline-flex items-center justify-center gap-2 rounded-md bg-brand-orange px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-brand-orange/90 disabled:opacity-70"
                 >
                   Finish
                   {isFinishing ? (

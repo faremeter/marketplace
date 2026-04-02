@@ -132,7 +132,7 @@ export default function SettingsPage() {
           {currentOrg ? (
             <>
               Manage settings for{" "}
-              <span className="text-corbits-orange">{currentOrg.name}</span>
+              <span className="text-brand-orange">{currentOrg.name}</span>
             </>
           ) : (
             "Account settings"
@@ -146,7 +146,7 @@ export default function SettingsPage() {
             onClick={() => setActiveTab("organization")}
             className={`px-4 py-2 text-sm font-medium transition-colors ${
               activeTab === "organization"
-                ? "border-b-2 border-corbits-orange text-corbits-orange"
+                ? "border-b-2 border-brand-orange text-brand-orange"
                 : "text-gray-11 hover:text-gray-12"
             }`}
           >
@@ -156,7 +156,7 @@ export default function SettingsPage() {
             onClick={() => setActiveTab("account")}
             className={`px-4 py-2 text-sm font-medium transition-colors ${
               activeTab === "account"
-                ? "border-b-2 border-corbits-orange text-corbits-orange"
+                ? "border-b-2 border-brand-orange text-brand-orange"
                 : "text-gray-11 hover:text-gray-12"
             }`}
           >

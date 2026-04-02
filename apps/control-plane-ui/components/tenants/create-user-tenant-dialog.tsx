@@ -653,7 +653,7 @@ export function CreateUserTenantDialog({
           }}
         >
           {isCelebrating ? (
-            <div className="flex flex-col items-center justify-center py-8 text-center rounded-lg border border-corbits-orange bg-corbits-orange/5 -m-6 p-6">
+            <div className="flex flex-col items-center justify-center py-8 text-center rounded-lg border border-brand-orange bg-brand-orange/5 -m-6 p-6">
               <div className="mb-4 text-5xl">🎉</div>
               <h2 className="text-xl font-semibold text-gray-12">
                 You&apos;re all set!
@@ -686,7 +686,7 @@ export function CreateUserTenantDialog({
                       onSuccess();
                     }, 1000);
                   }}
-                  className="inline-flex items-center justify-center gap-2 rounded-md bg-corbits-orange px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-corbits-orange/90"
+                  className="inline-flex items-center justify-center gap-2 rounded-md bg-brand-orange px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-brand-orange/90"
                 >
                   Finish
                   <svg
@@ -744,7 +744,7 @@ export function CreateUserTenantDialog({
                   <div className="flex justify-end">
                     <button
                       onClick={handleFinishImport}
-                      className="inline-flex items-center justify-center gap-2 rounded-md bg-corbits-orange px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-corbits-orange/90"
+                      className="inline-flex items-center justify-center gap-2 rounded-md bg-brand-orange px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-brand-orange/90"
                     >
                       Done
                     </button>
@@ -918,7 +918,7 @@ export function CreateUserTenantDialog({
                       type="button"
                       onClick={handleImport}
                       disabled={!parsedSpec || importing || isGoingBack}
-                      className="inline-flex items-center justify-center gap-2 rounded-md bg-corbits-orange px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-corbits-orange/90 disabled:cursor-not-allowed disabled:opacity-70"
+                      className="inline-flex items-center justify-center gap-2 rounded-md bg-brand-orange px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-brand-orange/90 disabled:cursor-not-allowed disabled:opacity-70"
                     >
                       {importing ? "Importing..." : "Import & Finish"}
                       {importing ? (
@@ -1421,7 +1421,7 @@ export function CreateUserTenantDialog({
                                   </Select.ItemIndicator>
                                   <Select.ItemText>{opt.label}</Select.ItemText>
                                   {opt.disabled && (
-                                    <span className="ml-2 text-[10px] text-corbits-orange">
+                                    <span className="ml-2 text-[10px] text-brand-orange">
                                       Coming Soon!
                                     </span>
                                   )}
@@ -1497,7 +1497,7 @@ export function CreateUserTenantDialog({
                   <button
                     type="submit"
                     disabled={isSubmitting}
-                    className="inline-flex items-center justify-center gap-2 rounded-md bg-corbits-orange px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-corbits-orange/90 disabled:cursor-not-allowed disabled:opacity-70"
+                    className="inline-flex items-center justify-center gap-2 rounded-md bg-brand-orange px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-brand-orange/90 disabled:cursor-not-allowed disabled:opacity-70"
                   >
                     {isSubmitting
                       ? registerOnly

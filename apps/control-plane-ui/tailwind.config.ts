@@ -37,8 +37,8 @@ const config: Config = {
           11: "var(--accent-11)",
           12: "var(--accent-12)",
         },
-        corbits: {
-          orange: "var(--corbits-orange)",
+        brand: {
+          orange: "var(--brand-orange)",
         },
       },
       fontFamily: {
