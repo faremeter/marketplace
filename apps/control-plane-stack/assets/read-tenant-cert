@@ -7,7 +7,14 @@ if [[ "$FILE" != "fullchain.pem" && "$FILE" != "privkey.pem" ]]; then
     exit 1
 fi
 
-if [[ ! "$DOMAIN" =~ ^[a-zA-Z0-9-]+(\.[a-zA-Z0-9-]+)?\.api\.corbits\.dev$ ]]; then
+BASE_DOMAIN=$(cat /etc/proxy-base-domain 2>/dev/null)
+if [[ -z "$BASE_DOMAIN" ]]; then
+    echo "Base domain not configured" >&2
+    exit 1
+fi
+
+ESCAPED_BASE_DOMAIN="${BASE_DOMAIN//./\\.}"
+if [[ ! "$DOMAIN" =~ ^[a-zA-Z0-9-]+(\.[a-zA-Z0-9-]+)?\.${ESCAPED_BASE_DOMAIN}$ ]]; then
     echo "Invalid domain" >&2
     exit 1
 fi

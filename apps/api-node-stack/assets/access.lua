@@ -1,9 +1,43 @@
 local httpc = require("resty.http").new()
 local cjson = require("cjson")
 
-local FACILITATOR_URL = "https://facilitator.corbits.dev"
-local BASE_DOMAIN = "api.corbits.dev"
-local ALT_BASE_DOMAIN = "api.corbits.io"
+local function get_domain_config()
+    local cached = ngx.shared.tenants:get("_domain_config")
+    if cached then
+        local ok, result = pcall(cjson.decode, cached)
+        if ok then return result end
+        ngx.log(ngx.ERR, "Failed to parse cached domain config: ", result)
+    end
+
+    local f = io.open("/etc/nginx/domain-config.json", "r")
+    if not f then
+        ngx.log(ngx.ERR, "domain-config.json not found")
+        return nil
+    end
+    local content = f:read("*a")
+    f:close()
+
+    local ok, result = pcall(cjson.decode, content)
+    if not ok then
+        ngx.log(ngx.ERR, "Failed to parse domain-config.json: ", result)
+        return nil
+    end
+
+    ngx.shared.tenants:set("_domain_config", content, 300)
+    return result
+end
+
+local domain_config = get_domain_config()
+if not domain_config then
+    ngx.status = 500
+    ngx.header["Content-Type"] = "application/json"
+    ngx.say(cjson.encode({error = "Domain configuration not found"}))
+    return ngx.exit(500)
+end
+
+local FACILITATOR_URL = domain_config.facilitator_url
+local BASE_DOMAIN = domain_config.base_domain
+local ALT_DOMAINS = domain_config.alt_domains or {}
 
 local function canonicalize_tenant_domain(host)
     if not host then
@@ -12,11 +46,12 @@ local function canonicalize_tenant_domain(host)
 
     host = string.lower(host)
     local escaped_base = BASE_DOMAIN:gsub("%.", "%%.")
-    local escaped_alt = ALT_BASE_DOMAIN:gsub("%.", "%%.")
-    local patterns = {
-        "^(.+)%." .. escaped_base .. "$",
-        "^(.+)%." .. escaped_alt .. "$"
-    }
+    local patterns = { "^(.+)%." .. escaped_base .. "$" }
+
+    for _, alt in ipairs(ALT_DOMAINS) do
+        local escaped_alt = alt:gsub("%.", "%%.")
+        table.insert(patterns, "^(.+)%." .. escaped_alt .. "$")
+    end
 
     for _, pattern in ipairs(patterns) do
         local prefix = string.match(host, pattern)

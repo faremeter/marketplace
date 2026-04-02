@@ -2,8 +2,12 @@
 set -euo pipefail
 
 CONFIG_FILE="/etc/nginx/tenant-config.json"
+DOMAIN_CONFIG="/etc/nginx/domain-config.json"
 OUTPUT_FILE="/etc/nginx/sites-available/api-node"
 CONF_DIR="/etc/nginx/sites-available/api-node.d"
+
+BASE_DOMAIN=$(jq -r '.base_domain' "$DOMAIN_CONFIG")
+mapfile -t ALT_DOMAINS < <(jq -r '.alt_domains[]' "$DOMAIN_CONFIG" 2>/dev/null)
 
 cat <<'BASE' >"$OUTPUT_FILE"
 lua_package_path '/etc/nginx/sites-available/api-node.d/?.lua;;';
@@ -65,10 +69,12 @@ if [[ -f "$CONFIG_FILE" ]] && [[ -s "$CONFIG_FILE" ]]; then
             if [[ -d "$CERT_PATH" ]]; then
                 SERVER_NAMES="$domain"
 
-                domain_io="${domain/.corbits.dev/.corbits.io}"
-                if [[ "$domain_io" != "$domain" ]]; then
-                    SERVER_NAMES="$SERVER_NAMES $domain_io"
-                fi
+                for alt in "${ALT_DOMAINS[@]}"; do
+                    domain_alt="${domain/.$BASE_DOMAIN/.$alt}"
+                    if [[ "$domain_alt" != "$domain" ]]; then
+                        SERVER_NAMES="$SERVER_NAMES $domain_alt"
+                    fi
+                done
 
                 cat <<EOF >>"$OUTPUT_FILE"
 
