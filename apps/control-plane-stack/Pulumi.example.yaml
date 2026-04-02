@@ -39,11 +39,11 @@ config:
   wireguard:dashboardPublicKey: <your-dashboard-wireguard-public-key> # WireGuard monitoring hub public key
   wireguard:dashboardEndpoint: dashboard.ops.example.com:51820 # WireGuard monitoring hub endpoint
 
-  # Branding (defaults to Corbits values if unset)
-  # site:name: Corbits                         # Display name shown in UI
-  # site:docsUrl: https://docs.corbits.dev     # Documentation URL
-  # site:salesEmail: sales@corbits.dev         # Sales email address
-  # site:supportUrl: https://support.example.com # Support page URL
+  # Branding
+  # site:name: Faremeter Marketplace                # Display name shown in UI
+  # site:docsUrl: https://docs.faremeter.xyz        # Documentation URL
+  # site:salesEmail: sales@faremeter.xyz            # Sales email address
+  # site:supportUrl: https://support.example.com    # Support page URL
   site:letsencryptEmail: ops@example.com # Contact email for Let's Encrypt certificates
 
 
