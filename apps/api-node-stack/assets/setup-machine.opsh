@@ -44,7 +44,7 @@ PrivateKey = ${WIREGUARD_PRIVATE_KEY}
 [Peer]
 PublicKey = ${WIREGUARD_DASHBOARD_PUBKEY}
 AllowedIPs = 10.11.0.0/24
-Endpoint = dashboard.ops.corbits.dev:51820
+Endpoint = ${WIREGUARD_DASHBOARD_ENDPOINT}
 EOF
     sudo systemctl enable --now wg-quick@wg0
 
@@ -170,6 +170,18 @@ step::40::setup-nginx() {
     cp ./init-config.lua /etc/nginx/.
     cp ./cert-installer.lua /etc/nginx/.
     cp ./cert-deleter.lua /etc/nginx/.
+
+    local alt_json="[]"
+    if [[ -n "${PROXY_ALT_DOMAINS}" ]]; then
+        alt_json=$(printf '%s\n' ${PROXY_ALT_DOMAINS} | jq -R . | jq -s .)
+    fi
+    cat <<EOF >/etc/nginx/domain-config.json
+{
+  "base_domain": "${PROXY_BASE_DOMAIN}",
+  "alt_domains": ${alt_json},
+  "facilitator_url": "${FACILITATOR_URL}"
+}
+EOF
 
     rm -rf "${nginx_config}.d"
     mkdir -p "${nginx_config}.d"

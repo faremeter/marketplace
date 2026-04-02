@@ -63,6 +63,7 @@ HTTP_PORT=${CONTROL_PLANE_PORT}
 WALLET_ENCRYPTION_KEY=${WALLET_ENCRYPTION_KEY}
 ROUTE53_ZONE_ID=${ROUTE53_ZONE_ID}
 LETSENCRYPT_EMAIL=${LETSENCRYPT_EMAIL}
+PROXY_BASE_DOMAIN=${PROXY_BASE_DOMAIN}
 CORBITS_DASH_API_KEY=${CORBITS_DASH_API_KEY}
 ATTIO_API_KEY=${ATTIO_API_KEY}
 ATTIO_LIST_ID=${ATTIO_LIST_ID}
@@ -82,6 +83,7 @@ DATABASE_USER=${DATABASE_USER}
 DATABASE_PASSWORD=${DATABASE_PASSWORD}
 DATABASE_SSL=true
 HTTP_PORT=1339
+PROXY_BASE_DOMAIN=${PROXY_BASE_DOMAIN}
 EOF
     chown admin:admin /home/admin/discovery/.env
     chmod 600 /home/admin/discovery/.env
@@ -92,6 +94,7 @@ step::23::setup-control-plane-ui-env() {
     chown admin:admin /home/admin/control-plane-ui
     cat <<EOF >/home/admin/control-plane-ui/.env
 NEXT_PUBLIC_CONTROL_PLANE_API_URL=http://localhost:${CONTROL_PLANE_PORT}
+NEXT_PUBLIC_PROXY_BASE_DOMAIN=${PROXY_BASE_DOMAIN}
 PORT=${UI_PORT}
 EOF
     chown admin:admin /home/admin/control-plane-ui/.env
@@ -109,7 +112,7 @@ PrivateKey = ${WIREGUARD_PRIVATE_KEY}
 [Peer]
 PublicKey = ${WIREGUARD_DASHBOARD_PUBKEY}
 AllowedIPs = 10.11.0.0/24
-Endpoint = dashboard.ops.corbits.dev:51820
+Endpoint = ${WIREGUARD_DASHBOARD_ENDPOINT}
 EOF
     sudo systemctl enable --now wg-quick@wg0
 
@@ -203,10 +206,12 @@ step::40::setup-nginx() {
     cp ./discovery.service /etc/systemd/system/discovery.service
     systemctl daemon-reload
 
-    cat <<'EOF' >/etc/nginx/sites-available/control-plane
+    echo "${PROXY_BASE_DOMAIN}" > /etc/proxy-base-domain
+
+    cat <<EOF >/etc/nginx/sites-available/control-plane
 server {
     listen 80;
-    server_name api.corbits.dev api.corbits.io;
+    server_name ${PROXY_BASE_DOMAIN} ${PROXY_ALT_DOMAINS};
 
     location /.well-known/acme-challenge/ {
         root /var/www/html;
@@ -221,33 +226,37 @@ EOF
 }
 
 step::50::get-tls-certs() {
+    local certbot_domains="-d ${PROXY_BASE_DOMAIN}"
+    for alt in ${PROXY_ALT_DOMAINS}; do
+        certbot_domains="${certbot_domains} -d ${alt}"
+    done
+
     certbot certonly --agree-tos -m ${LETSENCRYPT_EMAIL} --non-interactive --expand \
         --dns-route53 \
-        -d "api.corbits.dev" \
-        -d "api.corbits.io"
+        ${certbot_domains}
 
-    cat <<'EOF' >/etc/nginx/snippets/ssl-api.conf
-ssl_certificate /etc/letsencrypt/live/api.corbits.dev/fullchain.pem;
-ssl_certificate_key /etc/letsencrypt/live/api.corbits.dev/privkey.pem;
+    cat <<EOF >/etc/nginx/snippets/ssl-api.conf
+ssl_certificate /etc/letsencrypt/live/${PROXY_BASE_DOMAIN}/fullchain.pem;
+ssl_certificate_key /etc/letsencrypt/live/${PROXY_BASE_DOMAIN}/privkey.pem;
 EOF
 
-    cat <<'EOF' >/etc/nginx/sites-available/control-plane
+    cat <<EOF >/etc/nginx/sites-available/control-plane
 server {
     listen 80;
-    server_name api.corbits.dev api.corbits.io;
+    server_name ${PROXY_BASE_DOMAIN} ${PROXY_ALT_DOMAINS};
 
     location /.well-known/acme-challenge/ {
         root /var/www/html;
     }
 
     location / {
-        return 301 https://$host$request_uri;
+        return 301 https://\$host\$request_uri;
     }
 }
 
 server {
     listen 443 ssl;
-    server_name api.corbits.dev api.corbits.io;
+    server_name ${PROXY_BASE_DOMAIN} ${PROXY_ALT_DOMAINS};
 
     include /etc/nginx/snippets/ssl-api.conf;
     include /etc/nginx/sites-available/control-plane.d/*.conf;
