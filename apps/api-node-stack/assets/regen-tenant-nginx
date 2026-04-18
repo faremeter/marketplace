@@ -10,9 +10,10 @@ BASE_DOMAIN=$(jq -r '.base_domain' "$DOMAIN_CONFIG")
 mapfile -t ALT_DOMAINS < <(jq -r '.alt_domains[]' "$DOMAIN_CONFIG" 2>/dev/null)
 
 cat <<'BASE' >"$OUTPUT_FILE"
-lua_package_path '/etc/nginx/sites-available/api-node.d/?.lua;;';
+lua_package_path '/etc/nginx/?.lua;/etc/nginx/sites-available/api-node.d/?.lua;;';
 lua_shared_dict tenants 10m;
 lua_shared_dict word_dict 10m;
+lua_shared_dict fm_capture_buffer 10m;
 lua_ssl_trusted_certificate /etc/ssl/certs/ca-certificates.crt;
 lua_ssl_verify_depth 2;
 
@@ -76,7 +77,43 @@ if [[ -f "$CONFIG_FILE" ]] && [[ -s "$CONFIG_FILE" ]]; then
                     fi
                 done
 
-                cat <<EOF >>"$OUTPUT_FILE"
+                TENANT_SLUG=$(jq -r --arg d "$domain" '.config[$d].gateway_slug // empty' "$CONFIG_FILE")
+
+                if [[ -n "$TENANT_SLUG" ]] && [[ -f "/etc/faremeter-gateway/${TENANT_SLUG}/locations.conf" ]]; then
+                    cat <<EOF >>"$OUTPUT_FILE"
+
+server {
+    listen 443 ssl;
+    http2 on;
+    server_name ${SERVER_NAMES};
+
+    ssl_certificate ${CERT_PATH}/fullchain.pem;
+    ssl_certificate_key ${CERT_PATH}/privkey.pem;
+
+    lua_package_path '/etc/faremeter-gateway/${TENANT_SLUG}/?.lua;/etc/nginx/?.lua;/etc/nginx/sites-available/api-node.d/?.lua;;';
+
+    resolver 8.8.8.8 8.8.4.4 valid=300s;
+    resolver_timeout 5s;
+
+    set \$backend_url "";
+    set \$backend_host "";
+
+    location = /health {
+        access_by_lua_block { return }
+        return 200 'ok';
+        add_header Content-Type text/plain;
+    }
+
+    access_by_lua_file /etc/nginx/upstream-auth.lua;
+
+    include /etc/faremeter-gateway/${TENANT_SLUG}/locations.conf;
+
+    include ${CONF_DIR}/free-fallback.conf.inc;
+}
+EOF
+                else
+                    echo "WARNING: tenant ${domain} has no gateway_slug or missing gateway artifacts — serving free-tier only" >&2
+                    cat <<EOF >>"$OUTPUT_FILE"
 
 server {
     listen 443 ssl;
@@ -89,14 +126,21 @@ server {
     resolver 8.8.8.8 8.8.4.4 valid=300s;
     resolver_timeout 5s;
 
+    set \$backend_url "";
+    set \$backend_host "";
+
     location = /health {
+        access_by_lua_block { return }
         return 200 'ok';
         add_header Content-Type text/plain;
     }
 
-    include ${CONF_DIR}/*.conf;
+    access_by_lua_file /etc/nginx/upstream-auth.lua;
+
+    include ${CONF_DIR}/free-fallback.conf.inc;
 }
 EOF
+                fi
             fi
         done <<<"$TENANT_ENTRIES"
     fi

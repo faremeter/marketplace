@@ -1,0 +1,16 @@
+[Unit]
+Description=Faremeter sidecar
+After=network.target
+
+[Service]
+Type=exec
+User=tenantmgr
+WorkingDirectory=/usr/local/lib/faremeter-sidecar
+ExecStart=/usr/bin/node /usr/local/lib/faremeter-sidecar/dist/main.js
+ExecReload=/bin/kill -HUP $MAINPID
+Restart=on-failure
+RestartSec=5
+Environment=NODE_ENV=production
+
+[Install]
+WantedBy=multi-user.target
