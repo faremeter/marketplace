@@ -9,6 +9,9 @@ catalogs:
     '@eslint/js':
       specifier: 9.34.0
       version: 9.34.0
+    '@hono/node-server':
+      specifier: 1.19.1
+      version: 1.19.1
     '@pulumi/command':
       specifier: 1.1.1
       version: 1.1.1
@@ -27,6 +30,9 @@ catalogs:
     eslint:
       specifier: 9.34.0
       version: 9.34.0
+    hono:
+      specifier: 4.9.0
+      version: 4.9.0
     jiti:
       specifier: 2.5.1
       version: 2.5.1
@@ -116,6 +122,37 @@ importers:
       '@types/node':
         specifier: 'catalog:'
         version: 20.19.11
+      typescript:
+        specifier: 'catalog:'
+        version: 5.9.2
+
+  apps/api-node-stack/sidecar:
+    dependencies:
+      '@faremeter/middleware':
+        specifier: link:../../../../faremeter/packages/middleware
+        version: link:../../../../faremeter/packages/middleware
+      '@faremeter/middleware-openapi':
+        specifier: link:../../../../faremeter/packages/middleware-openapi
+        version: link:../../../../faremeter/packages/middleware-openapi
+      '@faremeter/sidecar':
+        specifier: link:../../../../faremeter/apps/sidecar
+        version: link:../../../../faremeter/apps/sidecar
+      '@faremeter/types':
+        specifier: link:../../../../faremeter/packages/types
+        version: link:../../../../faremeter/packages/types
+      '@hono/node-server':
+        specifier: 'catalog:'
+        version: 1.19.1(hono@4.10.7)
+    devDependencies:
+      '@types/node':
+        specifier: 'catalog:'
+        version: 20.19.11
+      esbuild:
+        specifier: ^0.25.0
+        version: 0.25.12
+      tsx:
+        specifier: 'catalog:'
+        version: 4.20.5
       typescript:
         specifier: 'catalog:'
         version: 5.9.2
@@ -1288,6 +1325,12 @@ packages:
     peerDependencies:
       arktype: ^2.0.0-dev.14
       hono: '*'
+
+  '@hono/node-server@1.19.1':
+    resolution: {integrity: sha512-h44e5s+ByUriaRIbeS/C74O8v90m0A95luyYQGMF7KEn96KkYMXO7bZAwombzTpjQTU4e0TkU8U1WBIXlwuwtA==}
+    engines: {node: '>=18.14.1'}
+    peerDependencies:
+      hono: ^4
 
   '@hono/node-server@1.19.6':
     resolution: {integrity: sha512-Shz/KjlIeAhfiuE93NDKVdZ7HdBVLQAfdbaXEaoAVO3ic9ibRSLGIQGkcBbFyuLr+7/1D5ZCINM8B+6IvXeMtw==}
@@ -5236,6 +5279,10 @@ packages:
     resolution: {integrity: sha512-icXIITfw/07Q88nLSkB9aiUrd8rYzSweK681Kjo/TSggaGbOX4RRyxxm71v+3PC8C/j+4rlxGeoTRxQDkaJkUw==}
     engines: {node: '>=16.9.0'}
 
+  hono@4.9.0:
+    resolution: {integrity: sha512-JAUc4Sqi3lhby2imRL/67LMcJFKiCu7ZKghM7iwvltVZzxEC5bVJCsAa4NTnSfmWGb+N2eOVtFE586R+K3fejA==}
+    engines: {node: '>=16.9.0'}
+
   hosted-git-info@7.0.2:
     resolution: {integrity: sha512-puUZAUKT5m8Zzvs72XWy3HtvVbTWljRE66cP60bxJzAqf2DgICo7lYTY2IHUmLnNpjYvw5bvmoHvPc0QO2a62w==}
     engines: {node: ^16.14.0 || >=18.0.0}
@@ -8659,6 +8706,14 @@ snapshots:
     dependencies:
       arktype: 2.1.29
       hono: 4.10.7
+
+  '@hono/node-server@1.19.1(hono@4.10.7)':
+    dependencies:
+      hono: 4.10.7
+
+  '@hono/node-server@1.19.1(hono@4.9.0)':
+    dependencies:
+      hono: 4.9.0
 
   '@hono/node-server@1.19.6(hono@4.10.7)':
     dependencies:
@@ -13897,6 +13952,8 @@ snapshots:
       hono: 4.10.7
 
   hono@4.10.7: {}
+
+  hono@4.9.0: {}
 
   hosted-git-info@7.0.2:
     dependencies:

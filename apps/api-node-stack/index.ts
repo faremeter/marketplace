@@ -43,11 +43,6 @@ new runner.SSHDeployer(
     update: {
       payload: [
         runner.localFile({
-          filename: "access.lua",
-          localPath: "./assets/access.lua",
-          mode: 0o644,
-        }),
-        runner.localFile({
           filename: "config-receiver.lua",
           localPath: "./assets/config-receiver.lua",
           mode: 0o644,
@@ -78,8 +73,18 @@ new runner.SSHDeployer(
           mode: 0o755,
         }),
         runner.localFile({
+          filename: "faremeter-sidecar.service",
+          localPath: "./assets/faremeter-sidecar.service",
+          mode: 0o644,
+        }),
+        runner.localFile({
           filename: "regen-tenant-nginx",
           localPath: "./assets/regen-tenant-nginx",
+          mode: 0o755,
+        }),
+        runner.localFile({
+          filename: "reload-faremeter-sidecar",
+          localPath: "./assets/reload-faremeter-sidecar",
           mode: 0o755,
         }),
         runner.localFile({
@@ -88,8 +93,33 @@ new runner.SSHDeployer(
           mode: 0o755,
         }),
         runner.localFile({
-          filename: "50_proxy.conf",
-          localPath: "./assets/50_proxy.conf",
+          filename: "control-plane-client.lua",
+          localPath: "./assets/control-plane-client.lua",
+          mode: 0o644,
+        }),
+        runner.localFile({
+          filename: "free-recording.lua",
+          localPath: "./assets/free-recording.lua",
+          mode: 0o644,
+        }),
+        runner.localFile({
+          filename: "upstream-auth.lua",
+          localPath: "./assets/upstream-auth.lua",
+          mode: 0o644,
+        }),
+        runner.localFile({
+          filename: "tenant-request.lua",
+          localPath: "./assets/tenant-request.lua",
+          mode: 0o644,
+        }),
+        runner.localFile({
+          filename: "free-fallback.conf.inc",
+          localPath: "./assets/free-fallback.conf.inc",
+          mode: 0o644,
+        }),
+        runner.localFile({
+          filename: "sidecar-main.js",
+          localPath: "./sidecar/dist/main.js",
           mode: 0o644,
         }),
         runner.localFile({

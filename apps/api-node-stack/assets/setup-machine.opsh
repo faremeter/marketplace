@@ -133,6 +133,28 @@ step::32::setup-tenantmgr-user() {
     usermod -a -G tenantmgr www-data
 }
 
+step::33::create-sidecar-directories() {
+    mkdir -p /etc/faremeter-sidecar
+    mkdir -p /etc/faremeter-gateway
+    chown tenantmgr:tenantmgr /etc/faremeter-sidecar /etc/faremeter-gateway
+    chmod 775 /etc/faremeter-sidecar /etc/faremeter-gateway
+    mkdir -p /usr/local/lib/faremeter-sidecar
+    chown tenantmgr:tenantmgr /usr/local/lib/faremeter-sidecar
+    chmod 755 /usr/local/lib/faremeter-sidecar
+
+    # Seed empty configs so the sidecar can start cleanly before the
+    # first control-plane push arrives.  The real values are written
+    # later by setup-nginx (step 40) and the control-plane sync.
+    if [[ ! -f /etc/faremeter-sidecar/config.json ]]; then
+        echo '{"sites":{}}' > /etc/faremeter-sidecar/config.json
+        chown tenantmgr:tenantmgr /etc/faremeter-sidecar/config.json
+    fi
+    if [[ ! -f /etc/nginx/control-plane-addrs.conf ]]; then
+        mkdir -p /etc/nginx
+        echo "$CONTROL_PLANE_ADDRS" > /etc/nginx/control-plane-addrs.conf
+    fi
+}
+
 step::35::setup-tenant-scripts() {
     mkdir -p /var/www/html/.well-known/acme-challenge
     chown -R www-data:www-data /var/www/html
@@ -150,10 +172,21 @@ step::35::setup-tenant-scripts() {
 www-data ALL=(tenantmgr) NOPASSWD: /usr/local/bin/install-tenant-cert
 www-data ALL=(tenantmgr) NOPASSWD: /usr/local/bin/delete-tenant-cert
 www-data ALL=(tenantmgr) NOPASSWD: /usr/local/bin/regen-tenant-nginx
+www-data ALL=(root) NOPASSWD: /usr/local/bin/reload-faremeter-sidecar
 tenantmgr ALL=(root) NOPASSWD: /usr/sbin/nginx -t
 tenantmgr ALL=(root) NOPASSWD: /bin/systemctl reload nginx
 EOF
     chmod 440 /etc/sudoers.d/tenant-provisioner
+}
+
+step::36::install-sidecar-service() {
+    mkdir -p /usr/local/lib/faremeter-sidecar/dist
+    cp ./sidecar-main.js /usr/local/lib/faremeter-sidecar/dist/main.js
+    cp ./faremeter-sidecar.service /etc/systemd/system/faremeter-sidecar.service
+    cp ./reload-faremeter-sidecar /usr/local/bin/reload-faremeter-sidecar
+    chmod +x /usr/local/bin/reload-faremeter-sidecar
+    systemctl daemon-reload
+    systemctl enable --now faremeter-sidecar
 }
 
 step::40::setup-nginx() {
@@ -165,11 +198,14 @@ step::40::setup-nginx() {
     echo "$NODE_ID" >/etc/api-node/node-id
     echo "$CONTROL_PLANE_ADDRS" >/etc/nginx/control-plane-addrs.conf
 
-    cp ./access.lua /etc/nginx/.
     cp ./config-receiver.lua /etc/nginx/.
     cp ./init-config.lua /etc/nginx/.
     cp ./cert-installer.lua /etc/nginx/.
     cp ./cert-deleter.lua /etc/nginx/.
+    cp ./control-plane-client.lua /etc/nginx/.
+    cp ./free-recording.lua /etc/nginx/.
+    cp ./upstream-auth.lua /etc/nginx/.
+    cp ./tenant-request.lua /etc/nginx/.
 
     local alt_json="[]"
     if [[ -n "${PROXY_ALT_DOMAINS}" ]]; then
@@ -185,7 +221,7 @@ EOF
 
     rm -rf "${nginx_config}.d"
     mkdir -p "${nginx_config}.d"
-    cp ./50_proxy.conf "${nginx_config}.d/."
+    cp ./free-fallback.conf.inc "${nginx_config}.d/."
 
     touch /etc/nginx/tenant-config.json
     chown www-data:tenantmgr /etc/nginx/tenant-config.json

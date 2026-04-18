@@ -1,10 +1,9 @@
-set $backend_url "";
-set $backend_host "";
-
-client_max_body_size 10m;
-
 location / {
-    access_by_lua_file /etc/nginx/access.lua;
+    set $backend_url "";
+    set $backend_host "";
+    client_max_body_size 10m;
+
+    access_by_lua_file /etc/nginx/free-recording.lua;
 
     proxy_pass $backend_url$is_args$args;
     proxy_ssl_server_name on;
