@@ -10,6 +10,7 @@
     "migrate:up": "tsx src/db/migrate.ts up",
     "migrate:down": "tsx src/db/migrate.ts down",
     "migrate:wallets": "tsx src/scripts/migrate-wallets.ts",
+    "audit:regex": "tsx src/scripts/audit-regex-endpoints.ts",
     "test": "tap 'src/**/*.test.ts'",
     "test:watch": "tap 'src/**/*.test.ts' --watch"
   },
