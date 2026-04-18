@@ -215,6 +215,7 @@ export async function setupTestSchema(): Promise<void> {
     .addColumn("tenant_id", "integer", (col) => col.notNull())
     .addColumn("path", "text")
     .addColumn("path_pattern", "text", (col) => col.notNull())
+    .addColumn("http_method", "text", (col) => col.defaultTo("ANY").notNull())
     .addColumn("price", "real")
     .addColumn("scheme", "text")
     .addColumn("description", "text")

@@ -62,6 +62,8 @@ export const CreateEndpointSchema = type({
   "scheme?": "'exact' | 'flex' | null",
   "description?": `string <= ${MAX_DESCRIPTION_LENGTH} | null`,
   "priority?": `0 <= number <= ${MAX_PRIORITY}`,
+  "http_method?":
+    "'ANY' | 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE' | 'HEAD' | 'OPTIONS'",
   "openapi_source_paths?": "string[] | null",
   "tags?": tagsArrayType,
 });
@@ -72,6 +74,8 @@ export const UpdateEndpointSchema = type({
   "scheme?": "'exact' | 'flex' | null",
   "description?": `string <= ${MAX_DESCRIPTION_LENGTH} | null`,
   "priority?": `0 <= number <= ${MAX_PRIORITY}`,
+  "http_method?":
+    "'ANY' | 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE' | 'HEAD' | 'OPTIONS'",
   "is_active?": "boolean",
   "openapi_source_paths?": "string[] | null",
   "tags?": tagsArrayType,
@@ -211,6 +215,8 @@ export const AdminUpdateEndpointSchema = type({
   "scheme?": "'exact' | 'flex' | null",
   "description?": `string <= ${MAX_DESCRIPTION_LENGTH} | null`,
   "priority?": `0 <= number <= ${MAX_PRIORITY}`,
+  "http_method?":
+    "'ANY' | 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE' | 'HEAD' | 'OPTIONS'",
   "tags?": tagsArrayType,
 });
 

@@ -1,10 +1,23 @@
 import "../tests/setup/env.js";
 import t from "tap";
+import { type } from "arktype";
 import { Hono } from "hono";
 import { db, setupTestSchema, clearTestData } from "../db/instance.js";
 import { signToken } from "../middleware/auth.js";
 import { endpointsRoutes } from "./endpoints.js";
 import { OPENAPI_USPTO } from "../tests/fixtures/openapi-spec.js";
+
+const EndpointResponse = type({
+  id: "number",
+  http_method: "string",
+  "path?": "string | null",
+  "path_pattern?": "string",
+  "price?": "number | null",
+  "scheme?": "string | null",
+  "priority?": "number",
+  "is_active?": "boolean",
+  "+": "delete",
+});
 
 const app = new Hono();
 app.route("/api/tenants/:tenantId/endpoints", endpointsRoutes);
@@ -544,6 +557,51 @@ await t.test("POST /api/tenants/:tenantId/endpoints", async (t) => {
     t.same(data.openapi_source_paths, sourcePaths);
   });
 
+  await t.test("creates endpoint with http_method", async (t) => {
+    const user = await createUser("member@example.com");
+    const org = await createOrg("Team", "team");
+    await addMember(user.id, org.id);
+    const tenant = await createTenant(org.id, "my-tenant");
+
+    const res = await app.request(`/api/tenants/${tenant.id}/endpoints`, {
+      method: "POST",
+      headers: {
+        Cookie: `auth_token=${user.token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        path: "/get-only",
+        http_method: "GET",
+      }),
+    });
+
+    t.equal(res.status, 201);
+    const data = EndpointResponse.assert(await res.json());
+    t.equal(data.http_method, "GET");
+  });
+
+  await t.test("defaults http_method to ANY when omitted", async (t) => {
+    const user = await createUser("member@example.com");
+    const org = await createOrg("Team", "team");
+    await addMember(user.id, org.id);
+    const tenant = await createTenant(org.id, "my-tenant");
+
+    const res = await app.request(`/api/tenants/${tenant.id}/endpoints`, {
+      method: "POST",
+      headers: {
+        Cookie: `auth_token=${user.token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        path: "/any-method",
+      }),
+    });
+
+    t.equal(res.status, 201);
+    const data = EndpointResponse.assert(await res.json());
+    t.equal(data.http_method, "ANY");
+  });
+
   await t.test("creates endpoint with tags", async (t) => {
     const user = await createUser("member@example.com");
     const org = await createOrg("Team", "team");
@@ -736,6 +794,42 @@ await t.test("PUT /api/tenants/:tenantId/endpoints/:id", async (t) => {
     t.equal(data.price, 0.1);
     t.equal(data.priority, 50);
     t.equal(data.description, "Updated description");
+  });
+
+  await t.test("updates http_method", async (t) => {
+    const user = await createUser("member@example.com");
+    const org = await createOrg("Team", "team");
+    await addMember(user.id, org.id);
+    const tenant = await createTenant(org.id, "my-tenant");
+
+    // Create via POST (defaults to ANY)
+    const createRes = await app.request(`/api/tenants/${tenant.id}/endpoints`, {
+      method: "POST",
+      headers: {
+        Cookie: `auth_token=${user.token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ path: "/method-test" }),
+    });
+    t.equal(createRes.status, 201);
+    const created = EndpointResponse.assert(await createRes.json());
+    t.equal(created.http_method, "ANY");
+
+    // Update to POST
+    const updateRes = await app.request(
+      `/api/tenants/${tenant.id}/endpoints/${created.id}`,
+      {
+        method: "PUT",
+        headers: {
+          Cookie: `auth_token=${user.token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ http_method: "POST" }),
+      },
+    );
+    t.equal(updateRes.status, 200);
+    const updated = EndpointResponse.assert(await updateRes.json());
+    t.equal(updated.http_method, "POST");
   });
 
   await t.test("supports partial updates", async (t) => {

@@ -1608,6 +1608,8 @@ adminRoutes.put(
     if (body.description !== undefined)
       updateData.description = body.description;
     if (body.priority !== undefined) updateData.priority = body.priority;
+    if (body.http_method !== undefined)
+      updateData.http_method = body.http_method;
     if (body.tags !== undefined) updateData.tags = body.tags;
 
     const result = await db

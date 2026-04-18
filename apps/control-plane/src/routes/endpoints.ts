@@ -139,6 +139,7 @@ endpointsRoutes.post(
         scheme: body.scheme ?? null,
         description: body.description ?? null,
         priority: body.priority ?? 100,
+        http_method: body.http_method ?? "ANY",
         is_active: true,
         openapi_source_paths: body.openapi_source_paths ?? undefined,
         tags: body.tags ?? [],
@@ -182,6 +183,8 @@ endpointsRoutes.put(
     if (body.description !== undefined)
       updateData.description = body.description;
     if (body.priority !== undefined) updateData.priority = body.priority;
+    if (body.http_method !== undefined)
+      updateData.http_method = body.http_method;
     if (body.is_active !== undefined) updateData.is_active = body.is_active;
     if (body.tags !== undefined) updateData.tags = body.tags;
 

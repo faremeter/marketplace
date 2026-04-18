@@ -117,6 +117,7 @@ export interface EndpointsTable {
   tenant_id: number;
   path: string | null;
   path_pattern: string;
+  http_method: ColumnType<string, string | undefined, string>;
   price: number | null;
   scheme: string | null;
   description: string | null;
