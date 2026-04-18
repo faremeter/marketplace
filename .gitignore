@@ -18,3 +18,4 @@ backups/
 tickets/
 Pulumi.*.yaml
 !Pulumi.example.yaml
+dispatch/
