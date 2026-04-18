@@ -128,9 +128,15 @@ importers:
       '@aws-sdk/client-route-53':
         specifier: ^3.948.0
         version: 3.958.0
+      '@faremeter/gateway-nginx':
+        specifier: link:../../../faremeter/packages/gateway-nginx
+        version: link:../../../faremeter/packages/gateway-nginx
       '@faremeter/info':
         specifier: ^0.21.0
         version: 0.21.0
+      '@faremeter/middleware-openapi':
+        specifier: link:../../../faremeter/packages/middleware-openapi
+        version: link:../../../faremeter/packages/middleware-openapi
       '@hono/arktype-validator':
         specifier: ^2.0.1
         version: 2.0.1(arktype@2.1.29)(hono@4.10.7)
