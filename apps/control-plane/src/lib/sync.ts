@@ -1,6 +1,37 @@
+import { type } from "arktype";
 import { db } from "../db/instance.js";
 import { logger } from "../logger.js";
 import { buildTenantDomain, toDomainInfo } from "./domain.js";
+import { buildTenantGatewaySpecFromData } from "./gateway-spec-builder.js";
+import { extractGatewaySpec, generateConfig } from "@faremeter/gateway-nginx";
+import { extractSpec } from "@faremeter/middleware-openapi";
+
+const envType = type({
+  FACILITATOR_URL: "string > 0",
+  "SIDECAR_URL?": "string",
+});
+const env = envType.assert(process.env);
+const FACILITATOR_URL = env.FACILITATOR_URL;
+const SIDECAR_URL = env.SIDECAR_URL ?? "http://127.0.0.1:4002";
+
+function sanitizeSlugPart(raw: string): string {
+  return raw
+    .toLowerCase()
+    .replace(/[^a-z0-9-]/g, "-")
+    .replace(/-{2,}/g, "-")
+    .replace(/^-|-$/g, "");
+}
+
+function deriveGatewaySlug(tenant: {
+  name: string;
+  org_slug: string | null;
+}): string {
+  const name = sanitizeSlugPart(tenant.name);
+  if (tenant.org_slug) {
+    return `${tenant.org_slug}--${name}`;
+  }
+  return name;
+}
 
 export async function buildNodeConfig(nodeId: number) {
   const node = await db
@@ -23,13 +54,10 @@ export async function buildNodeConfig(nodeId: number) {
       "tenants.name",
       "tenants.backend_url",
       "tenants.wallet_id",
-      "tenants.default_price",
-      "tenants.default_scheme",
       "tenants.upstream_auth_header",
       "tenants.upstream_auth_value",
       "tenants.org_slug",
       "wallets.wallet_config",
-      "wallets.funding_status",
     ])
     .where("tenant_nodes.node_id", "=", nodeId)
     .where("tenants.is_active", "=", true)
@@ -38,28 +66,12 @@ export async function buildNodeConfig(nodeId: number) {
     .execute();
 
   const config: Record<string, unknown> = {};
-  let skippedCount = 0;
+  const gateway: Record<string, unknown> = {};
+  const sidecarSites: Record<string, unknown> = {};
+  let skippedCollision = 0;
+  let skippedSpecFailed = 0;
 
   for (const tenant of tenants) {
-    const walletConfig = tenant.wallet_config;
-    const fundingStatus = tenant.funding_status;
-
-    if (!walletConfig) {
-      logger.warn(
-        `buildNodeConfig: Skipping tenant ${tenant.name} (id=${tenant.id}) - no wallet assigned`,
-      );
-      skippedCount++;
-      continue;
-    }
-
-    if (fundingStatus !== "funded") {
-      logger.warn(
-        `buildNodeConfig: Skipping tenant ${tenant.name} (id=${tenant.id}) - wallet not funded (status: ${fundingStatus})`,
-      );
-      skippedCount++;
-      continue;
-    }
-
     const endpoints = await db
       .selectFrom("endpoints")
       .selectAll()
@@ -77,25 +89,31 @@ export async function buildNodeConfig(nodeId: number) {
     const domainInfo = toDomainInfo(tenant);
     const domain = buildTenantDomain(domainInfo);
 
-    config[domain] = {
-      name: tenant.name,
-      proxy_name: tenant.name,
-      domain,
-      org_slug: tenant.org_slug ?? null,
-      backend_url: tenant.backend_url,
-      wallet_config: walletConfig,
-      default_price: tenant.default_price,
-      default_scheme: tenant.default_scheme,
-      upstream_auth_header: tenant.upstream_auth_header,
-      upstream_auth_value: tenant.upstream_auth_value,
+    const gatewaySlug = deriveGatewaySlug(tenant);
+
+    if (gateway[gatewaySlug]) {
+      logger.error(
+        `buildNodeConfig: Gateway slug collision for "${gatewaySlug}" — tenant ${tenant.name} (id=${tenant.id}) collides with an already-processed tenant, skipping`,
+      );
+      skippedCollision++;
+      continue;
+    }
+
+    const specResult = buildTenantGatewaySpecFromData({
+      tenantId: tenant.id,
+      tenantName: tenant.name,
+      walletConfig: tenant.wallet_config,
       endpoints: endpoints.map((e) => ({
         id: e.id,
+        path: e.path,
         path_pattern: e.path_pattern,
+        openapi_source_paths: e.openapi_source_paths,
         price: e.price,
         scheme: e.scheme,
-        priority: e.priority,
+        description: e.description,
+        http_method: e.http_method,
       })),
-      token_prices: tokenPrices.map((tp) => ({
+      tokenPrices: tokenPrices.map((tp) => ({
         token_symbol: tp.token_symbol,
         mint_address: tp.mint_address,
         network: tp.network,
@@ -103,20 +121,114 @@ export async function buildNodeConfig(nodeId: number) {
         decimals: tp.decimals,
         endpoint_id: tp.endpoint_id,
       })),
+    });
+
+    if (!specResult) {
+      logger.warn(
+        `buildNodeConfig: Skipping tenant ${tenant.name} (id=${tenant.id}) - buildTenantGatewaySpecFromData returned null`,
+      );
+      skippedSpecFailed++;
+      continue;
+    }
+
+    const { spec, operationKeyToEndpointId } = specResult;
+    const parsedSpec = extractGatewaySpec(spec);
+    const faremeterSpec = extractSpec(spec);
+
+    const networks = [
+      ...new Set(Object.values(faremeterSpec.assets).map((a) => a.chain)),
+    ];
+    const assetKeys = [...new Set(Object.keys(faremeterSpec.assets))];
+    const capabilities = { networks, assets: assetKeys };
+
+    const extraDirectives: string[] = [];
+    if (tenant.upstream_auth_header && tenant.upstream_auth_value) {
+      const safeHeaderName = /^[a-zA-Z0-9_-]+$/;
+      const unsafeNginxValue = /["\n\r;$\\]/;
+      if (!safeHeaderName.test(tenant.upstream_auth_header)) {
+        logger.error(
+          `buildNodeConfig: tenant ${tenant.name} has invalid upstream_auth_header, skipping auth header injection`,
+        );
+      } else if (unsafeNginxValue.test(tenant.upstream_auth_value)) {
+        logger.error(
+          `buildNodeConfig: tenant ${tenant.name} has unsafe characters in upstream_auth_value, skipping auth header injection`,
+        );
+      } else {
+        extraDirectives.push(
+          `proxy_set_header ${tenant.upstream_auth_header} "${tenant.upstream_auth_value}";`,
+        );
+      }
+    }
+
+    const { locationsConf, luaFiles, warnings } = generateConfig({
+      routes: parsedSpec.routes,
+      sidecarURL: SIDECAR_URL,
+      upstreamURL: tenant.backend_url,
+      sitePrefix: gatewaySlug,
+      extraDirectives: extraDirectives.length > 0 ? extraDirectives : undefined,
+    });
+
+    for (const warning of warnings) {
+      logger.warn(
+        "buildNodeConfig: gateway-nginx warning for tenant {tenantName}: {warning}",
+        { tenantName: tenant.name, warning },
+      );
+    }
+
+    const baseURL = `https://${domain}`;
+
+    config[domain] = {
+      name: tenant.name,
+      proxy_name: tenant.name,
+      domain,
+      org_slug: tenant.org_slug,
+      gateway_slug: gatewaySlug,
+      backend_url: tenant.backend_url,
+      upstream_auth_header: tenant.upstream_auth_header,
+      upstream_auth_value: tenant.upstream_auth_value,
+    };
+
+    gateway[gatewaySlug] = {
+      spec,
+      locationsConf,
+      luaFiles: Object.fromEntries(luaFiles),
+      warnings,
+      sidecarPrefix: gatewaySlug,
+      baseURL,
+      operationKeyToEndpointId,
+      capabilities,
+    };
+
+    sidecarSites[gatewaySlug] = {
+      spec,
+      baseURL,
+      capabilities,
+      operationKeyToEndpointId,
+      tenantName: tenant.name,
+      orgSlug: tenant.org_slug,
     };
   }
 
-  if (skippedCount > 0) {
+  const skipParts: string[] = [];
+  if (skippedCollision > 0)
+    skipParts.push(`${skippedCollision} slug collision`);
+  if (skippedSpecFailed > 0) skipParts.push(`${skippedSpecFailed} spec failed`);
+  if (skipParts.length > 0) {
     logger.info(
-      `buildNodeConfig: Skipped ${skippedCount} tenant(s) without funded wallets on node ${nodeId}`,
+      `buildNodeConfig: Skipped on node ${nodeId}: ${skipParts.join(", ")}`,
     );
   }
 
   return {
     node_id: node.id,
     node_name: node.name,
-    tenant_count: tenants.length,
+    tenant_count: Object.keys(gateway).length,
     config,
+    gateway,
+    sidecar: {
+      facilitatorURL: FACILITATOR_URL,
+      sites: sidecarSites,
+    },
   };
 }
 

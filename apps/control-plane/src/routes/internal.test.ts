@@ -1,8 +1,23 @@
 import "../tests/setup/env.js";
 import t from "tap";
+import { type } from "arktype";
 import { Hono } from "hono";
 import { db, setupTestSchema, clearTestData } from "../db/instance.js";
 import { internalRoutes } from "./internal.js";
+
+const SyncConfigEntry = type({
+  name: "string",
+  org_slug: "string | null",
+  gateway_slug: "string",
+  "+": "delete",
+});
+
+const SyncResponse = type({
+  config: "Record<string, unknown>",
+  gateway: "Record<string, unknown>",
+  sidecar: { sites: "Record<string, unknown>", "+": "delete" },
+  "+": "delete",
+});
 
 const app = new Hono();
 app.route("/internal", internalRoutes);
@@ -66,7 +81,25 @@ async function createWallet(orgId: number, name: string, funded = true) {
       name,
       organization_id: orgId,
       funding_status: funded ? "funded" : "pending",
-      wallet_config: JSON.stringify({ solana: { address: "abc123" } }),
+      wallet_config: JSON.stringify({
+        solana: { "mainnet-beta": { address: "abc123" } },
+      }),
+    })
+    .returning(["id"])
+    .executeTakeFirstOrThrow();
+}
+
+async function createTokenPrice(tenantId: number) {
+  return db
+    .insertInto("token_prices")
+    .values({
+      tenant_id: tenantId,
+      endpoint_id: null,
+      token_symbol: "USDC",
+      mint_address: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+      network: "solana-mainnet-beta",
+      amount: 1000,
+      decimals: 6,
     })
     .returning(["id"])
     .executeTakeFirstOrThrow();
@@ -1270,24 +1303,28 @@ await t.test("GET /internal/nodes/:id/sync", async (t) => {
   await t.test(
     "includes tenant with funded wallet and endpoints",
     async (t) => {
+      process.env.FACILITATOR_URL = "http://facilitator.example.test";
+
       const node = await createNode("test-node");
       const org = await createOrg("Team", "team");
       const wallet = await createWallet(org.id, "funded-wallet", true);
-      const tenant = await createTenant(org.id, "my-tenant", null, {
+      const tenant = await createTenant(org.id, "my-tenant", "team", {
         wallet_id: wallet.id,
         status: "active",
         is_active: true,
       });
       await linkTenantToNode(tenant.id, node.id);
+      await createTokenPrice(tenant.id);
 
       await db
         .insertInto("endpoints")
         .values({
           tenant_id: tenant.id,
           path: "/api/users",
-          path_pattern: "^/api/users$",
+          path_pattern: "/api/users",
           priority: 1,
           is_active: true,
+          scheme: "exact",
         })
         .execute();
 
@@ -1296,8 +1333,9 @@ await t.test("GET /internal/nodes/:id/sync", async (t) => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const data = (await res.json()) as any;
       t.equal(data.tenant_count, 1);
-      t.ok(data.config["my-tenant.api.example.test"]);
-      t.equal(data.config["my-tenant.api.example.test"].endpoints.length, 1);
+      t.ok(data.config["my-tenant.team.api.example.test"]);
+      t.ok(data.gateway["team--my-tenant"]);
+      t.ok(data.sidecar.sites["team--my-tenant"]);
     },
   );
 
@@ -1305,11 +1343,16 @@ await t.test("GET /internal/nodes/:id/sync", async (t) => {
     const node = await createNode("test-node");
     const org = await createOrg("Team", "team");
     const wallet = await createWallet(org.id, "unfunded-wallet", false);
-    const tenant = await createTenant(org.id, "unfunded-tenant", null, {
-      wallet_id: wallet.id,
-      status: "active",
-      is_active: true,
-    });
+    const tenant = await createTenant(
+      org.id,
+      "unfunded-tenant",
+      "unfunded-tenant",
+      {
+        wallet_id: wallet.id,
+        status: "active",
+        is_active: true,
+      },
+    );
     await linkTenantToNode(tenant.id, node.id);
 
     const res = await app.request(`/internal/nodes/${node.id}/sync`);
@@ -1323,11 +1366,16 @@ await t.test("GET /internal/nodes/:id/sync", async (t) => {
     const node = await createNode("test-node");
     const org = await createOrg("Team", "team");
     const wallet = await createWallet(org.id, "wallet", true);
-    const tenant = await createTenant(org.id, "pending-tenant", null, {
-      wallet_id: wallet.id,
-      status: "pending",
-      is_active: true,
-    });
+    const tenant = await createTenant(
+      org.id,
+      "pending-tenant",
+      "pending-tenant",
+      {
+        wallet_id: wallet.id,
+        status: "pending",
+        is_active: true,
+      },
+    );
     await linkTenantToNode(tenant.id, node.id);
 
     const res = await app.request(`/internal/nodes/${node.id}/sync`);
@@ -1337,16 +1385,17 @@ await t.test("GET /internal/nodes/:id/sync", async (t) => {
     t.equal(data.tenant_count, 0);
   });
 
-  await t.test("excludes inactive endpoints from sync config", async (t) => {
+  await t.test("excludes inactive endpoints from gateway spec", async (t) => {
     const node = await createNode("test-node");
     const org = await createOrg("Team", "team");
     const wallet = await createWallet(org.id, "wallet", true);
-    const tenant = await createTenant(org.id, "my-tenant", null, {
+    const tenant = await createTenant(org.id, "my-tenant", "team", {
       wallet_id: wallet.id,
       status: "active",
       is_active: true,
     });
     await linkTenantToNode(tenant.id, node.id);
+    await createTokenPrice(tenant.id);
 
     await db
       .insertInto("endpoints")
@@ -1354,16 +1403,18 @@ await t.test("GET /internal/nodes/:id/sync", async (t) => {
         {
           tenant_id: tenant.id,
           path: "/api/active",
-          path_pattern: "^/api/active$",
+          path_pattern: "/api/active",
           priority: 1,
           is_active: true,
+          scheme: "exact",
         },
         {
           tenant_id: tenant.id,
           path: "/api/inactive",
-          path_pattern: "^/api/inactive$",
+          path_pattern: "/api/inactive",
           priority: 2,
           is_active: false,
+          scheme: "exact",
         },
       ])
       .execute();
@@ -1372,11 +1423,11 @@ await t.test("GET /internal/nodes/:id/sync", async (t) => {
     t.equal(res.status, 200);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const data = (await res.json()) as any;
-    t.equal(data.config["my-tenant.api.example.test"].endpoints.length, 1);
-    t.equal(
-      data.config["my-tenant.api.example.test"].endpoints[0].path_pattern,
-      "^/api/active$",
-    );
+    const gw = data.gateway["team--my-tenant"];
+    t.ok(gw, "gateway config exists");
+    const paths = gw.spec.paths;
+    t.ok(paths["/api/active"], "active endpoint in spec");
+    t.notOk(paths["/api/inactive"], "inactive endpoint not in spec");
   });
 
   await t.test("sync config has complete tenant structure", async (t) => {
@@ -1395,6 +1446,7 @@ await t.test("GET /internal/nodes/:id/sync", async (t) => {
         is_active: true,
         status: "active",
         wallet_id: wallet.id,
+        org_slug: "team",
         upstream_auth_header: "Authorization",
         upstream_auth_value: "Bearer secret123",
       })
@@ -1402,16 +1454,28 @@ await t.test("GET /internal/nodes/:id/sync", async (t) => {
       .executeTakeFirstOrThrow();
 
     await linkTenantToNode(tenant.id, node.id);
+    await db
+      .insertInto("token_prices")
+      .values({
+        tenant_id: tenant.id,
+        endpoint_id: null,
+        token_symbol: "USDC",
+        mint_address: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+        network: "solana-mainnet-beta",
+        amount: 1000,
+        decimals: 6,
+      })
+      .execute();
 
     await db
       .insertInto("endpoints")
       .values({
         tenant_id: tenant.id,
         path: "/api/test",
-        path_pattern: "^/api/test$",
+        path_pattern: "/api/test",
         priority: 10,
         price: 0.1,
-        scheme: "prepay",
+        scheme: "exact",
         is_active: true,
       })
       .execute();
@@ -1421,34 +1485,39 @@ await t.test("GET /internal/nodes/:id/sync", async (t) => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const data = (await res.json()) as any;
 
-    const tenantConfig = data.config["configured-tenant.api.example.test"];
+    const domain = "configured-tenant.team.api.example.test";
+    const tenantConfig = data.config[domain];
     t.ok(tenantConfig, "tenant config exists");
     t.equal(tenantConfig.backend_url, "http://backend.example.com");
-    t.equal(tenantConfig.default_price, 0.05);
-    t.equal(tenantConfig.default_scheme, "exact");
     t.equal(tenantConfig.upstream_auth_header, "Authorization");
     t.equal(tenantConfig.upstream_auth_value, "Bearer secret123");
-    t.ok(tenantConfig.wallet_config, "wallet_config present");
+    t.equal(tenantConfig.name, "configured-tenant");
+    t.equal(tenantConfig.proxy_name, "configured-tenant");
+    t.equal(tenantConfig.org_slug, "team");
+    t.equal(tenantConfig.gateway_slug, "team--configured-tenant");
+    t.equal(tenantConfig.domain, domain);
 
-    t.equal(tenantConfig.endpoints.length, 1);
-    const endpoint = tenantConfig.endpoints[0];
-    t.ok(endpoint.id, "endpoint has id");
-    t.equal(endpoint.path_pattern, "^/api/test$");
-    t.equal(endpoint.price, 0.1);
-    t.equal(endpoint.scheme, "prepay");
-    t.equal(endpoint.priority, 10);
+    const gw = data.gateway["team--configured-tenant"];
+    t.ok(gw, "gateway config exists");
+    t.ok(gw.spec, "spec present");
+    t.ok(gw.locationsConf, "locationsConf present");
+
+    const site = data.sidecar.sites["team--configured-tenant"];
+    t.ok(site, "sidecar site exists");
+    t.equal(site.tenantName, "configured-tenant");
   });
 
-  await t.test("endpoints ordered by priority ascending in sync", async (t) => {
+  await t.test("multiple endpoints appear in gateway spec", async (t) => {
     const node = await createNode("test-node");
     const org = await createOrg("Team", "team");
     const wallet = await createWallet(org.id, "wallet", true);
-    const tenant = await createTenant(org.id, "my-tenant", null, {
+    const tenant = await createTenant(org.id, "my-tenant", "team", {
       wallet_id: wallet.id,
       status: "active",
       is_active: true,
     });
     await linkTenantToNode(tenant.id, node.id);
+    await createTokenPrice(tenant.id);
 
     await db
       .insertInto("endpoints")
@@ -1456,23 +1525,26 @@ await t.test("GET /internal/nodes/:id/sync", async (t) => {
         {
           tenant_id: tenant.id,
           path: "/low-priority",
-          path_pattern: "^/low$",
+          path_pattern: "/low",
           priority: 100,
           is_active: true,
+          scheme: "exact",
         },
         {
           tenant_id: tenant.id,
           path: "/high-priority",
-          path_pattern: "^/high$",
+          path_pattern: "/high",
           priority: 1,
           is_active: true,
+          scheme: "exact",
         },
         {
           tenant_id: tenant.id,
           path: "/medium-priority",
-          path_pattern: "^/medium$",
+          path_pattern: "/medium",
           priority: 50,
           is_active: true,
+          scheme: "exact",
         },
       ])
       .execute();
@@ -1481,11 +1553,10 @@ await t.test("GET /internal/nodes/:id/sync", async (t) => {
     t.equal(res.status, 200);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const data = (await res.json()) as any;
-    const endpoints = data.config["my-tenant.api.example.test"].endpoints;
-    t.equal(endpoints.length, 3);
-    t.equal(endpoints[0].priority, 1);
-    t.equal(endpoints[1].priority, 50);
-    t.equal(endpoints[2].priority, 100);
+    const paths = data.gateway["team--my-tenant"].spec.paths;
+    t.ok(paths["/low-priority"], "/low-priority in spec");
+    t.ok(paths["/high-priority"], "/high-priority in spec");
+    t.ok(paths["/medium-priority"], "/medium-priority in spec");
   });
 
   await t.test("handles non-numeric node id", async (t) => {
@@ -1496,6 +1567,8 @@ await t.test("GET /internal/nodes/:id/sync", async (t) => {
   await t.test(
     "sync config uses correct domain for org_slug format tenant",
     async (t) => {
+      process.env.FACILITATOR_URL = "http://facilitator.example.test";
+
       const node = await createNode("test-node");
       const org = await createOrg("Acme Corp", "acme");
       const wallet = await createWallet(org.id, "wallet", true);
@@ -1505,6 +1578,8 @@ await t.test("GET /internal/nodes/:id/sync", async (t) => {
         is_active: true,
       });
       await linkTenantToNode(tenant.id, node.id);
+      await createTokenPrice(tenant.id);
+      await createEndpoint(tenant.id, "/test");
 
       const res = await app.request(`/internal/nodes/${node.id}/sync`);
       t.equal(res.status, 200);
@@ -1516,35 +1591,36 @@ await t.test("GET /internal/nodes/:id/sync", async (t) => {
     },
   );
 
-  await t.test(
-    "sync config includes name, proxy_name, domain, org_slug for legacy tenant",
-    async (t) => {
-      const node = await createNode("test-node");
-      const org = await createOrg("Team", "team");
-      const wallet = await createWallet(org.id, "wallet", true);
-      const tenant = await createTenant(org.id, "legacy-api", null, {
-        wallet_id: wallet.id,
-        status: "active",
-        is_active: true,
-      });
-      await linkTenantToNode(tenant.id, node.id);
+  await t.test("includes tenant without org_slug", async (t) => {
+    const node = await createNode("test-node");
+    const org = await createOrg("Team", "team");
+    const wallet = await createWallet(org.id, "wallet", true);
+    const tenant = await createTenant(org.id, "no-slug-api", null, {
+      wallet_id: wallet.id,
+      status: "active",
+      is_active: true,
+    });
+    await linkTenantToNode(tenant.id, node.id);
+    await createTokenPrice(tenant.id);
+    await createEndpoint(tenant.id, "/test");
 
-      const res = await app.request(`/internal/nodes/${node.id}/sync`);
-      t.equal(res.status, 200);
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const data = (await res.json()) as any;
-      const tenantConfig = data.config["legacy-api.api.example.test"];
-      t.ok(tenantConfig, "tenant config exists");
-      t.equal(tenantConfig.name, "legacy-api");
-      t.equal(tenantConfig.proxy_name, "legacy-api");
-      t.equal(tenantConfig.domain, "legacy-api.api.example.test");
-      t.equal(tenantConfig.org_slug, null);
-    },
-  );
+    const res = await app.request(`/internal/nodes/${node.id}/sync`);
+    t.equal(res.status, 200);
+    const data = SyncResponse.assert(await res.json());
+    const domain = "no-slug-api.api.example.test";
+    t.ok(data.config[domain], "tenant appears in config");
+    const entry = SyncConfigEntry.assert(data.config[domain]);
+    t.equal(entry.org_slug, null);
+    t.equal(entry.gateway_slug, "no-slug-api");
+    t.ok(data.gateway["no-slug-api"], "gateway keyed by tenant name");
+    t.ok(data.sidecar.sites["no-slug-api"], "sidecar keyed by tenant name");
+  });
 
   await t.test(
-    "sync config includes name, proxy_name, domain, org_slug for org_slug tenant",
+    "sync config includes name, proxy_name, domain, org_slug, and gateway_slug",
     async (t) => {
+      process.env.FACILITATOR_URL = "http://facilitator.example.test";
+
       const node = await createNode("test-node");
       const org = await createOrg("Acme Corp", "acme");
       const wallet = await createWallet(org.id, "wallet", true);
@@ -1554,6 +1630,8 @@ await t.test("GET /internal/nodes/:id/sync", async (t) => {
         is_active: true,
       });
       await linkTenantToNode(tenant.id, node.id);
+      await createTokenPrice(tenant.id);
+      await createEndpoint(tenant.id, "/test");
 
       const res = await app.request(`/internal/nodes/${node.id}/sync`);
       t.equal(res.status, 200);
@@ -1565,31 +1643,38 @@ await t.test("GET /internal/nodes/:id/sync", async (t) => {
       t.equal(tenantConfig.proxy_name, "org-api");
       t.equal(tenantConfig.domain, "org-api.acme.api.example.test");
       t.equal(tenantConfig.org_slug, "acme");
+      t.equal(tenantConfig.gateway_slug, "acme--org-api");
     },
   );
 
   await t.test(
-    "multiple tenants with different formats on same node",
+    "multiple tenants from different orgs on same node",
     async (t) => {
+      process.env.FACILITATOR_URL = "http://facilitator.example.test";
+
       const node = await createNode("test-node");
       const org1 = await createOrg("Org One", "org-one");
       const org2 = await createOrg("Org Two", "org-two");
       const wallet1 = await createWallet(org1.id, "wallet1", true);
       const wallet2 = await createWallet(org2.id, "wallet2", true);
 
-      const legacyTenant = await createTenant(org1.id, "legacy-svc", null, {
+      const tenant1 = await createTenant(org1.id, "svc-one", "org-one", {
         wallet_id: wallet1.id,
         status: "active",
         is_active: true,
       });
-      const orgSlugTenant = await createTenant(org2.id, "org-svc", "org-two", {
+      const tenant2 = await createTenant(org2.id, "svc-two", "org-two", {
         wallet_id: wallet2.id,
         status: "active",
         is_active: true,
       });
 
-      await linkTenantToNode(legacyTenant.id, node.id);
-      await linkTenantToNode(orgSlugTenant.id, node.id);
+      await linkTenantToNode(tenant1.id, node.id);
+      await linkTenantToNode(tenant2.id, node.id);
+      await createTokenPrice(tenant1.id);
+      await createTokenPrice(tenant2.id);
+      await createEndpoint(tenant1.id, "/test");
+      await createEndpoint(tenant2.id, "/test");
 
       const res = await app.request(`/internal/nodes/${node.id}/sync`);
       t.equal(res.status, 200);
@@ -1597,14 +1682,15 @@ await t.test("GET /internal/nodes/:id/sync", async (t) => {
       const data = (await res.json()) as any;
       t.equal(data.tenant_count, 2);
 
-      // Legacy tenant uses simple domain
-      t.ok(data.config["legacy-svc.api.example.test"]);
-      t.equal(data.config["legacy-svc.api.example.test"].org_slug, null);
-
-      // org_slug tenant uses org-qualified domain
-      t.ok(data.config["org-svc.org-two.api.example.test"]);
+      t.ok(data.config["svc-one.org-one.api.example.test"]);
       t.equal(
-        data.config["org-svc.org-two.api.example.test"].org_slug,
+        data.config["svc-one.org-one.api.example.test"].org_slug,
+        "org-one",
+      );
+
+      t.ok(data.config["svc-two.org-two.api.example.test"]);
+      t.equal(
+        data.config["svc-two.org-two.api.example.test"].org_slug,
         "org-two",
       );
     },
@@ -1613,6 +1699,8 @@ await t.test("GET /internal/nodes/:id/sync", async (t) => {
   await t.test(
     "same tenant name in different orgs with org_slug format",
     async (t) => {
+      process.env.FACILITATOR_URL = "http://facilitator.example.test";
+
       const node = await createNode("test-node");
       const org1 = await createOrg("Org One", "org-one");
       const org2 = await createOrg("Org Two", "org-two");
@@ -1632,6 +1720,10 @@ await t.test("GET /internal/nodes/:id/sync", async (t) => {
 
       await linkTenantToNode(tenant1.id, node.id);
       await linkTenantToNode(tenant2.id, node.id);
+      await createTokenPrice(tenant1.id);
+      await createTokenPrice(tenant2.id);
+      await createEndpoint(tenant1.id, "/test");
+      await createEndpoint(tenant2.id, "/test");
 
       const res = await app.request(`/internal/nodes/${node.id}/sync`);
       t.equal(res.status, 200);
@@ -1639,7 +1731,6 @@ await t.test("GET /internal/nodes/:id/sync", async (t) => {
       const data = (await res.json()) as any;
       t.equal(data.tenant_count, 2);
 
-      // Both have same name but different domains
       t.ok(data.config["api.org-one.api.example.test"]);
       t.ok(data.config["api.org-two.api.example.test"]);
       t.equal(data.config["api.org-one.api.example.test"].org_slug, "org-one");
