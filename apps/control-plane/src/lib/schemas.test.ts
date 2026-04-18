@@ -113,6 +113,30 @@ await t.test("CreateEndpointSchema", async (t) => {
     t.equal(isError(result), false);
   });
 
+  await t.test("accepts valid http_method", async (t) => {
+    const result = CreateEndpointSchema({
+      path: "/api/test",
+      http_method: "POST",
+    });
+    t.equal(isError(result), false);
+  });
+
+  await t.test("accepts ANY http_method", async (t) => {
+    const result = CreateEndpointSchema({
+      path: "/api/test",
+      http_method: "ANY",
+    });
+    t.equal(isError(result), false);
+  });
+
+  await t.test("rejects lowercase http_method", async (t) => {
+    const result = CreateEndpointSchema({
+      path: "/api/test",
+      http_method: "get" as "GET",
+    });
+    t.equal(isError(result), true);
+  });
+
   await t.test("rejects empty path", async (t) => {
     const result = CreateEndpointSchema({ path: "" });
     t.equal(isError(result), true);
@@ -189,6 +213,20 @@ await t.test("UpdateEndpointSchema", async (t) => {
       is_active: false,
     });
     t.equal(isError(result), false);
+  });
+
+  await t.test("accepts http_method update", async (t) => {
+    const result = UpdateEndpointSchema({
+      http_method: "DELETE",
+    });
+    t.equal(isError(result), false);
+  });
+
+  await t.test("rejects invalid http_method", async (t) => {
+    const result = UpdateEndpointSchema({
+      http_method: "PATCH_ALL" as "PATCH",
+    });
+    t.equal(isError(result), true);
   });
 });
 
