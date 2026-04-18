@@ -1,0 +1,37 @@
+{
+  "name": "@marketplace/tests",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "tap 'src/**/*.test.ts'",
+    "test:prototype": "pnpm tsx src/gateway-nginx-prototype.test.ts"
+  },
+  "tap": {
+    "plugin": [
+      "!@tapjs/typescript",
+      "@tapjs/tsx"
+    ],
+    "disable-coverage": true
+  },
+  "dependencies": {
+    "@faremeter/fetch": "link:../../faremeter/packages/fetch",
+    "@faremeter/gateway-nginx": "link:../../faremeter/packages/gateway-nginx",
+    "@faremeter/info": "link:../../faremeter/packages/info",
+    "@faremeter/logs": "link:../../faremeter/packages/logs",
+    "@faremeter/middleware-openapi": "link:../../faremeter/packages/middleware-openapi",
+    "@faremeter/sidecar": "link:../../faremeter/apps/sidecar",
+    "@faremeter/test-harness": "link:../../faremeter/packages/test-harness",
+    "@faremeter/types": "link:../../faremeter/packages/types",
+    "@hono/node-server": "catalog:",
+    "hono": "catalog:",
+    "zx": "catalog:"
+  },
+  "devDependencies": {
+    "@tapjs/tsx": "catalog:",
+    "@types/node": "catalog:",
+    "tap": "catalog:",
+    "tsx": "catalog:",
+    "typescript": "catalog:"
+  }
+}
