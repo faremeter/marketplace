@@ -13,15 +13,15 @@ A multi-tenant payment proxy for the [x402 protocol](https://www.x402.org/). Pub
                      WireGuard mesh (wg1)
                                |
                            API Node
-                      (nginx + Lua x402)
-                        /            \
-              Facilitator          Backend API
-           (settles payment)     (proxied request)
-                        \            /
+                    (nginx + gateway sidecar)
+                      /        |         \
+              Facilitator   Sidecar    Backend API
+           (settles payment) (captures) (proxied request)
+                      \        |         /
                           Client
 ```
 
-- **API Nodes** handle client requests: TLS termination, subdomain routing, x402 payment validation (via the facilitator), and proxying to the publisher's backend
+- **API Nodes** handle client requests: TLS termination, subdomain routing, payment validation (via the facilitator), and proxying to the publisher's backend. Gateway-mode tenants use the `@faremeter/gateway-nginx` SDK to generate nginx routing config and run a sidecar process that captures settlement metadata. Legacy tenants continue to use the hand-written Lua access module.
 - **Control Plane** manages tenants, endpoints, pricing, and wallets. Pushes config to API nodes over the WireGuard mesh. Does not handle client traffic.
 - **Discovery Service** runs on the control plane and provides a searchable registry of published APIs
 
@@ -30,7 +30,7 @@ A multi-tenant payment proxy for the [x402 protocol](https://www.x402.org/). Pub
 - **VPC Stack** -- AWS networking (subnets, security groups, NAT)
 - **Database Stack** -- PostgreSQL RDS (Multi-AZ, encrypted)
 - **Control-Plane Stack** -- EC2 instance running the control-plane API, UI, and discovery service
-- **API Node Stack** -- EC2 instance(s) running nginx with Lua for x402 payment processing and request proxying
+- **API Node Stack** -- EC2 instance(s) running nginx for request proxying, with a gateway sidecar for payment capture and settlement on gateway-mode tenants
 
 Nodes communicate over a WireGuard mesh network. wg1 (10.12.0.0/24) handles internal control-plane to API node traffic. wg0 (10.11.0.0/24) ships logs to an external Grafana/Loki endpoint.
 
@@ -294,6 +294,7 @@ Check services:
 
 ```bash
 sudo systemctl status nginx
+sudo systemctl status faremeter-sidecar
 sudo wg show
 ```
 
