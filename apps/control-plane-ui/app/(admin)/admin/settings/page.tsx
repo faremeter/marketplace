@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useAuth } from "@/lib/auth/context";
 import useSWR from "swr";
 import * as Dialog from "@radix-ui/react-dialog";
@@ -91,9 +91,22 @@ function WalletSetupModal({
   const [showSolanaKey, setShowSolanaKey] = useState(false);
   const [showEvmKey, setShowEvmKey] = useState(false);
 
-  const solanaDerivation = useMemo(() => {
-    if (!solanaKey) return null;
-    return deriveSolanaAddress(solanaKey);
+  const [solanaDerivation, setSolanaDerivation] = useState<{
+    address: string;
+    key: string;
+  } | null>(null);
+  useEffect(() => {
+    if (!solanaKey) {
+      setSolanaDerivation(null);
+      return;
+    }
+    let cancelled = false;
+    deriveSolanaAddress(solanaKey).then((result) => {
+      if (!cancelled) setSolanaDerivation(result);
+    });
+    return () => {
+      cancelled = true;
+    };
   }, [solanaKey]);
 
   const evmDerivation = useMemo(() => {
@@ -1141,7 +1154,7 @@ export default function AdminSettingsPage() {
   const handleSaveWallet = async (config: EcosystemConfig) => {
     setIsSaving(true);
     try {
-      const walletConfig = buildWalletConfig(config);
+      const walletConfig = await buildWalletConfig(config);
       await api.put("/api/admin/settings", { wallet_config: walletConfig });
       await mutateSettings();
       await mutateBalances();

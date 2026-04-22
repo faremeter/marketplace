@@ -1,4 +1,7 @@
-import { Keypair } from "@solana/web3.js";
+import {
+  createKeyPairSignerFromBytes,
+  createKeyPairSignerFromPrivateKeyBytes,
+} from "@solana/kit";
 import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
 import bs58 from "bs58";
 
@@ -21,11 +24,19 @@ export interface EcosystemConfig {
   evm: { mode: "generate" | "import" | "skip"; key?: string };
 }
 
-export function generateSolanaWallet(): { address: string; key: string } {
-  const keypair = Keypair.generate();
+export async function generateSolanaWallet(): Promise<{
+  address: string;
+  key: string;
+}> {
+  const seed = crypto.getRandomValues(new Uint8Array(32));
+  const signer = await createKeyPairSignerFromPrivateKeyBytes(seed);
+  const pubBytes = bs58.decode(signer.address);
+  const secretKey = new Uint8Array(64);
+  secretKey.set(seed);
+  secretKey.set(pubBytes, 32);
   return {
-    address: keypair.publicKey.toBase58(),
-    key: "[" + keypair.secretKey.toString() + "]",
+    address: signer.address,
+    key: "[" + secretKey.toString() + "]",
   };
 }
 
@@ -37,9 +48,9 @@ export function generateEvmWallet(): { address: string; key: string } {
   };
 }
 
-export function deriveSolanaAddress(
+export async function deriveSolanaAddress(
   privateKey: string,
-): { address: string; key: string } | null {
+): Promise<{ address: string; key: string } | null> {
   try {
     let secretKey: Uint8Array;
 
@@ -71,9 +82,9 @@ export function deriveSolanaAddress(
       return null;
     }
 
-    const keypair = Keypair.fromSecretKey(secretKey);
+    const signer = await createKeyPairSignerFromBytes(secretKey);
     return {
-      address: keypair.publicKey.toBase58(),
+      address: signer.address,
       key: "[" + secretKey.toString() + "]",
     };
   } catch {
@@ -105,15 +116,17 @@ export function deriveEvmAddress(
   }
 }
 
-export function buildWalletConfig(config: EcosystemConfig): WalletConfig {
+export async function buildWalletConfig(
+  config: EcosystemConfig,
+): Promise<WalletConfig> {
   const result: WalletConfig = {};
 
   // Handle Solana
   if (config.solana.mode === "generate") {
-    const wallet = generateSolanaWallet();
+    const wallet = await generateSolanaWallet();
     result.solana = { "mainnet-beta": wallet };
   } else if (config.solana.mode === "import" && config.solana.key) {
-    const wallet = deriveSolanaAddress(config.solana.key);
+    const wallet = await deriveSolanaAddress(config.solana.key);
     if (wallet) {
       result.solana = { "mainnet-beta": wallet };
     }
