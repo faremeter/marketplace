@@ -39,7 +39,7 @@ Nodes communicate over a WireGuard mesh network. wg1 (10.12.0.0/24) handles inte
 - **AWS account** with a Route53 hosted zone for your domain
 - **AWS CLI** configured with credentials (`aws configure`)
 - **Pulumi CLI** ([install](https://www.pulumi.com/docs/install/))
-- **Node.js 20.x** ([install](https://nodejs.org/))
+- **Node.js 22.x** ([install](https://nodejs.org/))
 - **pnpm** (`npm install -g pnpm`)
 - **WireGuard tools** (`apt install wireguard-tools` or `brew install wireguard-tools`)
 - **Grafana/Loki endpoint** for centralized logging via wg0 ([Grafana Cloud](https://grafana.com/products/cloud/))
