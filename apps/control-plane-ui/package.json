@@ -31,6 +31,7 @@
     "@react-three/drei": "^10.7.7",
     "@react-three/fiber": "^9.4.2",
     "@scalar/openapi-parser": "^0.24.2",
+    "@scalar/openapi-types": "^0.5.3",
     "@sentry/nextjs": "^10.36.0",
     "@solana/web3.js": "1.98.4",
     "@uiw/react-json-view": "^2.0.0-alpha.40",
