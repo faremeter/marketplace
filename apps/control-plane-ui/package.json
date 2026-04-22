@@ -34,7 +34,7 @@
     "@sentry/nextjs": "^10.36.0",
     "@solana/web3.js": "^1.98.4",
     "@uiw/react-json-view": "^2.0.0-alpha.40",
-    "arktype": "^2.1.28",
+    "arktype": "^2.2.0",
     "geist": "^1.5.1",
     "next": "^15.5.7",
     "papaparse": "^5.5.3",
