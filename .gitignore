@@ -4,6 +4,7 @@ dist
 **/.next
 git-*
 node_modules
+package-lock.json
 .local-packages
 tsconfig.tsbuildinfo
 .tap
