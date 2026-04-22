@@ -29,8 +29,8 @@
     "@hono/arktype-validator": "^2.0.1",
     "@hono/node-server": "catalog:",
     "@logtape/logtape": "catalog:",
-    "@solana/spl-token": "0.4.14",
-    "@solana/web3.js": "1.98.4",
+    "@solana-program/token": "catalog:",
+    "@solana/kit": "catalog:",
     "arktype": "catalog:",
     "bcrypt": "^5.1.1",
     "bs58": "catalog:",
@@ -50,7 +50,6 @@
       "bcrypt",
       "better-sqlite3",
       "esbuild",
-      "bigint-buffer",
       "bufferutil",
       "utf-8-validate"
     ]

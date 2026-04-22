@@ -1,41 +1,37 @@
-// Mock for @solana/web3.js
+// Mock for @solana/kit RPC client
 
-export class MockPublicKey {
-  constructor(public key: string) {}
-  toString() {
-    return this.key;
-  }
-  toBase58() {
-    return this.key;
-  }
-}
-
-export const mockConnection = {
-  getBalance: async () => 1000000000, // 1 SOL in lamports
-  getParsedTokenAccountsByOwner: async () => ({
-    value: [
-      {
-        account: {
-          data: {
-            parsed: {
-              info: {
-                tokenAmount: { uiAmountString: "100.00" },
+export const mockRpc = {
+  getBalance: (_addr: string) => ({
+    send: async () => ({ value: 1000000000n }), // 1 SOL in lamports
+  }),
+  getTokenAccountsByOwner: (
+    _owner: string,
+    _filter: unknown,
+    _config?: unknown,
+  ) => ({
+    send: async () => ({
+      value: [
+        {
+          account: {
+            data: {
+              parsed: {
+                info: {
+                  mint: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+                  tokenAmount: {
+                    uiAmount: 100,
+                    uiAmountString: "100.00",
+                  },
+                },
               },
             },
           },
         },
-      },
-    ],
-  }),
-  getLatestBlockhash: async () => ({
-    blockhash: "mock-blockhash",
-    lastValidBlockHeight: 12345,
+      ],
+    }),
   }),
 };
 
-// Factory to create connection with custom behavior
-export function createMockConnection(
-  overrides: Partial<typeof mockConnection> = {},
-) {
-  return { ...mockConnection, ...overrides };
+// Factory to create RPC mock with custom behavior
+export function createMockRpc(overrides: Partial<typeof mockRpc> = {}) {
+  return { ...mockRpc, ...overrides };
 }

@@ -1,10 +1,15 @@
-import { Connection, PublicKey } from "@solana/web3.js";
-import { TOKEN_PROGRAM_ID, TOKEN_2022_PROGRAM_ID } from "@solana/spl-token";
+import { createSolanaRpc, address } from "@solana/kit";
+import { TOKEN_PROGRAM_ADDRESS } from "@solana-program/token";
 import { createPublicClient, http, formatUnits, erc20Abi } from "viem";
 import { base, polygon } from "viem/chains";
 import { evm, solana } from "@faremeter/info";
 import { logger } from "../logger.js";
 import { getSymbolToUsdRate } from "./jupiter-prices.js";
+
+// @solana-program/token-2022 is 4MB for one constant — define inline
+const TOKEN_2022_PROGRAM_ADDRESS = address(
+  "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb",
+);
 
 const USDC_DECIMALS = 6;
 const SOLANA_DECIMALS = 9;
@@ -44,6 +49,8 @@ const MONAD_USDC = evm.lookupKnownAsset("eip155:143", "USDC");
 
 const SOLANA_RPC_URL =
   process.env.SOLANA_RPC_URL ?? "https://api.mainnet-beta.solana.com";
+
+const solanaRpc = createSolanaRpc(SOLANA_RPC_URL);
 
 const monad = {
   id: 143,
@@ -108,20 +115,30 @@ interface ParsedTokenAccountData {
 async function getSolanaBalances(addr: string): Promise<ChainBalances> {
   return withRetry(
     async () => {
-      const connection = new Connection(SOLANA_RPC_URL);
-      const pubkey = new PublicKey(addr);
+      const pubkey = address(addr);
 
-      const nativeLamports = await connection.getBalance(pubkey);
-      const native = (nativeLamports / 10 ** SOLANA_DECIMALS).toFixed(4);
+      const balanceResult = await solanaRpc.getBalance(pubkey).send();
+      const native = (
+        Number(balanceResult.value) /
+        10 ** SOLANA_DECIMALS
+      ).toFixed(4);
 
       // Fetch ALL token accounts in 2 calls (SPL Token + Token-2022) instead of per-mint
       const [splAccounts, token2022Accounts] = await Promise.allSettled([
-        connection.getParsedTokenAccountsByOwner(pubkey, {
-          programId: TOKEN_PROGRAM_ID,
-        }),
-        connection.getParsedTokenAccountsByOwner(pubkey, {
-          programId: TOKEN_2022_PROGRAM_ID,
-        }),
+        solanaRpc
+          .getTokenAccountsByOwner(
+            pubkey,
+            { programId: TOKEN_PROGRAM_ADDRESS },
+            { encoding: "jsonParsed" },
+          )
+          .send(),
+        solanaRpc
+          .getTokenAccountsByOwner(
+            pubkey,
+            { programId: TOKEN_2022_PROGRAM_ADDRESS },
+            { encoding: "jsonParsed" },
+          )
+          .send(),
       ]);
 
       // Aggregate balances per mint across all accounts
