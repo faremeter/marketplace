@@ -17,10 +17,10 @@
   },
   "dependencies": {
     "@1click/db-schema": "workspace:*",
-    "@hono/node-server": "^1.19.5",
-    "@logtape/logtape": "^1.2.2",
-    "dotenv": "^17.2.1",
-    "hono": "^4.9.10",
+    "@hono/node-server": "catalog:",
+    "@logtape/logtape": "catalog:",
+    "dotenv": "catalog:",
+    "hono": "catalog:",
     "kysely": "^0.27.4",
     "pg": "^8.13.1"
   },
@@ -32,14 +32,14 @@
   },
   "devDependencies": {
     "@1click/test-db": "workspace:*",
-    "@tapjs/asserts": "^4.0.1",
-    "@tapjs/tsx": "^3.0.1",
+    "@tapjs/asserts": "catalog:",
+    "@tapjs/tsx": "catalog:",
     "@types/better-sqlite3": "^7.6.11",
-    "@types/node": "^20.19.11",
+    "@types/node": "catalog:",
     "@types/pg": "^8.11.10",
     "better-sqlite3": "^11.7.0",
-    "tap": "^21.1.0",
-    "tsx": "^4.20.5",
-    "typescript": "^5.9.2"
+    "tap": "catalog:",
+    "tsx": "catalog:",
+    "typescript": "catalog:"
   }
 }
