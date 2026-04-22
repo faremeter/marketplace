@@ -158,8 +158,8 @@ Run `make format` to auto-format all files.
 
 ### Functions
 
-| Pattern     | Use Case                       | Example                                         |
-| ----------- | ------------------------------ | ----------------------------------------------- |
+| Pattern     | Use Case                       | Example                              |
+| ----------- | ------------------------------ | ------------------------------------ |
 | `camelCase` | All functions                  | `handleRequest`, `buildNodeConfig`   |
 | `create*`   | Factory functions              | `createServer`, `createRouter`       |
 | `is*`       | Boolean predicates             | `isValidationError`, `isActive`      |
@@ -205,14 +205,14 @@ const HttpConnection = { ... };
 
 ### Types and Interfaces
 
-| Pattern           | Use Case                 | Example                                   |
-| ----------------- | ------------------------ | ----------------------------------------- |
-| `PascalCase`      | Interfaces, type aliases | `EndpointConfig`, `TenantRecord`     |
-| `lowercase`       | Protocol-specific types  | `x402PaymentRequirements`            |
-| `*Args` / `*Opts` | Function arguments       | `CreateServerOpts`, `BuildConfigArgs`|
-| `*Response`       | API responses            | `HealthResponse`                     |
-| `*Info`           | Data structures          | `NodeInfo`, `TenantInfo`             |
-| `*Handler`        | Handler interfaces       | `RequestHandler`                     |
+| Pattern           | Use Case                 | Example                               |
+| ----------------- | ------------------------ | ------------------------------------- |
+| `PascalCase`      | Interfaces, type aliases | `EndpointConfig`, `TenantRecord`      |
+| `lowercase`       | Protocol-specific types  | `x402PaymentRequirements`             |
+| `*Args` / `*Opts` | Function arguments       | `CreateServerOpts`, `BuildConfigArgs` |
+| `*Response`       | API responses            | `HealthResponse`                      |
+| `*Info`           | Data structures          | `NodeInfo`, `TenantInfo`              |
+| `*Handler`        | Handler interfaces       | `RequestHandler`                      |
 
 ---
 
@@ -465,10 +465,10 @@ await t.test("descriptiveTestName", async (t) => {
 ### Common Assertions
 
 ```typescript
-t.equal(actual, expected);       // Strict equality
-t.matchOnly(actual, expected);   // Deep/partial matching
-t.match(actual, pattern);        // Pattern matching
-t.ok(condition);                 // Truthy
+t.equal(actual, expected); // Strict equality
+t.matchOnly(actual, expected); // Deep/partial matching
+t.match(actual, pattern); // Pattern matching
+t.ok(condition); // Truthy
 await t.rejects(asyncFn, expectedError);
 ```
 
@@ -499,11 +499,17 @@ import { configure, getConsoleSink, getLogger } from "@logtape/logtape";
 await configure({
   sinks: { console: getConsoleSink() },
   loggers: [
-    { category: ["logtape", "meta"], sinks: ["console"], lowestLevel: "warning" },
+    {
+      category: ["logtape", "meta"],
+      sinks: ["console"],
+      lowestLevel: "warning",
+    },
     {
       category: ["my-app"],
       sinks: ["console"],
-      lowestLevel: (process.env.LOG_LEVEL as "debug" | "info" | "warning" | "error") ?? "info",
+      lowestLevel:
+        (process.env.LOG_LEVEL as "debug" | "info" | "warning" | "error") ??
+        "info",
     },
   ],
 });
