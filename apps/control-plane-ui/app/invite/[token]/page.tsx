@@ -54,14 +54,14 @@ export default function InvitePage() {
           const data = err.data as { error?: string };
           setState({
             type: "error",
-            message: data.error || "Failed to load invitation",
+            message: data.error ?? "Failed to load invitation",
           });
         } else {
           setState({ type: "error", message: "Failed to load invitation" });
         }
       }
     }
-    fetchInvitation();
+    void fetchInvitation();
   }, [token]);
 
   const handleAccept = async () => {
@@ -83,7 +83,7 @@ export default function InvitePage() {
         const data = err.data as { error?: string };
         setState({
           type: "error",
-          message: data.error || "Failed to accept invitation",
+          message: data.error ?? "Failed to accept invitation",
         });
       } else {
         setState({ type: "error", message: "Failed to accept invitation" });
@@ -202,7 +202,7 @@ export default function InvitePage() {
                       </span>
                     </p>
                     <button
-                      onClick={handleAccept}
+                      onClick={() => void handleAccept()}
                       className="w-full rounded-md bg-white px-4 py-2 text-sm font-medium text-black transition-colors hover:bg-white/90"
                     >
                       Accept Invitation

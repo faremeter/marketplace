@@ -326,7 +326,7 @@ export default function DashboardPage() {
                   <RegisteredProxiesTable
                     tenants={registeredTenants}
                     orgId={currentOrg.id}
-                    onActivate={() => mutateTenants()}
+                    onActivate={() => void mutateTenants()}
                   />
                 </div>
               )}

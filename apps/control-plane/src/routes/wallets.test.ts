@@ -1,9 +1,35 @@
 import "../tests/setup/env.js";
 import t from "tap";
+import { type } from "arktype";
 import { Hono } from "hono";
 import { db, setupTestSchema, clearTestData } from "../db/instance.js";
 import { signToken } from "../middleware/auth.js";
 import { walletsRoutes } from "./wallets.js";
+
+const WalletResponse = type({
+  "id?": "number",
+  "name?": "string",
+  "organization_id?": "number | null",
+  "funding_status?": "string",
+  "cached_balances?": "unknown",
+  "wallet_config?": "Record<string, unknown>",
+  "+": "delete",
+});
+
+const NameCheckResponse = type({
+  available: "boolean",
+  "+": "delete",
+});
+
+const ErrorResponse = type({
+  error: "string",
+  "+": "delete",
+});
+
+const SuccessResponse = type({
+  success: "boolean",
+  "+": "delete",
+});
 
 const app = new Hono();
 app.route("/api/wallets", walletsRoutes);
@@ -87,8 +113,7 @@ await t.test("GET /api/wallets/organization/:orgId", async (t) => {
     });
 
     t.equal(res.status, 200);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data = (await res.json()) as any;
+    const data = WalletResponse.array().assert(await res.json());
     t.same(data, []);
   });
 
@@ -111,9 +136,9 @@ await t.test("GET /api/wallets/organization/:orgId", async (t) => {
     });
 
     t.equal(res.status, 200);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data = (await res.json()) as any;
+    const data = WalletResponse.array().assert(await res.json());
     t.equal(data.length, 1);
+    if (!data[0]) throw new Error("expected data[0]");
     t.equal(data[0].name, "Test Wallet");
   });
 
@@ -135,8 +160,7 @@ await t.test("GET /api/wallets/organization/:orgId", async (t) => {
     });
 
     t.equal(res.status, 200);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data = (await res.json()) as any;
+    const data = WalletResponse.array().assert(await res.json());
     t.equal(data.length, 1);
   });
 
@@ -168,8 +192,9 @@ await t.test("GET /api/wallets/organization/:orgId", async (t) => {
     });
 
     t.equal(res.status, 200);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data = (await res.json()) as any;
+    const data = WalletResponse.array().assert(await res.json());
+    if (!data[0]) throw new Error("expected data[0]");
+    if (!data[1]) throw new Error("expected data[1]");
     t.equal(data[0].name, "Alpha Wallet");
     t.equal(data[1].name, "Zebra Wallet");
   });
@@ -203,8 +228,7 @@ await t.test("GET /api/wallets/organization/:orgId/check-name", async (t) => {
     );
 
     t.equal(res.status, 200);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data = (await res.json()) as any;
+    const data = NameCheckResponse.assert(await res.json());
     t.equal(data.available, false);
   });
 
@@ -221,8 +245,7 @@ await t.test("GET /api/wallets/organization/:orgId/check-name", async (t) => {
     );
 
     t.equal(res.status, 200);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data = (await res.json()) as any;
+    const data = NameCheckResponse.assert(await res.json());
     t.equal(data.available, true);
   });
 
@@ -248,8 +271,7 @@ await t.test("GET /api/wallets/organization/:orgId/check-name", async (t) => {
     );
 
     t.equal(res.status, 200);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data = (await res.json()) as any;
+    const data = NameCheckResponse.assert(await res.json());
     t.equal(data.available, false);
   });
 
@@ -274,8 +296,7 @@ await t.test("GET /api/wallets/organization/:orgId/check-name", async (t) => {
     );
 
     t.equal(res.status, 200);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data = (await res.json()) as any;
+    const data = NameCheckResponse.assert(await res.json());
     t.equal(data.available, true);
   });
 });
@@ -352,8 +373,7 @@ await t.test("GET /api/wallets/:id", async (t) => {
     });
 
     t.equal(res.status, 200);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data = (await res.json()) as any;
+    const data = WalletResponse.assert(await res.json());
     t.equal(data.name, "Team Wallet");
   });
 
@@ -396,8 +416,7 @@ await t.test("GET /api/wallets/:id", async (t) => {
     });
 
     t.equal(res.status, 200);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data = (await res.json()) as any;
+    const data = WalletResponse.assert(await res.json());
     t.equal(data.name, "Master Wallet");
   });
 });
@@ -483,9 +502,10 @@ await t.test("GET /api/wallets/:id/balances", async (t) => {
     });
 
     t.equal(res.status, 200);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data = (await res.json()) as any;
-    const balances = typeof data === "string" ? JSON.parse(data) : data;
+    const balances = type({
+      solana: { native: "string", "+": "delete" },
+      "+": "delete",
+    }).assert(await res.json());
     t.equal(balances.solana.native, "1.5");
   });
 
@@ -596,8 +616,7 @@ await t.test("POST /api/wallets/organization/:orgId", async (t) => {
     });
 
     t.equal(res.status, 403);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data = (await res.json()) as any;
+    const data = ErrorResponse.assert(await res.json());
     t.ok(data.error.includes("owners"));
   });
 
@@ -619,8 +638,7 @@ await t.test("POST /api/wallets/organization/:orgId", async (t) => {
     });
 
     t.equal(res.status, 400);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data = (await res.json()) as any;
+    const data = ErrorResponse.assert(await res.json());
     t.ok(data.error.includes("address"));
   });
 
@@ -642,8 +660,7 @@ await t.test("POST /api/wallets/organization/:orgId", async (t) => {
     });
 
     t.equal(res.status, 201);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data = (await res.json()) as any;
+    const data = WalletResponse.assert(await res.json());
     t.equal(data.name, "My Wallet");
     t.equal(data.organization_id, org.id);
     t.equal(data.funding_status, "pending");
@@ -781,8 +798,7 @@ await t.test("PUT /api/wallets/:id", async (t) => {
     });
 
     t.equal(res.status, 200);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data = (await res.json()) as any;
+    const data = WalletResponse.assert(await res.json());
     t.equal(data.name, "New Name");
   });
 
@@ -821,8 +837,7 @@ await t.test("PUT /api/wallets/:id", async (t) => {
     });
 
     t.equal(res.status, 200);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data = (await res.json()) as any;
+    const data = WalletResponse.assert(await res.json());
     t.equal(data.funding_status, "pending");
     t.equal(data.cached_balances, null);
   });
@@ -852,8 +867,7 @@ await t.test("PUT /api/wallets/:id", async (t) => {
     });
 
     t.equal(res.status, 200);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data = (await res.json()) as any;
+    const data = WalletResponse.assert(await res.json());
     t.equal(data.name, "Unchanged");
   });
 
@@ -881,8 +895,7 @@ await t.test("PUT /api/wallets/:id", async (t) => {
     });
 
     t.equal(res.status, 200);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data = (await res.json()) as any;
+    const data = WalletResponse.assert(await res.json());
     t.equal(data.name, "Admin Updated");
   });
 });
@@ -976,8 +989,7 @@ await t.test("DELETE /api/wallets/:id", async (t) => {
     });
 
     t.equal(res.status, 400);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data = (await res.json()) as any;
+    const data = ErrorResponse.assert(await res.json());
     t.ok(data.error.includes("tenants"));
   });
 
@@ -1002,8 +1014,7 @@ await t.test("DELETE /api/wallets/:id", async (t) => {
     });
 
     t.equal(res.status, 200);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data = (await res.json()) as any;
+    const data = SuccessResponse.assert(await res.json());
     t.equal(data.success, true);
 
     const check = await db
@@ -1056,8 +1067,7 @@ await t.test("GET /api/wallets/admin/master", async (t) => {
     });
 
     t.equal(res.status, 200);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data = (await res.json()) as any;
+    const data = WalletResponse.array().assert(await res.json());
     t.same(data, []);
   });
 
@@ -1088,9 +1098,9 @@ await t.test("GET /api/wallets/admin/master", async (t) => {
     });
 
     t.equal(res.status, 200);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data = (await res.json()) as any;
+    const data = WalletResponse.array().assert(await res.json());
     t.equal(data.length, 1);
+    if (!data[0]) throw new Error("expected data[0]");
     t.equal(data[0].name, "Master Wallet");
     t.equal(data[0].organization_id, null);
   });
@@ -1131,8 +1141,7 @@ await t.test("POST /api/wallets/admin/master", async (t) => {
     });
 
     t.equal(res.status, 201);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data = (await res.json()) as any;
+    const data = WalletResponse.assert(await res.json());
     t.equal(data.name, "New Master");
     t.equal(data.organization_id, null);
     t.equal(data.funding_status, "funded");
@@ -1168,10 +1177,10 @@ await t.test(
       });
 
       t.equal(res.status, 201);
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const data = (await res.json()) as any;
+      const data = WalletResponse.assert(await res.json());
       t.equal(data.name, "Solana Only Wallet");
       // wallet_config is auto-parsed by SQLite adapter plugin
+      if (!data.wallet_config) throw new Error("expected wallet_config");
       t.ok(data.wallet_config.solana);
       t.notOk(data.wallet_config.evm);
     });
@@ -1203,10 +1212,10 @@ await t.test(
       });
 
       t.equal(res.status, 201);
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const data = (await res.json()) as any;
+      const data = WalletResponse.assert(await res.json());
       t.equal(data.name, "Base Only Wallet");
       // wallet_config is auto-parsed by SQLite adapter plugin
+      if (!data.wallet_config) throw new Error("expected wallet_config");
       t.ok(data.wallet_config.evm);
       t.notOk(data.wallet_config.solana);
     });
@@ -1244,8 +1253,7 @@ await t.test(
         });
 
         t.equal(res.status, 201);
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const data = (await res.json()) as any;
+        const data = WalletResponse.assert(await res.json());
         t.equal(data.funding_status, "pending");
       },
     );
@@ -1278,15 +1286,13 @@ await t.test(
         });
 
         t.equal(res.status, 201);
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const data = (await res.json()) as any;
+        const data = WalletResponse.assert(await res.json());
         // Initial response shows pending, but enqueueBalanceCheck marks it as funded
         // We need to refetch to see the updated status
         const refetch = await app.request(`/api/wallets/${data.id}`, {
           headers: { Cookie: `auth_token=${user.token}` },
         });
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const updated = (await refetch.json()) as any;
+        const updated = WalletResponse.assert(await refetch.json());
         t.equal(updated.funding_status, "funded");
       },
     );
@@ -1324,8 +1330,7 @@ await t.test(
         });
 
         t.equal(res.status, 201);
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const data = (await res.json()) as any;
+        const data = WalletResponse.assert(await res.json());
         // Mixed wallet has Solana, so it stays pending (needs Solana funding check)
         t.equal(data.funding_status, "pending");
       },
@@ -1381,8 +1386,7 @@ await t.test("PUT /api/wallets/:id - funding status updates", async (t) => {
     const refetch = await app.request(`/api/wallets/${wallet.id}`, {
       headers: { Cookie: `auth_token=${user.token}` },
     });
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const updated = (await refetch.json()) as any;
+    const updated = WalletResponse.assert(await refetch.json());
     t.equal(updated.funding_status, "funded");
   });
 
@@ -1430,8 +1434,7 @@ await t.test("PUT /api/wallets/:id - funding status updates", async (t) => {
       });
 
       t.equal(res.status, 200);
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const data = (await res.json()) as any;
+      const data = WalletResponse.assert(await res.json());
       // Updated config resets to pending
       t.equal(data.funding_status, "pending");
     },

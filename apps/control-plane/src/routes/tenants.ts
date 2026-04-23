@@ -208,7 +208,7 @@ tenantsRoutes.put(
       .execute();
 
     for (const { node_id } of assignedNodes) {
-      syncToNode(node_id).catch((err) => logger.error(String(err)));
+      syncToNode(node_id).catch((err: unknown) => logger.error(String(err)));
     }
 
     return c.json(result);
@@ -254,17 +254,17 @@ tenantsRoutes.delete("/:id", async (c) => {
     return c.json({ error: "Tenant not found" }, 404);
   }
 
-  deleteAllTenantDnsRecords(domainInfo).catch((err) =>
+  deleteAllTenantDnsRecords(domainInfo).catch((err: unknown) =>
     logger.error(`Failed to delete DNS for tenant ${tenant.name}: ${err}`),
   );
 
   for (const { node_id, health_check_id } of tenantNodes) {
     if (health_check_id) {
-      deleteHealthCheck(health_check_id).catch((err) =>
+      deleteHealthCheck(health_check_id).catch((err: unknown) =>
         logger.error(`Failed to delete health check: ${err}`),
       );
     }
-    syncToNode(node_id).catch((err) => logger.error(String(err)));
+    syncToNode(node_id).catch((err: unknown) => logger.error(String(err)));
   }
 
   return c.json({ deleted: true });
@@ -389,18 +389,20 @@ tenantsRoutes.post(
       nodeId,
       node.public_ip,
       healthCheckId,
-    ).catch((err) => logger.error(`Failed to create DNS record: ${err}`));
+    ).catch((err: unknown) =>
+      logger.error(`Failed to create DNS record: ${err}`),
+    );
 
     if (node.status === "active") {
       enqueueCertProvisioning([nodeId], tenant.name, domainInfo.orgSlug).catch(
-        (err) =>
+        (err: unknown) =>
           logger.error(
             `Failed to enqueue cert provisioning for tenant ${tenant.name} on node ${nodeId}: ${err}`,
           ),
       );
     }
 
-    syncToNode(nodeId).catch((err) => logger.error(String(err)));
+    syncToNode(nodeId).catch((err: unknown) => logger.error(String(err)));
 
     return c.json(result, 201);
   },
@@ -439,16 +441,16 @@ tenantsRoutes.delete("/:id/nodes/:nodeId", async (c) => {
   }
 
   if (result.health_check_id) {
-    deleteHealthCheck(result.health_check_id).catch((err) =>
+    deleteHealthCheck(result.health_check_id).catch((err: unknown) =>
       logger.error(`Failed to delete health check: ${err}`),
     );
   }
 
-  deleteNodeDnsRecord(domainInfo, nodeId).catch((err) =>
+  deleteNodeDnsRecord(domainInfo, nodeId).catch((err: unknown) =>
     logger.error(`Failed to delete DNS record: ${err}`),
   );
 
-  syncToNode(nodeId).catch((err) => logger.error(String(err)));
+  syncToNode(nodeId).catch((err: unknown) => logger.error(String(err)));
 
   return c.json({ deleted: true });
 });

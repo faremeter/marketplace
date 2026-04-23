@@ -64,7 +64,9 @@ export function InviteMemberDialog({
     onOpenChange(newOpen);
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (
+    e: React.SyntheticEvent<HTMLFormElement, SubmitEvent>,
+  ) => {
     e.preventDefault();
     setError("");
 
@@ -89,7 +91,7 @@ export function InviteMemberDialog({
     } catch (err) {
       if (err instanceof ApiError && err.data) {
         const data = err.data as { error?: string };
-        setError(data.error || "Failed to create invitation");
+        setError(data.error ?? "Failed to create invitation");
       } else {
         setError(
           err instanceof Error ? err.message : "Failed to create invitation",
@@ -125,7 +127,7 @@ export function InviteMemberDialog({
           </div>
 
           {!invitation ? (
-            <form onSubmit={handleSubmit} className="space-y-4">
+            <form onSubmit={(e) => void handleSubmit(e)} className="space-y-4">
               <div>
                 <label className="mb-1.5 block text-sm text-gray-11">
                   Email Address <span className="text-red-400">*</span>
@@ -215,7 +217,7 @@ export function InviteMemberDialog({
                 />
                 <button
                   type="button"
-                  onClick={handleCopy}
+                  onClick={() => void handleCopy()}
                   className="flex h-8 w-8 items-center justify-center rounded text-gray-11 hover:bg-gray-4 hover:text-gray-12"
                 >
                   {copied ? (

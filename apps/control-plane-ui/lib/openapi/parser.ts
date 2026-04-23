@@ -1,9 +1,15 @@
 import { validate } from "@scalar/openapi-parser";
-import type { OpenAPI } from "@scalar/openapi-types";
+
+interface OpenApiDocument {
+  openapi?: string;
+  info?: { title?: string; version?: string };
+  paths?: Record<string, unknown>;
+  [key: string]: unknown;
+}
 
 export interface ParseResult {
   valid: boolean;
-  spec: OpenAPI.Document | null;
+  spec: OpenApiDocument | null;
   paths: string[];
   info: { title?: string; version?: string };
   errors: string[];
@@ -24,13 +30,13 @@ export async function parseOpenApiSpec(input: string): Promise<ParseResult> {
 
   let valid: boolean;
   let errors: { message: string }[] | undefined;
-  let specification: OpenAPI.Document | undefined;
+  let specification: OpenApiDocument | undefined;
 
   try {
     const result = await validate(input);
     valid = result.valid;
     errors = result.errors;
-    specification = result.specification;
+    specification = result.specification as OpenApiDocument | undefined;
   } catch (e) {
     return {
       ...empty,
@@ -41,7 +47,7 @@ export async function parseOpenApiSpec(input: string): Promise<ParseResult> {
   if (!valid || !specification) {
     return {
       ...empty,
-      errors: errors?.map((e) => e.message) || ["Invalid OpenAPI spec"],
+      errors: errors?.map((e) => e.message) ?? ["Invalid OpenAPI spec"],
     };
   }
 

@@ -256,7 +256,7 @@ await t.test("withRetry", async (t) => {
     await t.rejects(
       withRetry(
         async () => {
-          throw "string error";
+          throw "string error"; // eslint-disable-line @typescript-eslint/only-throw-error -- testing non-Error throw conversion
         },
         { retries: 0, baseDelay: 10 },
       ),

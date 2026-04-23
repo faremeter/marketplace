@@ -204,11 +204,11 @@ function FloatingDollars({ position }: { position: [number, number, number] }) {
 
         const textMesh = textGroup.children[0] as THREE.Mesh;
         const glowMesh = textGroup.children[1] as THREE.Mesh;
-        if (textMesh && textMesh.material) {
+        if (textMesh?.material) {
           (textMesh.material as THREE.MeshBasicMaterial).opacity =
             opacity * 0.9;
         }
-        if (glowMesh && glowMesh.material) {
+        if (glowMesh?.material) {
           (glowMesh.material as THREE.MeshBasicMaterial).opacity =
             opacity * 0.3;
         }

@@ -67,32 +67,34 @@ export function InlineNameEdit({
       clearTimeout(checkTimeoutRef.current);
     }
 
-    checkTimeoutRef.current = setTimeout(async () => {
-      lastCheckedRef.current = sanitized;
+    checkTimeoutRef.current = setTimeout(() => {
+      void (async () => {
+        lastCheckedRef.current = sanitized;
 
-      try {
-        let url = `${checkAvailabilityEndpoint}?name=${encodeURIComponent(sanitized)}`;
-        if (excludeId !== undefined) {
-          url += `&excludeId=${excludeId}`;
-        }
-        if (organizationId) {
-          url += `&organization_id=${organizationId}`;
-        }
+        try {
+          let url = `${checkAvailabilityEndpoint}?name=${encodeURIComponent(sanitized)}`;
+          if (excludeId !== undefined) {
+            url += `&excludeId=${excludeId}`;
+          }
+          if (organizationId) {
+            url += `&organization_id=${organizationId}`;
+          }
 
-        const result = await api.get<{ available: boolean }>(url);
+          const result = await api.get<{ available: boolean }>(url);
 
-        if (lastCheckedRef.current === sanitized) {
-          setNameAvailable(result.available);
+          if (lastCheckedRef.current === sanitized) {
+            setNameAvailable(result.available);
+          }
+        } catch {
+          if (lastCheckedRef.current === sanitized) {
+            setNameAvailable(null);
+          }
+        } finally {
+          if (lastCheckedRef.current === sanitized) {
+            setIsCheckingName(false);
+          }
         }
-      } catch {
-        if (lastCheckedRef.current === sanitized) {
-          setNameAvailable(null);
-        }
-      } finally {
-        if (lastCheckedRef.current === sanitized) {
-          setIsCheckingName(false);
-        }
-      }
+      })();
     }, 500);
 
     return () => {
@@ -138,7 +140,7 @@ export function InlineNameEdit({
       let message = "Unknown error";
       if (err instanceof ApiError && err.data) {
         const data = err.data as { error?: string };
-        message = data.error || err.message;
+        message = data.error ?? err.message;
       } else if (err instanceof Error) {
         message = err.message;
       }
@@ -163,7 +165,7 @@ export function InlineNameEdit({
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter") {
-      handleSave();
+      void handleSave();
     } else if (e.key === "Escape") {
       setIsOpen(false);
     }
@@ -245,7 +247,7 @@ export function InlineNameEdit({
                 Cancel
               </button>
               <button
-                onClick={handleSave}
+                onClick={() => void handleSave()}
                 disabled={!canSave}
                 className="inline-flex items-center gap-1 rounded bg-accent-9 px-2 py-1 text-xs text-white hover:bg-accent-10 disabled:opacity-50"
               >

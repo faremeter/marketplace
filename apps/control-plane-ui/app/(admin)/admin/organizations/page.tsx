@@ -168,13 +168,13 @@ export default function AdminOrganizationsPage() {
       <ImportOrgsDialog
         open={importDialogOpen}
         onOpenChange={setImportDialogOpen}
-        onSuccess={() => mutate()}
+        onSuccess={() => void mutate()}
       />
 
       <CreateOrgDialog
         open={createDialogOpen}
         onOpenChange={setCreateDialogOpen}
-        onSuccess={() => mutate()}
+        onSuccess={() => void mutate()}
       />
 
       {manageMembersOrg && (
@@ -185,7 +185,7 @@ export default function AdminOrganizationsPage() {
           }}
           orgId={manageMembersOrg.id}
           orgName={manageMembersOrg.name}
-          onSuccess={() => mutate()}
+          onSuccess={() => void mutate()}
         />
       )}
 
@@ -297,7 +297,7 @@ export default function AdminOrganizationsPage() {
                         orgId={org.id}
                         orgName={org.name}
                         isCompleted={org.onboarding_completed ?? false}
-                        onUpdate={() => mutate()}
+                        onUpdate={() => void mutate()}
                       />
                     </td>
                     <td className="px-4 py-3 text-sm text-gray-11">

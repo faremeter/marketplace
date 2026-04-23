@@ -29,10 +29,10 @@ async function shutdown(): Promise<void> {
   process.exit(0);
 }
 
-process.on("SIGTERM", shutdown);
-process.on("SIGINT", shutdown);
+process.on("SIGTERM", () => void shutdown());
+process.on("SIGINT", () => void shutdown());
 
-const port = parseInt(process.env.HTTP_PORT || "1339");
+const port = parseInt(process.env.HTTP_PORT ?? "1339");
 
 logger.info(`Discovery service starting on http://localhost:${port}`);
 serve({ fetch: app.fetch, port });

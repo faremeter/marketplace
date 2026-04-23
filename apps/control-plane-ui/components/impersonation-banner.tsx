@@ -31,7 +31,7 @@ export function ImpersonationBanner() {
           Viewing as <strong>{user.email}</strong>
         </span>
         <button
-          onClick={handleExit}
+          onClick={() => void handleExit()}
           disabled={exiting}
           className="rounded border border-white/30 px-2.5 py-0.5 text-xs font-medium transition-colors hover:bg-white/20 disabled:opacity-50"
         >

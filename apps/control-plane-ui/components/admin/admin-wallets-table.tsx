@@ -202,7 +202,7 @@ function WalletRow({
               {truncateAddress(addresses.solana)}
             </code>
             <button
-              onClick={() => copyToClipboard(addresses.solana ?? "")}
+              onClick={() => void copyToClipboard(addresses.solana ?? "")}
               className="rounded p-1 text-gray-11 hover:bg-gray-4 hover:text-gray-12"
             >
               {copiedAddress === addresses.solana ? (
@@ -223,7 +223,7 @@ function WalletRow({
               {truncateAddress(addresses.evm)}
             </code>
             <button
-              onClick={() => copyToClipboard(addresses.evm ?? "")}
+              onClick={() => void copyToClipboard(addresses.evm ?? "")}
               className="rounded p-1 text-gray-11 hover:bg-gray-4 hover:text-gray-12"
             >
               {copiedAddress === addresses.evm ? (
@@ -320,7 +320,7 @@ function WalletRow({
                 </AlertDialog.Cancel>
                 <AlertDialog.Action asChild>
                   <button
-                    onClick={handleDelete}
+                    onClick={() => void handleDelete()}
                     disabled={isDeleting || tenantsUsingWallet.length > 0}
                     className="rounded-md bg-red-600 px-3 py-2 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-50"
                   >

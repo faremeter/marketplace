@@ -130,7 +130,7 @@ export function CreateTenantDialog({
       walletId !== null ||
       defaultPrice !== "0.01" ||
       defaultScheme !== "exact" ||
-      registerOnly !== false ||
+      registerOnly ||
       tags.length > 0
     );
   }, [
@@ -169,27 +169,29 @@ export function CreateTenantDialog({
       clearTimeout(checkTimeoutRef.current);
     }
 
-    checkTimeoutRef.current = setTimeout(async () => {
-      try {
-        const sanitized = sanitizeProxyName(name);
-        if (!sanitized) {
+    checkTimeoutRef.current = setTimeout(() => {
+      void (async () => {
+        try {
+          const sanitized = sanitizeProxyName(name);
+          if (!sanitized) {
+            setNameAvailable(null);
+            setIsCheckingName(false);
+            return;
+          }
+
+          let checkUrl = `/api/admin/tenants/check-name?name=${encodeURIComponent(sanitized)}`;
+          if (!isLegacyMode && organizationId) {
+            checkUrl += `&organization_id=${organizationId}`;
+          }
+
+          const result = await api.get<{ available: boolean }>(checkUrl);
+          setNameAvailable(result.available);
+        } catch {
           setNameAvailable(null);
+        } finally {
           setIsCheckingName(false);
-          return;
         }
-
-        let checkUrl = `/api/admin/tenants/check-name?name=${encodeURIComponent(sanitized)}`;
-        if (!isLegacyMode && organizationId) {
-          checkUrl += `&organization_id=${organizationId}`;
-        }
-
-        const result = await api.get<{ available: boolean }>(checkUrl);
-        setNameAvailable(result.available);
-      } catch {
-        setNameAvailable(null);
-      } finally {
-        setIsCheckingName(false);
-      }
+      })();
     }, 500);
 
     return () => {
@@ -264,7 +266,9 @@ export function CreateTenantDialog({
     onOpenChange(false);
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (
+    e: React.SyntheticEvent<HTMLFormElement, SubmitEvent>,
+  ) => {
     e.preventDefault();
     setError("");
 
@@ -434,7 +438,7 @@ export function CreateTenantDialog({
               )}
           </div>
 
-          <form onSubmit={handleSubmit} className="space-y-6">
+          <form onSubmit={(e) => void handleSubmit(e)} className="space-y-6">
             {/* Organization - FIRST */}
             <section>
               <h3 className="mb-3 text-xs font-medium uppercase tracking-wider text-gray-11">

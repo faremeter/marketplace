@@ -88,7 +88,7 @@ export function CreateOrgDialog({ open, onOpenChange }: CreateOrgDialogProps) {
         setSuggestedSlug(null);
       } else {
         setSlugTaken(true);
-        setSuggestedSlug(result.suggested || null);
+        setSuggestedSlug(result.suggested ?? null);
       }
     } catch {
       setSlugTaken(false);
@@ -107,7 +107,7 @@ export function CreateOrgDialog({ open, onOpenChange }: CreateOrgDialogProps) {
     }
 
     const timer = setTimeout(() => {
-      checkSlugAvailability(slug);
+      void checkSlugAvailability(slug);
     }, 300);
 
     return () => clearTimeout(timer);
@@ -127,7 +127,9 @@ export function CreateOrgDialog({ open, onOpenChange }: CreateOrgDialogProps) {
     onOpenChange(newOpen);
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (
+    e: React.SyntheticEvent<HTMLFormElement, SubmitEvent>,
+  ) => {
     e.preventDefault();
     setError("");
 
@@ -161,7 +163,7 @@ export function CreateOrgDialog({ open, onOpenChange }: CreateOrgDialogProps) {
     } catch (err) {
       if (err instanceof ApiError && err.data) {
         const data = err.data as { error?: string };
-        setError(data.error || "Failed to create organization");
+        setError(data.error ?? "Failed to create organization");
       } else {
         setError(
           err instanceof Error ? err.message : "Failed to create organization",
@@ -186,7 +188,7 @@ export function CreateOrgDialog({ open, onOpenChange }: CreateOrgDialogProps) {
             </Dialog.Close>
           </div>
 
-          <form onSubmit={handleSubmit} className="space-y-4">
+          <form onSubmit={(e) => void handleSubmit(e)} className="space-y-4">
             <div>
               <label className="mb-1.5 block text-sm text-gray-11">
                 Organization Name <span className="text-red-400">*</span>

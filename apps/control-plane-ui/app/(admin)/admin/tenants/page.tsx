@@ -78,6 +78,7 @@ export default function AdminTenantsPage() {
   const [search, setSearch] = useState("");
   const { toast } = useToast();
 
+  /* eslint-disable @typescript-eslint/prefer-nullish-coalescing -- boolean OR chain; ?? would short-circuit on false and skip backend_url/tags matching */
   const filteredTenants =
     tenants?.filter(
       (t) =>
@@ -86,6 +87,7 @@ export default function AdminTenantsPage() {
         t.backend_url.toLowerCase().includes(search.toLowerCase()) ||
         t.tags?.some((tag) => tag.toLowerCase().includes(search.toLowerCase())),
     ) ?? [];
+  /* eslint-enable @typescript-eslint/prefer-nullish-coalescing */
   const totalCount = filteredTenants.length;
   const totalPages = Math.ceil(totalCount / PAGE_SIZE);
   const offset = page * PAGE_SIZE;
@@ -109,7 +111,7 @@ export default function AdminTenantsPage() {
       await api.delete(`/api/admin/tenants/${tenantToDelete.id}`);
       setDeleteDialogOpen(false);
       setTenantToDelete(null);
-      mutate();
+      void mutate();
       toast({
         title: "Deletion started",
         description: `${tenantToDelete.name} is being deleted`,
@@ -118,7 +120,7 @@ export default function AdminTenantsPage() {
     } catch (err) {
       if (err instanceof ApiError && err.data) {
         const data = err.data as { error?: string };
-        setDeleteError(data.error || "Failed to delete tenant");
+        setDeleteError(data.error ?? "Failed to delete tenant");
       } else {
         setDeleteError("Failed to delete tenant");
       }
@@ -163,7 +165,7 @@ export default function AdminTenantsPage() {
       <CreateTenantDialog
         open={dialogOpen}
         onOpenChange={setDialogOpen}
-        onSuccess={() => mutate()}
+        onSuccess={() => void mutate()}
       />
 
       {isLoading ? (
@@ -229,7 +231,7 @@ export default function AdminTenantsPage() {
                     <td className="px-4 py-3">
                       <InlineNameEdit
                         name={tenant.name}
-                        onUpdate={() => mutate()}
+                        onUpdate={() => void mutate()}
                         apiEndpoint={`/api/admin/tenants/${tenant.id}`}
                         label="Tenant Name"
                         checkAvailabilityEndpoint="/api/admin/tenants/check-name"
@@ -244,7 +246,7 @@ export default function AdminTenantsPage() {
                         tenantId={tenant.id}
                         tenantName={tenant.name}
                         orgSlug={tenant.org_slug}
-                        onUpdate={() => mutate()}
+                        onUpdate={() => void mutate()}
                         disabled={isEditDisabled(tenant)}
                         disabledReason={getEditDisabledReason(tenant)}
                       />
@@ -254,7 +256,7 @@ export default function AdminTenantsPage() {
                         apiEndpoint={`/api/admin/tenants/${tenant.id}`}
                         label={tenant.name}
                         tags={tenant.tags ?? []}
-                        onUpdate={() => mutate()}
+                        onUpdate={() => void mutate()}
                       />
                     </td>
                     <td className="px-4 py-3">
@@ -265,7 +267,7 @@ export default function AdminTenantsPage() {
                               proxyName: tenant.name,
                               orgSlug: tenant.org_slug,
                             });
-                            navigator.clipboard.writeText(url);
+                            void navigator.clipboard.writeText(url);
                             toast({
                               title: "Proxy URL copied to clipboard",
                               variant: "default",
@@ -295,7 +297,7 @@ export default function AdminTenantsPage() {
                         tenantId={tenant.id}
                         tenantName={tenant.name}
                         nodes={tenant.nodes}
-                        onUpdate={() => mutate()}
+                        onUpdate={() => void mutate()}
                       />
                     </td>
                     <td className="px-4 py-3">
@@ -303,7 +305,7 @@ export default function AdminTenantsPage() {
                         tenantId={tenant.id}
                         tenantName={tenant.name}
                         backendUrl={tenant.backend_url}
-                        onUpdate={() => mutate()}
+                        onUpdate={() => void mutate()}
                       />
                     </td>
                     <td className="px-4 py-3">
@@ -316,7 +318,7 @@ export default function AdminTenantsPage() {
                         currentWalletId={tenant.wallet_id}
                         currentWalletName={tenant.wallet_name}
                         currentWalletOrgId={tenant.wallet_organization_id}
-                        onUpdate={() => mutate()}
+                        onUpdate={() => void mutate()}
                         disabled={isEditDisabled(tenant)}
                         disabledReason={getEditDisabledReason(tenant)}
                       />
@@ -328,7 +330,7 @@ export default function AdminTenantsPage() {
                         tenantOrgId={tenant.organization_id}
                         currentWalletId={tenant.wallet_id}
                         currentWalletName={tenant.wallet_name}
-                        onUpdate={() => mutate()}
+                        onUpdate={() => void mutate()}
                       />
                     </td>
                     <td className="px-4 py-3">
@@ -337,7 +339,7 @@ export default function AdminTenantsPage() {
                         tenantName={tenant.name}
                         authHeader={tenant.upstream_auth_header}
                         authValue={tenant.upstream_auth_value}
-                        onUpdate={() => mutate()}
+                        onUpdate={() => void mutate()}
                       />
                     </td>
                     <td className="px-4 py-3">
@@ -345,7 +347,7 @@ export default function AdminTenantsPage() {
                         tenantId={tenant.id}
                         tenantName={tenant.name}
                         isActive={tenant.is_active}
-                        onUpdate={() => mutate()}
+                        onUpdate={() => void mutate()}
                         disabled={tenant.status === "registered"}
                         disabledTooltip="Go live to enable this setting"
                       />
@@ -454,7 +456,7 @@ export default function AdminTenantsPage() {
                 Cancel
               </button>
               <button
-                onClick={handleDeleteConfirm}
+                onClick={() => void handleDeleteConfirm()}
                 disabled={deletingId !== null}
                 className="rounded-md bg-red-600 px-3 py-2 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-50"
               >

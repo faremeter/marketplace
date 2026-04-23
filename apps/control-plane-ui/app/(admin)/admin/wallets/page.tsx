@@ -201,7 +201,7 @@ export default function AdminWalletsPage() {
                 key={org.id}
                 org={org}
                 wallets={orgWallets}
-                onWalletUpdate={() => mutateWallets()}
+                onWalletUpdate={() => void mutateWallets()}
               />
             ))}
           </div>
@@ -225,7 +225,7 @@ export default function AdminWalletsPage() {
               created_at: "",
             }}
             wallets={filteredMasterWallets}
-            onWalletUpdate={() => mutateWallets()}
+            onWalletUpdate={() => void mutateWallets()}
             isMaster
           />
         </div>

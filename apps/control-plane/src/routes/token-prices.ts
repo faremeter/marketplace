@@ -31,7 +31,7 @@ async function syncTenantNodes(tenantId: number) {
     .execute();
 
   for (const tn of tenantNodes) {
-    syncToNode(tn.node_id).catch((err) => logger.error(String(err)));
+    syncToNode(tn.node_id).catch((err: unknown) => logger.error(String(err)));
   }
 }
 
@@ -107,7 +107,8 @@ tokenPricesRoutes.post(
       .where("token_symbol", "=", body.token_symbol)
       .where("network", "=", body.network)
       .$if(endpointId !== null, (qb) =>
-        qb.where("endpoint_id", "=", endpointId as number),
+        // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+        qb.where("endpoint_id", "=", endpointId!),
       )
       .$if(endpointId === null, (qb) => qb.where("endpoint_id", "is", null))
       .executeTakeFirst();
@@ -135,7 +136,7 @@ tokenPricesRoutes.post(
       .returningAll()
       .executeTakeFirst();
 
-    syncTenantNodes(tenantId);
+    void syncTenantNodes(tenantId);
 
     return c.json(result, 201);
   },
@@ -172,7 +173,7 @@ tokenPricesRoutes.put(
       return c.json({ error: "Token price not found" }, 404);
     }
 
-    syncTenantNodes(tenantId);
+    void syncTenantNodes(tenantId);
 
     return c.json(result);
   },
@@ -193,7 +194,7 @@ tokenPricesRoutes.delete("/:id", modifyResourceLimiter, async (c) => {
     return c.json({ error: "Token price not found" }, 404);
   }
 
-  syncTenantNodes(tenantId);
+  void syncTenantNodes(tenantId);
 
   return c.json({ success: true });
 });

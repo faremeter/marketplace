@@ -39,7 +39,9 @@ export function BetaSignupDialog({
   const [error, setError] = useState("");
   const [success, setSuccess] = useState(false);
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (
+    e: React.SyntheticEvent<HTMLFormElement, SubmitEvent>,
+  ) => {
     e.preventDefault();
     setError("");
 
@@ -69,8 +71,12 @@ export function BetaSignupDialog({
       });
 
       if (!res.ok) {
-        const data = await res.json();
-        throw new Error(data.error || "Failed to join waitlist");
+        const data = (await res.json()) as Record<string, unknown>;
+        throw new Error(
+          typeof data.error === "string"
+            ? data.error
+            : "Failed to join waitlist",
+        );
       }
 
       setSuccess(true);
@@ -130,7 +136,7 @@ export function BetaSignupDialog({
                 monetize your APIs.
               </Dialog.Description>
 
-              <form onSubmit={handleSubmit} className="mt-6">
+              <form onSubmit={(e) => void handleSubmit(e)} className="mt-6">
                 <div>
                   <input
                     type="email"

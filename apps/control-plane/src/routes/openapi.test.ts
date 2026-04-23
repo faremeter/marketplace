@@ -1,10 +1,92 @@
 import "../tests/setup/env.js";
 import t from "tap";
+import { type } from "arktype";
 import { Hono } from "hono";
 import { db, setupTestSchema, clearTestData } from "../db/instance.js";
 import { signToken } from "../middleware/auth.js";
 import { openapiRoutes } from "./openapi.js";
 import { OPENAPI_USPTO } from "../tests/fixtures/openapi-spec.js";
+
+const ErrorResponse = type({ error: "string", "+": "delete" });
+
+const FaremeterPricing = type({
+  "price?": "number",
+  "scheme?": "string",
+  "endpoint_id?": "number",
+  "+": "delete",
+});
+
+const FaremeterPathItem = type({
+  "x-faremeter-pricing?": FaremeterPricing,
+  "x-faremeter-tags?": "string[]",
+  "x-faremeter-orphan?": "boolean",
+  "x-faremeter-original-pattern?": "string",
+  "+": "delete",
+});
+
+function fmPath(val: unknown) {
+  return FaremeterPathItem.assert(val);
+}
+
+const ExportedSpec = type({
+  paths: "Record<string, unknown>",
+  info: "Record<string, unknown>",
+  openapi: "string",
+  "orphans?": "unknown[]",
+  "servers?": "unknown[]",
+  "components?": "Record<string, unknown>",
+  "+": "delete",
+});
+
+const SpecResponse = type({
+  "spec?": ExportedSpec.or(type("null")),
+  hasSpec: "boolean",
+  "+": "delete",
+});
+
+const ExportResponse = type({
+  spec: ExportedSpec,
+  "warnings?": "string[]",
+  "orphanEndpoints?": "unknown[]",
+  stats: {
+    totalEndpoints: "number",
+    withLineage: "number",
+    orphans: "number",
+    "+": "delete",
+  },
+  "+": "delete",
+});
+
+const ImportResponse = type({
+  success: "boolean",
+  created: "number",
+  linked: "number",
+  paths: { created: "string[]", "+": "delete" },
+  "+": "delete",
+});
+
+const DeleteSpecResponse = type({
+  success: "boolean",
+  "+": "delete",
+});
+
+const ValidateResponse = type({
+  valid: "boolean",
+  "isValidRegex?": "boolean",
+  "hasSpec?": "boolean",
+  "matches?": "string[]",
+  "totalSpecPaths?": "number",
+  "+": "delete",
+});
+
+const OpenApiSpec = type({
+  paths: "Record<string, unknown>",
+  "info?": { "title?": "string", "+": "delete" },
+  "openapi?": "string",
+  "servers?": "unknown[]",
+  "components?": "Record<string, unknown>",
+  "+": "delete",
+});
 
 const app = new Hono();
 app.route("/api/tenants/:tenantId/openapi", openapiRoutes);
@@ -91,8 +173,7 @@ await t.test("GET /api/tenants/:tenantId/openapi/spec", async (t) => {
       headers: { Cookie: `auth_token=${user.token}` },
     });
     t.equal(res.status, 200);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data = (await res.json()) as any;
+    const data = SpecResponse.assert(await res.json());
     t.equal(data.spec, null);
     t.equal(data.hasSpec, false);
   });
@@ -116,10 +197,9 @@ await t.test("GET /api/tenants/:tenantId/openapi/spec", async (t) => {
       headers: { Cookie: `auth_token=${user.token}` },
     });
     t.equal(res.status, 200);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data = (await res.json()) as any;
+    const data = SpecResponse.assert(await res.json());
     t.equal(data.hasSpec, true);
-    t.ok(data.spec);
+    if (!data.spec) throw new Error("expected spec");
     t.equal(data.spec.openapi, OPENAPI_USPTO.openapi);
   });
 });
@@ -152,8 +232,7 @@ await t.test("DELETE /api/tenants/:tenantId/openapi/spec", async (t) => {
       headers: { Cookie: `auth_token=${user.token}` },
     });
     t.equal(res.status, 200);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data = (await res.json()) as any;
+    const data = DeleteSpecResponse.assert(await res.json());
     t.equal(data.success, true);
   });
 });
@@ -176,8 +255,7 @@ await t.test("POST /api/tenants/:tenantId/openapi/import", async (t) => {
       }),
     });
     t.equal(res.status, 400);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data = (await res.json()) as any;
+    const data = ErrorResponse.assert(await res.json());
     t.ok(data.error.includes("Invalid"));
   });
 
@@ -202,8 +280,7 @@ await t.test("POST /api/tenants/:tenantId/openapi/import", async (t) => {
       }),
     });
     t.equal(res.status, 400);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data = (await res.json()) as any;
+    const data = ErrorResponse.assert(await res.json());
     t.ok(data.error.includes("No paths"));
   });
 
@@ -222,8 +299,7 @@ await t.test("POST /api/tenants/:tenantId/openapi/import", async (t) => {
       body: JSON.stringify({ spec: OPENAPI_USPTO }),
     });
     t.equal(res.status, 200);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data = (await res.json()) as any;
+    const data = ImportResponse.assert(await res.json());
     t.equal(data.success, true);
     t.ok(data.created >= 2);
   });
@@ -280,8 +356,7 @@ await t.test("POST /api/tenants/:tenantId/openapi/import", async (t) => {
         },
       );
       t.equal(res.status, 200);
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const data = (await res.json()) as any;
+      const data = ImportResponse.assert(await res.json());
       t.equal(data.created, 0);
       t.ok(data.linked >= 2);
     },
@@ -311,8 +386,7 @@ await t.test("POST /api/tenants/:tenantId/openapi/import", async (t) => {
       body: JSON.stringify({ spec: specWithParams }),
     });
     t.equal(res.status, 200);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data = (await res.json()) as any;
+    const data = ImportResponse.assert(await res.json());
     t.equal(data.created, 2);
   });
 });
@@ -328,8 +402,7 @@ await t.test("GET /api/tenants/:tenantId/openapi/export", async (t) => {
       headers: { Cookie: `auth_token=${user.token}` },
     });
     t.equal(res.status, 200);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data = (await res.json()) as any;
+    const data = ExportResponse.assert(await res.json());
     t.ok(data.spec);
     t.equal(data.spec.openapi, "3.0.3");
   });
@@ -353,8 +426,7 @@ await t.test("GET /api/tenants/:tenantId/openapi/export", async (t) => {
       headers: { Cookie: `auth_token=${user.token}` },
     });
     t.equal(res.status, 200);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data = (await res.json()) as any;
+    const data = ExportResponse.assert(await res.json());
     t.ok(data.stats);
     t.ok(data.stats.totalEndpoints >= 2);
   });
@@ -380,9 +452,9 @@ await t.test("GET /api/tenants/:tenantId/openapi/export", async (t) => {
       headers: { Cookie: `auth_token=${user.token}` },
     });
     t.equal(res.status, 200);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data = (await res.json()) as any;
+    const data = ExportResponse.assert(await res.json());
     t.equal(data.stats.orphans, 1);
+    if (!data.warnings) throw new Error("expected data.warnings");
     t.ok(data.warnings.length > 0);
   });
 
@@ -408,8 +480,7 @@ await t.test("GET /api/tenants/:tenantId/openapi/export", async (t) => {
       { headers: { Cookie: `auth_token=${user.token}` } },
     );
     t.equal(res.status, 200);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data = (await res.json()) as any;
+    const data = ExportResponse.assert(await res.json());
     t.ok(Object.keys(data.spec.paths).length > 0);
   });
 
@@ -438,8 +509,7 @@ await t.test("GET /api/tenants/:tenantId/openapi/export", async (t) => {
       headers: { Cookie: `auth_token=${user.token}` },
     });
     t.equal(res.status, 200);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data = (await res.json()) as any;
+    const data = ExportResponse.assert(await res.json());
     t.equal(data.stats.totalEndpoints, 0);
   });
 });
@@ -465,8 +535,7 @@ await t.test(
         },
       );
       t.equal(res.status, 200);
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const data = (await res.json()) as any;
+      const data = ValidateResponse.assert(await res.json());
       t.equal(data.valid, false);
       t.equal(data.isValidRegex, false);
     });
@@ -489,8 +558,7 @@ await t.test(
         },
       );
       t.equal(res.status, 200);
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const data = (await res.json()) as any;
+      const data = ValidateResponse.assert(await res.json());
       t.equal(data.valid, true);
       t.equal(data.hasSpec, false);
       t.same(data.matches, []);
@@ -523,8 +591,7 @@ await t.test(
         },
       );
       t.equal(res.status, 200);
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const data = (await res.json()) as any;
+      const data = ValidateResponse.assert(await res.json());
       t.equal(data.valid, true);
       t.equal(data.isValidRegex, true);
     });
@@ -566,8 +633,8 @@ await t.test(
         },
       );
       t.equal(res.status, 200);
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const data = (await res.json()) as any;
+      const data = ValidateResponse.assert(await res.json());
+      if (!data.matches) throw new Error("expected data.matches");
       t.equal(data.matches.length, 2);
       t.ok(data.matches.includes("/api/users"));
       t.ok(data.matches.includes("/api/posts"));
@@ -610,8 +677,8 @@ await t.test(
         },
       );
       t.equal(res.status, 200);
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const data = (await res.json()) as any;
+      const data = ValidateResponse.assert(await res.json());
+      if (!data.matches) throw new Error("expected data.matches");
       t.equal(data.matches.length, 0);
       t.equal(data.totalSpecPaths, 3);
     });
@@ -647,8 +714,7 @@ await t.test(
         },
       );
       t.equal(res.status, 200);
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const data = (await res.json()) as any;
+      const data = ImportResponse.assert(await res.json());
       t.equal(data.created, 1);
       t.ok(data.paths.created.includes("/api/v3/users"));
     });
@@ -680,8 +746,7 @@ await t.test(
         },
       );
       t.equal(res.status, 200);
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const data = (await res.json()) as any;
+      const data = ImportResponse.assert(await res.json());
       t.equal(data.created, 2);
       t.ok(data.paths.created.includes("/api/users/"));
     });
@@ -735,8 +800,7 @@ await t.test(
         );
 
         t.equal(res.status, 200);
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const data = (await res.json()) as any;
+        const data = ImportResponse.assert(await res.json());
         // Should create 2 new paths
         t.equal(data.created, 2);
         t.ok(data.paths.created.includes("/api/v2/users"));
@@ -775,8 +839,7 @@ await t.test(
       );
 
       t.equal(res.status, 200);
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const data = (await res.json()) as any;
+      const data = ImportResponse.assert(await res.json());
       t.equal(data.created, 50);
     });
   },
@@ -826,9 +889,9 @@ await t.test(
           },
         );
         t.equal(res.status, 200);
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const data = (await res.json()) as any;
+        const data = ValidateResponse.assert(await res.json());
         t.equal(data.hasSpec, false);
+        if (!data.matches) throw new Error("expected data.matches");
         t.equal(data.matches.length, 0);
       },
     );
@@ -882,21 +945,21 @@ await t.test("OpenAPI spec auto-sync with endpoint mutations", async (t) => {
         },
       );
       t.equal(specRes.status, 200);
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const specData = (await specRes.json()) as any;
+      const specData = SpecResponse.assert(await specRes.json());
       t.equal(specData.hasSpec, true);
 
-      const spec = specData.spec;
+      const spec = ExportedSpec.assert(specData.spec);
       // Original info preserved
-      t.equal(spec.info.title, "USPTO Data Set API");
-      t.equal(spec.info.version, "1.0.0");
+      t.equal(spec.info?.title, "USPTO Data Set API");
+      t.equal(spec.info?.version, "1.0.0");
       // Original servers preserved
       t.ok(spec.servers);
-      t.equal(spec.servers.length, 1);
+      t.equal(spec.servers?.length, 1);
       // Original components preserved
       t.ok(spec.components);
       // Imported paths preserved (with lineage endpoints still active)
       t.ok(
+        // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- checking if either path exists
         spec.paths["/{dataset}/{version}/fields"] ||
           spec.paths["/{dataset}/{version}/records"],
       );
@@ -933,9 +996,7 @@ await t.test("OpenAPI spec auto-sync with endpoint mutations", async (t) => {
 
       // Find the fields endpoint
       const fieldsEndpoint = endpoints.find(
-        (e) =>
-          (e.openapi_source_paths as string[] | null)?.[0] ===
-          "/{dataset}/{version}/fields",
+        (e) => e.openapi_source_paths?.[0] === "/{dataset}/{version}/fields",
       );
       if (!fieldsEndpoint) {
         t.fail("expected fieldsEndpoint");
@@ -962,8 +1023,7 @@ await t.test("OpenAPI spec auto-sync with endpoint mutations", async (t) => {
         t.fail("expected tenantRow");
         return;
       }
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const spec = tenantRow.openapi_spec as any;
+      const spec = OpenApiSpec.assert(tenantRow.openapi_spec);
       t.notOk(spec.paths["/{dataset}/{version}/fields"]);
       // Other path should still exist
       t.ok(spec.paths["/{dataset}/{version}/records"]);
@@ -991,9 +1051,9 @@ await t.test("OpenAPI spec auto-sync with endpoint mutations", async (t) => {
         },
       );
       t.equal(importRes.status, 200);
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const importData = (await importRes.json()) as any;
-      const importedCount = importData.created + importData.linked;
+      const importData = ImportResponse.assert(await importRes.json());
+      const importedCount =
+        (importData.created ?? 0) + (importData.linked ?? 0);
 
       // Add manual endpoint
       const { syncOpenApiSpec } = await import("../lib/openapi-sync.js");
@@ -1022,8 +1082,7 @@ await t.test("OpenAPI spec auto-sync with endpoint mutations", async (t) => {
         t.fail("expected tenantRow");
         return;
       }
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      let spec = tenantRow.openapi_spec as any;
+      let spec = OpenApiSpec.assert(tenantRow.openapi_spec);
       t.ok(spec.paths["/health"], "manual endpoint present after add");
       const pathCountWithManual = Object.keys(spec.paths).length;
       t.equal(pathCountWithManual, importedCount + 1);
@@ -1047,14 +1106,14 @@ await t.test("OpenAPI spec auto-sync with endpoint mutations", async (t) => {
         t.fail("expected tenantRow after remove");
         return;
       }
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      spec = tenantRow.openapi_spec as any;
+      spec = OpenApiSpec.assert(tenantRow.openapi_spec);
       t.notOk(spec.paths["/health"], "manual endpoint gone after remove");
       t.equal(Object.keys(spec.paths).length, importedCount);
       // Original imported paths still intact
       t.ok(spec.paths["/{dataset}/{version}/fields"]);
       t.ok(spec.paths["/{dataset}/{version}/records"]);
       // Original spec metadata preserved
+      if (!spec.info) throw new Error("expected spec.info");
       t.equal(spec.info.title, "USPTO Data Set API");
       t.ok(spec.servers);
       t.ok(spec.components);
@@ -1099,8 +1158,7 @@ async function exportSpec(
   const res = await app.request(url, {
     headers: { Cookie: `auth_token=${token}` },
   });
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  return { res, data: (await res.json()) as any };
+  return { res, data: ExportResponse.assert(await res.json()) };
 }
 
 async function setupTenant() {
@@ -1140,22 +1198,20 @@ await t.test("x-402 export extensions", async (t) => {
 
       const { data } = await exportSpec(tenant.id, user.token);
 
-      t.equal(data.spec.paths["/api/users"]["x-faremeter-pricing"].price, 500);
-      t.equal(
-        data.spec.paths["/api/users"]["x-faremeter-pricing"].scheme,
-        "exact",
-      );
+      const usersFm = fmPath(data.spec.paths["/api/users"]);
+      if (!usersFm["x-faremeter-pricing"]) throw new Error("expected pricing");
+      t.equal(usersFm["x-faremeter-pricing"].price, 500);
+      t.equal(usersFm["x-faremeter-pricing"].scheme, "exact");
       t.notOk(
-        data.spec.paths["/api/users"]["x-faremeter-pricing"].endpoint_id,
+        usersFm["x-faremeter-pricing"].endpoint_id,
         "endpoint_id should not be exported",
       );
 
-      t.equal(data.spec.paths["/api/posts"]["x-faremeter-pricing"].price, 0);
-      t.equal(
-        data.spec.paths["/api/posts"]["x-faremeter-pricing"].scheme,
-        "exact",
-      );
-      t.notOk(data.spec.paths["/api/posts"]["x-faremeter-pricing"].endpoint_id);
+      const postsFm = fmPath(data.spec.paths["/api/posts"]);
+      if (!postsFm["x-faremeter-pricing"]) throw new Error("expected pricing");
+      t.equal(postsFm["x-faremeter-pricing"].price, 0);
+      t.equal(postsFm["x-faremeter-pricing"].scheme, "exact");
+      t.notOk(postsFm["x-faremeter-pricing"].endpoint_id);
     },
   );
 
@@ -1178,7 +1234,7 @@ await t.test("x-402 export extensions", async (t) => {
 
     const { data } = await exportSpec(tenant.id, user.token);
 
-    t.same(data.spec.paths["/api/users"]["x-faremeter-tags"], [
+    t.same(fmPath(data.spec.paths["/api/users"])["x-faremeter-tags"], [
       "production",
       "v2",
     ]);
@@ -1198,7 +1254,7 @@ await t.test("x-402 export extensions", async (t) => {
     const { data } = await exportSpec(tenant.id, user.token);
 
     t.notOk(
-      data.spec.paths["/api/users"]["x-faremeter-tags"],
+      fmPath(data.spec.paths["/api/users"])["x-faremeter-tags"],
       "x-faremeter-tags should be absent when no tags",
     );
   });
@@ -1218,11 +1274,10 @@ await t.test("x-402 export extensions", async (t) => {
 
       const { data } = await exportSpec(tenant.id, user.token);
 
-      t.equal(data.spec.paths["/api/users"]["x-faremeter-pricing"].price, 0.01);
-      t.equal(
-        data.spec.paths["/api/users"]["x-faremeter-pricing"].scheme,
-        "exact",
-      );
+      const fm = fmPath(data.spec.paths["/api/users"]);
+      if (!fm["x-faremeter-pricing"]) throw new Error("expected pricing");
+      t.equal(fm["x-faremeter-pricing"].price, 0.01);
+      t.equal(fm["x-faremeter-pricing"].scheme, "exact");
     },
   );
 
@@ -1247,11 +1302,11 @@ await t.test("x-402 export extensions", async (t) => {
 
       const { data } = await exportSpec(tenant.id, user.token, true);
 
-      const orphanPath = data.spec.paths["/manual/endpoint"];
+      const orphanPath = fmPath(data.spec.paths["/manual/endpoint"]);
       t.ok(orphanPath, "orphan path should exist");
       t.equal(orphanPath["x-faremeter-orphan"], true);
-      t.equal(orphanPath["x-faremeter-pricing"].price, 250);
-      t.equal(orphanPath["x-faremeter-pricing"].scheme, "exact");
+      t.equal(orphanPath["x-faremeter-pricing"]?.price, 250);
+      t.equal(orphanPath["x-faremeter-pricing"]?.scheme, "exact");
       t.same(orphanPath["x-faremeter-tags"], ["internal"]);
     },
   );
@@ -1480,17 +1535,15 @@ await t.test("x-402 round-trip and deduplication", async (t) => {
         .where("is_active", "=", true)
         .execute();
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const usersEp = endpoints.find((e) => e.path === "/api/users") as any;
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const postsEp = endpoints.find((e) => e.path === "/api/posts") as any;
+      const usersEp = endpoints.find((e) => e.path === "/api/users");
+      const postsEp = endpoints.find((e) => e.path === "/api/posts");
 
-      t.ok(usersEp);
+      if (!usersEp) throw new Error("usersEp not found");
       t.equal(usersEp.price, 750);
       t.equal(usersEp.scheme, "exact");
       t.same(usersEp.tags, ["premium"]);
 
-      t.ok(postsEp);
+      if (!postsEp) throw new Error("postsEp not found");
       t.equal(postsEp.price, 0);
       t.equal(postsEp.scheme, "exact");
       t.same(postsEp.tags, ["free", "public"]);
@@ -1508,8 +1561,7 @@ await t.test("x-402 round-trip and deduplication", async (t) => {
         "/api/posts": { get: { summary: "List posts" } },
       });
       const firstRes = await importSpec(tenant.id, user.token, plainSpec);
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const firstData = (await firstRes.json()) as any;
+      const firstData = ImportResponse.assert(await firstRes.json());
       t.equal(firstData.created, 2);
 
       const countBefore = await db
@@ -1537,8 +1589,7 @@ await t.test("x-402 round-trip and deduplication", async (t) => {
         user.token,
         specWithExtensions,
       );
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const secondData = (await secondRes.json()) as any;
+      const secondData = ImportResponse.assert(await secondRes.json());
       t.equal(secondData.created, 0, "no new endpoints created");
       t.equal(secondData.linked, 2, "both linked to existing");
 
@@ -1613,8 +1664,14 @@ await t.test("x-402 round-trip and deduplication", async (t) => {
       "tenant B does not have tenant A's path",
     );
 
-    t.equal(exportA.spec.paths["/api/alpha"]["x-faremeter-pricing"].price, 100);
-    t.equal(exportB.spec.paths["/api/beta"]["x-faremeter-pricing"].price, 200);
+    t.equal(
+      fmPath(exportA.spec.paths["/api/alpha"])["x-faremeter-pricing"]?.price,
+      100,
+    );
+    t.equal(
+      fmPath(exportB.spec.paths["/api/beta"])["x-faremeter-pricing"]?.price,
+      200,
+    );
   });
 
   await t.test(
@@ -1667,8 +1724,7 @@ await t.test("x-402 round-trip and deduplication", async (t) => {
         user.token,
         exportData.spec,
       );
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const reimportData = (await reimportRes.json()) as any;
+      const reimportData = ImportResponse.assert(await reimportRes.json());
 
       // The orphan should be linked, not created as new
       t.equal(reimportData.created, 0, "no new endpoints should be created");
@@ -1721,8 +1777,7 @@ await t.test("x-402 import edge cases", async (t) => {
         "/api/users": { get: {} },
       });
       const res = await importSpec(tenant.id, user.token, plainSpec);
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const data = (await res.json()) as any;
+      const data = ImportResponse.assert(await res.json());
       t.equal(data.linked, 1, "should link, not create");
       t.equal(data.created, 0);
 
@@ -2057,20 +2112,20 @@ await t.test("x-402 import edge cases", async (t) => {
         .execute();
       t.equal(endpoints.length, 3, "all three paths should create endpoints");
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const valid = endpoints.find((e) => e.path === "/api/valid") as any;
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const none = endpoints.find((e) => e.path === "/api/none") as any;
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const invalid = endpoints.find((e) => e.path === "/api/invalid") as any;
+      const valid = endpoints.find((e) => e.path === "/api/valid");
+      const none = endpoints.find((e) => e.path === "/api/none");
+      const invalid = endpoints.find((e) => e.path === "/api/invalid");
 
+      if (!valid) throw new Error("valid endpoint not found");
       t.equal(valid.price, 100);
       t.equal(valid.scheme, "exact");
       t.same(valid.tags, ["production"]);
 
+      if (!none) throw new Error("none endpoint not found");
       t.equal(none.price, null, "no-extension path gets null");
       t.equal(none.scheme, null);
 
+      if (!invalid) throw new Error("invalid endpoint not found");
       t.equal(invalid.price, null, "invalid extensions get null");
       t.equal(invalid.scheme, null);
       t.same(invalid.tags, []);

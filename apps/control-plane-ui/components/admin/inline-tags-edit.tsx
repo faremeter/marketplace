@@ -53,7 +53,7 @@ export function InlineTagsEdit({
       let message = "Unknown error";
       if (err instanceof ApiError && err.data) {
         const data = err.data as { error?: string };
-        message = data.error || err.message;
+        message = data.error ?? err.message;
       } else if (err instanceof Error) {
         message = err.message;
       }
@@ -140,7 +140,7 @@ export function InlineTagsEdit({
                 Cancel
               </button>
               <button
-                onClick={handleSave}
+                onClick={() => void handleSave()}
                 disabled={!tagsChanged || isSaving}
                 className="inline-flex items-center gap-1 rounded bg-accent-9 px-2 py-1 text-xs text-white hover:bg-accent-10 disabled:opacity-50"
               >

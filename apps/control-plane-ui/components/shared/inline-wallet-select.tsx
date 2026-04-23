@@ -80,7 +80,7 @@ export function InlineWalletSelect({
   return (
     <Select.Root
       value={currentWalletId?.toString() ?? "none"}
-      onValueChange={handleChange}
+      onValueChange={(value) => void handleChange(value)}
       open={isOpen}
       onOpenChange={setIsOpen}
     >

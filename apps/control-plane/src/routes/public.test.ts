@@ -1,5 +1,6 @@
 import "../tests/setup/env.js";
 import t from "tap";
+import { type } from "arktype";
 import { Hono } from "hono";
 import { db, setupTestSchema, clearTestData } from "../db/instance.js";
 import { signToken } from "../middleware/auth.js";
@@ -23,8 +24,7 @@ await t.test("POST /api/waitlist", async (t) => {
     });
 
     t.equal(res.status, 200);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data = (await res.json()) as any;
+    const data = type({ success: "true" }).assert(await res.json());
     t.same(data, { success: true });
 
     const entry = await db
@@ -105,8 +105,12 @@ await t.test("GET /api/invitations/:token", async (t) => {
     const res = await app.request("/api/invitations/test-token-123");
     t.equal(res.status, 200);
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data = (await res.json()) as any;
+    const InvitationResponse = type({
+      email: "string",
+      organization_name: "string",
+      "+": "delete",
+    });
+    const data = InvitationResponse.assert(await res.json());
     t.equal(data.email, "invited@example.com");
     t.equal(data.organization_name, "Test Org");
   });
@@ -192,8 +196,12 @@ await t.test("GET /api/invitations/:token with auth", async (t) => {
     });
 
     t.equal(res.status, 200);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data = (await res.json()) as any;
+    const AuthInvitationResponse = type({
+      emailMatch: "boolean",
+      currentUserEmail: "string",
+      "+": "delete",
+    });
+    const data = AuthInvitationResponse.assert(await res.json());
     t.equal(data.emailMatch, true);
     t.equal(data.currentUserEmail, "match@example.com");
   });
@@ -232,8 +240,9 @@ await t.test("GET /api/invitations/:token with auth", async (t) => {
     });
 
     t.equal(res.status, 200);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data = (await res.json()) as any;
+    const data = type({ emailMatch: "boolean", "+": "delete" }).assert(
+      await res.json(),
+    );
     t.equal(data.emailMatch, false);
   });
 });
@@ -433,8 +442,12 @@ await t.test("POST /api/invitations/:token/accept", async (t) => {
     });
 
     t.equal(res.status, 200);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data = (await res.json()) as any;
+    const AcceptResponse = type({
+      success: "true",
+      organization: { name: "string", "+": "delete" },
+      "+": "delete",
+    });
+    const data = AcceptResponse.assert(await res.json());
     t.equal(data.success, true);
     t.equal(data.organization.name, "Join Org");
 

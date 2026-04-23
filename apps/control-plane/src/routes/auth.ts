@@ -286,7 +286,7 @@ authRoutes.post("/stop-impersonation", requireAuth, async (c) => {
     .where("id", "=", payload.userId)
     .executeTakeFirst();
 
-  if (!admin || !admin.is_admin) {
+  if (!admin?.is_admin) {
     return c.json({ error: "Invalid admin token" }, 401);
   }
 

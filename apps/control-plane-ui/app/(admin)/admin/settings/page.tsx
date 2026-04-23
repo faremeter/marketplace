@@ -418,7 +418,7 @@ function FundingAmountEditor({
             </button>
           </div>
           <button
-            onClick={handleSave}
+            onClick={() => void handleSave()}
             disabled={isSaving}
             className="inline-flex items-center gap-1 rounded-md bg-white px-3 py-1.5 text-sm font-medium text-black disabled:opacity-50"
           >
@@ -518,7 +518,7 @@ function MasterWalletDisplay({
         <h3 className="text-sm font-medium text-gray-12">Master Wallet</h3>
         <div className="flex gap-2">
           <button
-            onClick={handleRefresh}
+            onClick={() => void handleRefresh()}
             disabled={isRefreshing}
             className="flex items-center gap-2 rounded-md border border-gray-6 px-3 py-1.5 text-sm text-gray-11 hover:bg-gray-3 disabled:opacity-50"
           >
@@ -551,7 +551,7 @@ function MasterWalletDisplay({
                 <Tooltip.Root>
                   <Tooltip.Trigger asChild>
                     <button
-                      onClick={() => copyToClipboard(solanaAddress)}
+                      onClick={() => void copyToClipboard(solanaAddress)}
                       className="rounded-md border border-gray-6 p-2 text-gray-11 hover:bg-gray-3 hover:text-gray-12"
                     >
                       {copiedAddress === solanaAddress ? (
@@ -590,7 +590,7 @@ function MasterWalletDisplay({
                 <Tooltip.Root>
                   <Tooltip.Trigger asChild>
                     <button
-                      onClick={() => copyToClipboard(evmAddress)}
+                      onClick={() => void copyToClipboard(evmAddress)}
                       className="rounded-md border border-gray-6 p-2 text-gray-11 hover:bg-gray-3 hover:text-gray-12"
                     >
                       {copiedAddress === evmAddress ? (
@@ -701,15 +701,15 @@ function EmailSettingsSection({
   const [validationError, setValidationError] = useState("");
 
   const handleEdit = () => {
-    setFromEmail(emailSettings?.from_email || "");
-    setSiteUrl(emailSettings?.site_url || "");
+    setFromEmail(emailSettings?.from_email ?? "");
+    setSiteUrl(emailSettings?.site_url ?? "");
     setVerificationId(
-      emailSettings?.template_ids?.verification?.toString() || "",
+      emailSettings?.template_ids?.verification?.toString() ?? "",
     );
-    setWelcomeId(emailSettings?.template_ids?.welcome?.toString() || "");
-    setInvitationId(emailSettings?.template_ids?.invitation?.toString() || "");
+    setWelcomeId(emailSettings?.template_ids?.welcome?.toString() ?? "");
+    setInvitationId(emailSettings?.template_ids?.invitation?.toString() ?? "");
     setPasswordResetId(
-      emailSettings?.template_ids?.password_reset?.toString() || "",
+      emailSettings?.template_ids?.password_reset?.toString() ?? "",
     );
     setCustomVars(
       emailSettings?.custom_variables
@@ -996,7 +996,7 @@ function EmailSettingsSection({
               Cancel
             </button>
             <button
-              onClick={handleSave}
+              onClick={() => void handleSave()}
               disabled={isSaving}
               className="rounded-md bg-white px-4 py-2 text-sm font-medium text-black shadow-button transition-colors hover:bg-white/90 disabled:opacity-50"
             >
@@ -1011,7 +1011,7 @@ function EmailSettingsSection({
               From Email
             </label>
             <p className="text-sm text-gray-12">
-              {emailSettings?.from_email || (
+              {emailSettings?.from_email ?? (
                 <span className="text-gray-8">Not configured</span>
               )}
             </p>
@@ -1020,7 +1020,7 @@ function EmailSettingsSection({
           <div className="rounded-lg border border-gray-6 bg-gray-2 p-4">
             <label className="block text-xs text-gray-11 mb-1">Site URL</label>
             <p className="text-sm text-gray-12">
-              {emailSettings?.site_url || (
+              {emailSettings?.site_url ?? (
                 <span className="text-gray-8">Not configured</span>
               )}
             </p>
@@ -1034,7 +1034,7 @@ function EmailSettingsSection({
               <div>
                 <span className="text-xs text-gray-11">Verification</span>
                 <p className="text-sm font-mono text-gray-12">
-                  {emailSettings?.template_ids?.verification || (
+                  {emailSettings?.template_ids?.verification ?? (
                     <span className="text-gray-8">-</span>
                   )}
                 </p>
@@ -1042,7 +1042,7 @@ function EmailSettingsSection({
               <div>
                 <span className="text-xs text-gray-11">Welcome</span>
                 <p className="text-sm font-mono text-gray-12">
-                  {emailSettings?.template_ids?.welcome || (
+                  {emailSettings?.template_ids?.welcome ?? (
                     <span className="text-gray-8">-</span>
                   )}
                 </p>
@@ -1050,7 +1050,7 @@ function EmailSettingsSection({
               <div>
                 <span className="text-xs text-gray-11">Invitation</span>
                 <p className="text-sm font-mono text-gray-12">
-                  {emailSettings?.template_ids?.invitation || (
+                  {emailSettings?.template_ids?.invitation ?? (
                     <span className="text-gray-8">-</span>
                   )}
                 </p>
@@ -1058,7 +1058,7 @@ function EmailSettingsSection({
               <div>
                 <span className="text-xs text-gray-11">Password Reset</span>
                 <p className="text-sm font-mono text-gray-12">
-                  {emailSettings?.template_ids?.password_reset || (
+                  {emailSettings?.template_ids?.password_reset ?? (
                     <span className="text-gray-8">-</span>
                   )}
                 </p>
@@ -1342,7 +1342,7 @@ export default function AdminSettingsPage() {
       <WalletSetupModal
         open={showWalletModal}
         onOpenChange={setShowWalletModal}
-        onSave={handleSaveWallet}
+        onSave={(config) => void handleSaveWallet(config)}
         isSaving={isSaving}
       />
     </div>

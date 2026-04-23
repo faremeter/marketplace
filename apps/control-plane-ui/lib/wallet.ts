@@ -46,7 +46,7 @@ export function deriveSolanaAddress(
     // Try parsing as JSON array first (e.g., "[1,2,3,...]")
     const trimmed = privateKey.trim();
     if (trimmed.startsWith("[")) {
-      const parsed = JSON.parse(trimmed);
+      const parsed: unknown = JSON.parse(trimmed);
       if (!Array.isArray(parsed)) {
         return null;
       }

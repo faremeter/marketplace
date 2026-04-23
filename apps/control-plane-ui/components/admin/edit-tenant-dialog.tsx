@@ -207,7 +207,7 @@ export function EditTenantDialog({
               Cancel
             </button>
             <button
-              onClick={handleSave}
+              onClick={() => void handleSave()}
               disabled={isSaving}
               className="rounded-md bg-accent-9 px-3 py-2 text-sm font-medium text-white hover:bg-accent-10 disabled:opacity-50"
             >

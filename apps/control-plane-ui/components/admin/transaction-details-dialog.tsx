@@ -20,7 +20,7 @@ interface Transaction {
   request_path: string;
   client_ip: string | null;
   request_method: string | null;
-  metadata: unknown | null;
+  metadata: unknown;
   ngx_request_id: string;
   created_at: string;
 }

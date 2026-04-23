@@ -1,9 +1,40 @@
 import "../tests/setup/env.js";
 import t from "tap";
+import { type } from "arktype";
 import { Hono } from "hono";
 import { db, setupTestSchema, clearTestData } from "../db/instance.js";
 import { signToken } from "../middleware/auth.js";
 import { tenantsRoutes } from "./tenants.js";
+
+const TenantResponse = type({
+  "id?": "number",
+  "name?": "string",
+  "backend_url?": "string",
+  "default_price?": "number",
+  "default_scheme?": "string",
+  "status?": "string",
+  "is_active?": "boolean",
+  "upstream_auth_header?": "string | null",
+  "+": "delete",
+});
+
+const ErrorResponse = type({
+  error: "string",
+  "+": "delete",
+});
+
+const DeleteResponse = type({
+  deleted: "boolean",
+  "+": "delete",
+});
+
+const NodeAssignment = type({
+  "node_name?": "string",
+  "is_primary?": "boolean",
+  "tenant_id?": "number",
+  "node_id?": "number",
+  "+": "delete",
+});
 
 const app = new Hono();
 app.route("/api/tenants", tenantsRoutes);
@@ -107,8 +138,7 @@ await t.test("GET /api/tenants", async (t) => {
       headers: { Cookie: `auth_token=${token}` },
     });
     t.equal(res.status, 200);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data = (await res.json()) as any;
+    const data = TenantResponse.array().assert(await res.json());
     t.same(data, []);
   });
 
@@ -139,8 +169,7 @@ await t.test("GET /api/tenants", async (t) => {
       headers: { Cookie: `auth_token=${token}` },
     });
     t.equal(res.status, 200);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data = (await res.json()) as any;
+    const data = TenantResponse.array().assert(await res.json());
     t.equal(data.length, 2);
   });
 });
@@ -172,8 +201,7 @@ await t.test("GET /api/tenants/:id", async (t) => {
       headers: { Cookie: `auth_token=${token}` },
     });
     t.equal(res.status, 200);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data = (await res.json()) as any;
+    const data = TenantResponse.assert(await res.json());
     t.equal(data.name, "my-tenant");
     t.equal(data.backend_url, "http://backend.com");
   });
@@ -196,8 +224,7 @@ await t.test("POST /api/tenants", async (t) => {
     });
 
     t.equal(res.status, 201);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data = (await res.json()) as any;
+    const data = TenantResponse.assert(await res.json());
     t.equal(data.name, "new-tenant");
     t.equal(data.backend_url, "http://new-backend.com");
     t.equal(data.default_price, 0);
@@ -224,8 +251,7 @@ await t.test("POST /api/tenants", async (t) => {
     });
 
     t.equal(res.status, 201);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data = (await res.json()) as any;
+    const data = TenantResponse.assert(await res.json());
     t.equal(data.default_price, 0.1);
     t.equal(data.default_scheme, "exact");
     t.equal(data.upstream_auth_header, "X-API-Key");
@@ -247,8 +273,7 @@ await t.test("POST /api/tenants", async (t) => {
     });
 
     t.equal(res.status, 201);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data = (await res.json()) as any;
+    const data = TenantResponse.assert(await res.json());
     t.equal(data.name, "my-tenant-name");
   });
 
@@ -358,8 +383,7 @@ await t.test("POST /api/tenants", async (t) => {
     });
 
     t.equal(res.status, 201);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data = (await res.json()) as any;
+    const data = TenantResponse.assert(await res.json());
     t.equal(data.backend_url, "https://api.openai.com/v1/responses");
   });
 
@@ -379,8 +403,7 @@ await t.test("POST /api/tenants", async (t) => {
     });
 
     t.equal(res.status, 201);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data = (await res.json()) as any;
+    const data = TenantResponse.assert(await res.json());
     t.equal(data.status, "active");
   });
 
@@ -403,8 +426,7 @@ await t.test("POST /api/tenants", async (t) => {
       });
 
       t.equal(res.status, 201);
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const data = (await res.json()) as any;
+      const data = TenantResponse.assert(await res.json());
       t.equal(data.status, "registered");
       t.equal(data.is_active, false);
     },
@@ -456,8 +478,7 @@ await t.test("PUT /api/tenants/:id", async (t) => {
     });
 
     t.equal(res.status, 200);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data = (await res.json()) as any;
+    const data = TenantResponse.assert(await res.json());
     t.equal(data.name, "new-name");
     t.equal(data.backend_url, "http://new.com");
     t.equal(data.default_price, 0.05);
@@ -488,8 +509,7 @@ await t.test("PUT /api/tenants/:id", async (t) => {
     });
 
     t.equal(res.status, 400);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data = (await res.json()) as any;
+    const data = ErrorResponse.assert(await res.json());
     t.ok(data.error.includes("operation is in progress"));
   });
 
@@ -518,8 +538,7 @@ await t.test("PUT /api/tenants/:id", async (t) => {
     });
 
     t.equal(res.status, 200);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data = (await res.json()) as any;
+    const data = TenantResponse.assert(await res.json());
     t.equal(data.backend_url, "http://new-backend.com");
   });
 });
@@ -556,8 +575,7 @@ await t.test("DELETE /api/tenants/:id", async (t) => {
     });
 
     t.equal(res.status, 200);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data = (await res.json()) as any;
+    const data = DeleteResponse.assert(await res.json());
     t.equal(data.deleted, true);
 
     const check = await db
@@ -782,8 +800,7 @@ await t.test("DELETE /api/tenants/:id", async (t) => {
     });
 
     t.equal(res.status, 200);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data = (await res.json()) as any;
+    const data = DeleteResponse.assert(await res.json());
     t.equal(data.deleted, true);
   });
 
@@ -869,8 +886,7 @@ await t.test("GET /api/tenants/:id/nodes", async (t) => {
     });
 
     t.equal(res.status, 200);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data = (await res.json()) as any;
+    const data = NodeAssignment.array().assert(await res.json());
     t.same(data, []);
   });
 
@@ -913,10 +929,11 @@ await t.test("GET /api/tenants/:id/nodes", async (t) => {
     });
 
     t.equal(res.status, 200);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data = (await res.json()) as any;
+    const data = NodeAssignment.array().assert(await res.json());
     t.equal(data.length, 1);
+    if (!data[0]) throw new Error("expected data[0]");
     t.equal(data[0].node_name, "node1");
+    if (!data[0]) throw new Error("expected data[0]");
     t.equal(data[0].is_primary, true);
   });
 });
@@ -946,8 +963,7 @@ await t.test("POST /api/tenants/:id/nodes", async (t) => {
     });
 
     t.equal(res.status, 404);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data = (await res.json()) as any;
+    const data = ErrorResponse.assert(await res.json());
     t.equal(data.error, "Tenant not found");
   });
 
@@ -975,8 +991,7 @@ await t.test("POST /api/tenants/:id/nodes", async (t) => {
     });
 
     t.equal(res.status, 404);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data = (await res.json()) as any;
+    const data = ErrorResponse.assert(await res.json());
     t.equal(data.error, "Node not found");
   });
 
@@ -1014,8 +1029,7 @@ await t.test("POST /api/tenants/:id/nodes", async (t) => {
     });
 
     t.equal(res.status, 400);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data = (await res.json()) as any;
+    const data = ErrorResponse.assert(await res.json());
     t.ok(data.error.includes("public IP"));
   });
 
@@ -1063,8 +1077,7 @@ await t.test("POST /api/tenants/:id/nodes", async (t) => {
     });
 
     t.equal(res.status, 409);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data = (await res.json()) as any;
+    const data = ErrorResponse.assert(await res.json());
     t.ok(data.error.includes("already assigned"));
   });
 
@@ -1105,8 +1118,7 @@ await t.test("POST /api/tenants/:id/nodes", async (t) => {
       });
 
       t.equal(res.status, 201);
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const data = (await res.json()) as any;
+      const data = NodeAssignment.assert(await res.json());
       t.equal(data.tenant_id, tenant.id);
       t.equal(data.node_id, node.id);
       t.equal(data.is_primary, false);
@@ -1148,8 +1160,7 @@ await t.test("POST /api/tenants/:id/nodes", async (t) => {
     });
 
     t.equal(res.status, 201);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data = (await res.json()) as any;
+    const data = NodeAssignment.assert(await res.json());
     t.equal(data.is_primary, true);
   });
 
@@ -1440,8 +1451,7 @@ await t.test("DELETE /api/tenants/:id/nodes/:nodeId", async (t) => {
     );
 
     t.equal(res.status, 200);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data = (await res.json()) as any;
+    const data = DeleteResponse.assert(await res.json());
     t.equal(data.deleted, true);
 
     const check = await db
@@ -1496,8 +1506,7 @@ await t.test("DELETE /api/tenants/:id/nodes/:nodeId", async (t) => {
     );
 
     t.equal(res.status, 200);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data = (await res.json()) as any;
+    const data = DeleteResponse.assert(await res.json());
     t.equal(data.deleted, true);
 
     const nodes = await db

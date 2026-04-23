@@ -270,7 +270,9 @@ export async function buildTenantGatewaySpec(
     endpoints,
     tokenPrices: tokenPrices.map((tp) => ({
       ...tp,
-      amount: String(tp.amount),
+      // SQLite returns integer columns as numbers; coerce to string to match
+      // the production Postgres schema where amount is bigint (text).
+      amount: String(tp.amount), // eslint-disable-line @typescript-eslint/no-unnecessary-type-conversion -- runtime type differs from Kysely schema
     })),
   });
 }
@@ -323,7 +325,7 @@ function buildPricingRules(
           recipient,
         };
       }
-      result.rules.push({ match: "true", capture: String(tp.amount) });
+      result.rules.push({ match: "true", capture: tp.amount });
     }
   } else if (tenantPrices.length > 0) {
     // Fall back to tenant-level token prices combined with endpoint.price

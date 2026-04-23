@@ -31,7 +31,12 @@ export function createMockFetch(): typeof fetch {
     input: string | URL | Request,
     init?: RequestInit,
   ): Promise<Response> => {
-    const url = typeof input === "string" ? input : input.toString();
+    const url =
+      typeof input === "string"
+        ? input
+        : input instanceof URL
+          ? input.href
+          : input.url;
 
     for (const [pattern, handler] of handlers) {
       if (url.includes(pattern)) {

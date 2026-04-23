@@ -76,7 +76,7 @@ adminRoutes.get("/analytics", async (c) => {
 });
 
 adminRoutes.get("/telemetry", async (c) => {
-  const type = c.req.query("type") || "all";
+  const type = c.req.query("type") ?? "all";
   if (!["all", "search", "view"].includes(type)) {
     return c.json({ error: "type must be 'all', 'search', or 'view'" }, 400);
   }
@@ -89,7 +89,7 @@ adminRoutes.get("/telemetry", async (c) => {
     return c.json({ error: "Invalid 'to' date" }, 400);
   }
   const limit = Math.min(
-    parseInt(c.req.query("limit") || "100", 10) || 100,
+    parseInt(c.req.query("limit") ?? "100", 10) || 100,
     500,
   );
 
@@ -127,7 +127,7 @@ adminRoutes.get("/telemetry/top-searches", async (c) => {
   if (to && isNaN(Date.parse(to))) {
     return c.json({ error: "Invalid 'to' date" }, 400);
   }
-  const limit = Math.min(parseInt(c.req.query("limit") || "20", 10) || 20, 100);
+  const limit = Math.min(parseInt(c.req.query("limit") ?? "20", 10) || 20, 100);
 
   try {
     let query = db
@@ -163,7 +163,7 @@ adminRoutes.get("/telemetry/top-proxies", async (c) => {
   if (to && isNaN(Date.parse(to))) {
     return c.json({ error: "Invalid 'to' date" }, 400);
   }
-  const limit = Math.min(parseInt(c.req.query("limit") || "20", 10) || 20, 100);
+  const limit = Math.min(parseInt(c.req.query("limit") ?? "20", 10) || 20, 100);
 
   try {
     let query = db
@@ -200,7 +200,7 @@ adminRoutes.get("/telemetry/top-proxies", async (c) => {
 adminRoutes.get("/telemetry/timeseries", async (c) => {
   const from = c.req.query("from");
   const to = c.req.query("to");
-  const type = c.req.query("type") || "all";
+  const type = c.req.query("type") ?? "all";
   if (!["all", "search", "view"].includes(type)) {
     return c.json({ error: "type must be 'all', 'search', or 'view'" }, 400);
   }
@@ -385,6 +385,7 @@ adminRoutes.post("/organizations", async (c) => {
     return c.json({ error: "Name is required" }, 400);
   }
 
+  // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- empty string slug must fall through to slugify
   let slug = body.slug || slugify(body.name);
 
   const maxRetries = 5;
@@ -397,6 +398,7 @@ adminRoutes.post("/organizations", async (c) => {
 
     if (!existingSlug) break;
 
+    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- empty string slug must fall through to slugify
     const baseSlug = body.slug || slugify(body.name);
     slug = `${baseSlug}-${generateSlugSuffix()}`;
   }
@@ -836,21 +838,24 @@ adminRoutes.post(
             nodeId,
             node.public_ip,
             healthCheckId,
-          ).catch((err) => logger.error(`Failed to create DNS record: ${err}`));
+          ).catch((err: unknown) =>
+            logger.error(`Failed to create DNS record: ${err}`),
+          );
         }
 
         if (node.status === "active") {
           activeNodeIds.push(nodeId);
         }
 
-        syncToNode(nodeId).catch((err) => logger.error(String(err)));
+        syncToNode(nodeId).catch((err: unknown) => logger.error(String(err)));
       }
     }
 
     // Skip cert provisioning for registered tenants
     if (!isRegisterOnly && activeNodeIds.length > 0) {
       enqueueCertProvisioning(activeNodeIds, sanitizedName, orgSlug).catch(
-        (err) => logger.error(`Failed to enqueue cert provisioning: ${err}`),
+        (err: unknown) =>
+          logger.error(`Failed to enqueue cert provisioning: ${err}`),
       );
     }
 
@@ -878,7 +883,7 @@ adminRoutes.post(
         };
 
         setupAccountWithAddresses(tenant.name, accessToken, addresses).catch(
-          (err) =>
+          (err: unknown) =>
             logger.error(
               `Failed to setup faremeter dash account for ${tenant.name}: ${err}`,
             ),
@@ -942,7 +947,7 @@ adminRoutes.put(
 
       const targetOrgSlug =
         body.org_slug !== undefined
-          ? body.org_slug || null
+          ? body.org_slug || null // eslint-disable-line @typescript-eslint/prefer-nullish-coalescing -- empty string means clear
           : derivedOrgSlug !== undefined
             ? derivedOrgSlug
             : tenant.org_slug;
@@ -1140,7 +1145,7 @@ adminRoutes.put(
       .execute();
 
     for (const tn of tenantNodes) {
-      syncToNode(tn.node_id).catch((err) => logger.error(String(err)));
+      syncToNode(tn.node_id).catch((err: unknown) => logger.error(String(err)));
     }
 
     if (newWalletConfig) {
@@ -1151,7 +1156,7 @@ adminRoutes.put(
         monad: newWalletConfig.evm?.monad?.address,
       };
 
-      updateAccountAddresses(tenant.name, addresses).catch((err) =>
+      updateAccountAddresses(tenant.name, addresses).catch((err: unknown) =>
         logger.error(
           `Failed to update faremeter dash addresses for ${tenant.name}: ${err}`,
         ),
@@ -1265,14 +1270,16 @@ adminRoutes.post("/tenants/:id/activate", async (c) => {
         tn.node_id,
         tn.public_ip,
         healthCheckId,
-      ).catch((err) => logger.error(`Failed to create DNS record: ${err}`));
+      ).catch((err: unknown) =>
+        logger.error(`Failed to create DNS record: ${err}`),
+      );
     }
 
     if (tn.node_status === "active") {
       activeNodeIds.push(tn.node_id);
     }
 
-    syncToNode(tn.node_id).catch((err) => logger.error(String(err)));
+    syncToNode(tn.node_id).catch((err: unknown) => logger.error(String(err)));
   }
 
   if (activeNodeIds.length > 0) {
@@ -1280,7 +1287,7 @@ adminRoutes.post("/tenants/:id/activate", async (c) => {
       activeNodeIds,
       tenant.name,
       tenant.org_slug ?? null,
-    ).catch((err) =>
+    ).catch((err: unknown) =>
       logger.error(`Failed to enqueue cert provisioning: ${err}`),
     );
   }
@@ -1296,7 +1303,7 @@ adminRoutes.post("/tenants/:id/activate", async (c) => {
     };
 
     setupAccountWithAddresses(tenant.name, accessToken, addresses).catch(
-      (err) =>
+      (err: unknown) =>
         logger.error(
           `Failed to setup faremeter dash account for ${tenant.name}: ${err}`,
         ),
@@ -1443,16 +1450,19 @@ adminRoutes.post(
         nodeId,
         node.public_ip,
         healthCheckId,
-      ).catch((err) => logger.error(`Failed to create DNS record: ${err}`));
+      ).catch((err: unknown) =>
+        logger.error(`Failed to create DNS record: ${err}`),
+      );
     }
 
     if (node.status === "active") {
       enqueueCertProvisioning([nodeId], tenant.name, domainInfo.orgSlug).catch(
-        (err) => logger.error(`Failed to enqueue cert provisioning: ${err}`),
+        (err: unknown) =>
+          logger.error(`Failed to enqueue cert provisioning: ${err}`),
       );
     }
 
-    syncToNode(nodeId).catch((err) => logger.error(String(err)));
+    syncToNode(nodeId).catch((err: unknown) => logger.error(String(err)));
 
     return c.json({ success: true, is_primary: isPrimary }, 201);
   },
@@ -1530,13 +1540,13 @@ adminRoutes.delete("/tenants/:id/nodes/:nodeId", async (c) => {
             .where("id", "=", nextNode.id)
             .execute();
 
-          syncToNode(nextNode.node_id).catch((err) =>
+          syncToNode(nextNode.node_id).catch((err: unknown) =>
             logger.error(String(err)),
           );
         }
       }
 
-      syncToNode(nodeId).catch((err) => logger.error(String(err)));
+      syncToNode(nodeId).catch((err: unknown) => logger.error(String(err)));
       logger.info(`Removed node ${nodeId} from tenant ${tenant.name}`);
     } catch (err) {
       logger.error(
@@ -1550,7 +1560,7 @@ adminRoutes.delete("/tenants/:id/nodes/:nodeId", async (c) => {
     }
   };
 
-  cleanup();
+  void cleanup();
 
   return c.json({ success: true });
 });
@@ -1631,9 +1641,9 @@ adminRoutes.put(
       .execute();
 
     for (const tn of tenantNodes) {
-      syncToNode(tn.node_id).catch((err) => logger.error(String(err)));
+      syncToNode(tn.node_id).catch((err: unknown) => logger.error(String(err)));
     }
-    syncOpenApiSpec(tenantId).catch((err) =>
+    syncOpenApiSpec(tenantId).catch((err: unknown) =>
       logger.error(
         `Failed to sync OpenAPI spec for tenant ${tenantId}: ${err}`,
       ),
@@ -1670,9 +1680,9 @@ adminRoutes.delete("/tenants/:tenantId/endpoints/:endpointId", async (c) => {
     .execute();
 
   for (const tn of tenantNodes) {
-    syncToNode(tn.node_id).catch((err) => logger.error(String(err)));
+    syncToNode(tn.node_id).catch((err: unknown) => logger.error(String(err)));
   }
-  syncOpenApiSpec(tenantId).catch((err) =>
+  syncOpenApiSpec(tenantId).catch((err: unknown) =>
     logger.error(`Failed to sync OpenAPI spec for tenant ${tenantId}: ${err}`),
   );
 
@@ -1733,7 +1743,7 @@ adminRoutes.get("/transactions", async (c) => {
 
   return c.json({
     transactions,
-    total: countResult?.count || 0,
+    total: Number(countResult?.count ?? 0), // eslint-disable-line @typescript-eslint/no-unnecessary-type-conversion -- pg driver returns bigint aggregates as strings
     limit,
     offset,
   });
@@ -1780,7 +1790,7 @@ adminRoutes.get("/tenants/:id/transactions", async (c) => {
 
   return c.json({
     transactions,
-    total: countResult?.count || 0,
+    total: Number(countResult?.count ?? 0), // eslint-disable-line @typescript-eslint/no-unnecessary-type-conversion -- pg driver returns bigint aggregates as strings
     limit,
     offset,
   });
@@ -2026,13 +2036,15 @@ adminRoutes.get("/stats", async (c) => {
         .executeTakeFirst(),
     ]);
 
+  /* eslint-disable @typescript-eslint/no-unnecessary-type-conversion -- pg driver returns bigint aggregates as strings */
   return c.json({
-    users: usersCount?.count || 0,
-    organizations: orgsCount?.count || 0,
-    tenants: tenantsCount?.count || 0,
-    nodes: nodesCount?.count || 0,
-    transactions: transactionsCount?.count || 0,
+    users: Number(usersCount?.count ?? 0),
+    organizations: Number(orgsCount?.count ?? 0),
+    tenants: Number(tenantsCount?.count ?? 0),
+    nodes: Number(nodesCount?.count ?? 0),
+    transactions: Number(transactionsCount?.count ?? 0),
   });
+  /* eslint-enable @typescript-eslint/no-unnecessary-type-conversion */
 });
 
 interface WalletConfig {
@@ -2197,7 +2209,7 @@ adminRoutes.get("/settings/balances", async (c) => {
     .select("wallet_config")
     .executeTakeFirst();
 
-  if (!settings || !settings.wallet_config) {
+  if (!settings?.wallet_config) {
     return c.json({ error: "No wallet configured" }, 404);
   }
 
@@ -2246,11 +2258,11 @@ adminRoutes.get("/settings/email", async (c) => {
   return c.json({
     configured:
       hasApiKey && config !== null && !!config.from_email && !!config.site_url,
-    from_email: config?.from_email || null,
-    site_url: config?.site_url || null,
+    from_email: config?.from_email || null, // eslint-disable-line @typescript-eslint/prefer-nullish-coalescing -- empty string means unconfigured
+    site_url: config?.site_url || null, // eslint-disable-line @typescript-eslint/prefer-nullish-coalescing -- empty string means unconfigured
     has_api_key: hasApiKey,
-    template_ids: config?.template_ids || null,
-    custom_variables: config?.custom_variables || null,
+    template_ids: config?.template_ids ?? null,
+    custom_variables: config?.custom_variables ?? null,
   });
 });
 
@@ -2391,7 +2403,7 @@ adminRoutes.get("/tenants/:tenantId/catch-all/analytics", async (c) => {
 adminRoutes.get("/analytics/earnings", async (c) => {
   const level = c.req.query("level") as "organization" | "tenant" | "endpoint";
   const idStr = c.req.query("id");
-  const granularityParam = c.req.query("granularity") || "month";
+  const granularityParam = c.req.query("granularity") ?? "month";
   const periodsStr = c.req.query("periods");
 
   if (!level || !["organization", "tenant", "endpoint"].includes(level)) {

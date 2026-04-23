@@ -143,7 +143,7 @@ export function InlineWalletSelect({
           </div>
           <div className="max-h-64 overflow-y-auto">
             <button
-              onClick={() => handleChange(null)}
+              onClick={() => void handleChange(null)}
               className={`flex w-full items-center justify-between rounded px-2 py-1.5 text-sm transition-colors ${
                 currentWalletId === null
                   ? "bg-accent-3 text-accent-11"
@@ -161,7 +161,9 @@ export function InlineWalletSelect({
               return (
                 <button
                   key={wallet.id}
-                  onClick={() => !isUnfunded && handleChange(wallet.id)}
+                  onClick={() => {
+                    if (!isUnfunded) void handleChange(wallet.id);
+                  }}
                   disabled={isUnfunded}
                   className={`flex w-full items-center justify-between rounded px-2 py-1.5 text-sm transition-colors ${
                     isSelected

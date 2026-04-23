@@ -35,7 +35,7 @@ export default function AdminWaitlistPage() {
 
     try {
       await api.delete(`/api/admin/waitlist/${id}`);
-      mutate();
+      void mutate();
     } catch {
       // Silently fail
     }
@@ -44,7 +44,7 @@ export default function AdminWaitlistPage() {
   const handleToggleWhitelist = async (id: number, whitelisted: boolean) => {
     try {
       await api.patch(`/api/admin/waitlist/${id}`, { whitelisted });
-      mutate();
+      void mutate();
     } catch {
       // Silently fail
     }
@@ -123,7 +123,10 @@ export default function AdminWaitlistPage() {
                     <td className="px-4 py-3">
                       <button
                         onClick={() =>
-                          handleToggleWhitelist(entry.id, !entry.whitelisted)
+                          void handleToggleWhitelist(
+                            entry.id,
+                            !entry.whitelisted,
+                          )
                         }
                         disabled={entry.signed_up && entry.whitelisted}
                         className={`rounded px-2 py-1 text-xs font-medium transition-colors ${
@@ -161,7 +164,7 @@ export default function AdminWaitlistPage() {
                     </td>
                     <td className="px-4 py-3 text-right">
                       <button
-                        onClick={() => handleDelete(entry.id)}
+                        onClick={() => void handleDelete(entry.id)}
                         className="rounded p-1.5 text-gray-11 transition-colors hover:bg-red-900/30 hover:text-red-400"
                         title="Remove from waitlist"
                       >

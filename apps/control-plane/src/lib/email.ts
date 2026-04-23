@@ -69,7 +69,7 @@ async function getEmailConfig(): Promise<{
       invitation: config.template_ids?.invitation || 0,
       password_reset: config.template_ids?.password_reset || 0,
     },
-    customVariables: config.custom_variables || {},
+    customVariables: config.custom_variables ?? {},
   };
 }
 

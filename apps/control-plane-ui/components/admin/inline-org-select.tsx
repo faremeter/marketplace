@@ -202,11 +202,11 @@ export function InlineOrgSelect({
       setWalletDialogOpen(true);
       return;
     }
-    saveOrgChange(pendingOrgId, undefined);
+    void saveOrgChange(pendingOrgId, undefined);
   };
 
   const handleWalletConfirm = () => {
-    saveOrgChange(pendingOrgId, selectedWalletId);
+    void saveOrgChange(pendingOrgId, selectedWalletId);
   };
 
   const formatDomain = (slug: string | null) => {
@@ -256,7 +256,7 @@ export function InlineOrgSelect({
             </div>
             <div className="max-h-64 overflow-y-auto">
               <button
-                onClick={() => handleOrgChange(null)}
+                onClick={() => void handleOrgChange(null)}
                 className={`flex w-full items-center justify-between rounded px-2 py-1.5 text-sm transition-colors ${
                   currentOrgId === null
                     ? "bg-accent-3 text-accent-11"
@@ -269,7 +269,7 @@ export function InlineOrgSelect({
               {visible.map((org) => (
                 <button
                   key={org.id}
-                  onClick={() => handleOrgChange(org.id)}
+                  onClick={() => void handleOrgChange(org.id)}
                   className={`flex w-full items-center justify-between rounded px-2 py-1.5 text-sm transition-colors ${
                     currentOrgId === org.id
                       ? "bg-accent-3 text-accent-11"

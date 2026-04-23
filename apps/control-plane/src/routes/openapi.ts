@@ -108,8 +108,8 @@ function extractPathsFromSpec(spec: OpenApiSpec): ExtractedPath[] {
   for (const [path, pathItem] of Object.entries(spec.paths)) {
     if (path === "/" || path === "/*") continue;
 
-    const item = pathItem as PathItem;
-    let description: string | null = item.summary || item.description || null;
+    const item = pathItem;
+    let description: string | null = item.summary ?? item.description ?? null;
     if (!description) {
       const methods = [
         "get",
@@ -122,7 +122,8 @@ function extractPathsFromSpec(spec: OpenApiSpec): ExtractedPath[] {
         "trace",
       ] as const;
       for (const method of methods) {
-        const op = item[method] as OperationObject | undefined;
+        const op = item[method];
+        // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- empty summary must fall through to description
         if (op?.summary || op?.description) {
           description = op.summary || op.description || null;
           break;
@@ -325,7 +326,7 @@ openapiRoutes.post(
       .execute();
 
     for (const tn of tenantNodes) {
-      syncToNode(tn.node_id).catch((err) => logger.error(String(err)));
+      syncToNode(tn.node_id).catch((err: unknown) => logger.error(String(err)));
     }
 
     return c.json({
@@ -391,17 +392,13 @@ openapiRoutes.get("/export", async (c) => {
   const orphanEndpoints: { pattern: string; description: string | null }[] = [];
 
   for (const endpoint of endpoints) {
-    const sourcePaths = endpoint.openapi_source_paths as string[] | null;
+    const sourcePaths = endpoint.openapi_source_paths;
 
     if (sourcePaths && sourcePaths.length > 0) {
       // Has lineage - add pricing extension to each source path
       for (const sourcePath of sourcePaths) {
-        if (!exportedSpec.paths) {
-          exportedSpec.paths = {};
-        }
-        if (!exportedSpec.paths[sourcePath]) {
-          exportedSpec.paths[sourcePath] = {};
-        }
+        exportedSpec.paths ??= {};
+        exportedSpec.paths[sourcePath] ??= {};
 
         const pathObj = exportedSpec.paths[sourcePath] as Record<
           string,
@@ -409,7 +406,7 @@ openapiRoutes.get("/export", async (c) => {
         >;
 
         if (endpoint.description) {
-          pathObj["description"] = endpoint.description;
+          pathObj.description = endpoint.description;
         }
 
         pathObj["x-faremeter-pricing"] = {
@@ -436,9 +433,7 @@ openapiRoutes.get("/export", async (c) => {
         );
         if (!displayPath) continue;
 
-        if (!exportedSpec.paths) {
-          exportedSpec.paths = {};
-        }
+        exportedSpec.paths ??= {};
         const orphanPath: Record<string, unknown> = {
           "x-faremeter-orphan": true,
           "x-faremeter-original-pattern": endpoint.path_pattern,
@@ -449,7 +444,7 @@ openapiRoutes.get("/export", async (c) => {
         };
 
         if (endpoint.description) {
-          orphanPath["description"] = endpoint.description;
+          orphanPath.description = endpoint.description;
         }
 
         const orphanTags = endpoint.tags as string[] | null;
@@ -515,7 +510,7 @@ openapiRoutes.post(
     }
 
     const spec = tenant.openapi_spec as OpenApiSpec;
-    const specPaths = Object.keys(spec.paths || {});
+    const specPaths = Object.keys(spec.paths ?? {});
 
     const matches: string[] = [];
     for (const path of specPaths) {

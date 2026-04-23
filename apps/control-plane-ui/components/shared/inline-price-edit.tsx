@@ -174,7 +174,7 @@ export function InlinePriceEdit({
                 Cancel
               </button>
               <button
-                onClick={handleSave}
+                onClick={() => void handleSave()}
                 disabled={
                   isSaving ||
                   price === "" ||

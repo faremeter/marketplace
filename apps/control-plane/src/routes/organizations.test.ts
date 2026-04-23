@@ -1,5 +1,6 @@
 import "../tests/setup/env.js";
 import t from "tap";
+import { type } from "arktype";
 import { Hono } from "hono";
 import { db, setupTestSchema, clearTestData } from "../db/instance.js";
 import { signToken } from "../middleware/auth.js";
@@ -8,6 +9,78 @@ import {
   enableFaremeterMock,
   disableFaremeterMock,
 } from "../tests/setup/faremeter-mock.js";
+
+const ErrorResponse = type({ error: "string", "+": "delete" });
+const DeleteResponse = type({ deleted: "boolean", "+": "delete" });
+const SuccessResponse = type({ success: "boolean", "+": "delete" });
+const ActivateResponse = type({
+  success: "boolean",
+  status: "string",
+  "+": "delete",
+});
+
+const OrgResponse = type({
+  id: "number",
+  name: "string",
+  slug: "string",
+  "role?": "string",
+  "+": "delete",
+});
+
+const SlugCheckResponse = type({
+  available: "boolean",
+  "slug?": "string",
+  "suggested?": "string",
+  "+": "delete",
+});
+
+const InviteResponse = type({
+  email: "string",
+  token: "string",
+  "+": "delete",
+});
+
+const MemberResponse = type({
+  email: "string",
+  role: "string",
+  "+": "delete",
+});
+
+const ProxyAvailabilityResponse = type({
+  available: "boolean",
+  "reason?": "string",
+  "+": "delete",
+});
+
+const OnboardingResponse = type({
+  steps: {
+    "wallet?": "boolean",
+    "funded?": "boolean",
+    "tenant?": "boolean",
+    "proxy?": "boolean",
+    "endpoint?": "boolean",
+    "+": "delete",
+  },
+  "all_steps_complete?": "boolean",
+  "first_proxy_id?": "number | null",
+  "+": "delete",
+});
+
+const ProxyResponse = type({
+  id: "number",
+  name: "string",
+  "org_slug?": "string | null",
+  "backend_url?": "string",
+  "wallet_id?": "number | null",
+  "status?": "string",
+  "default_price?": "number",
+  "default_scheme?": "string",
+  "nodes?": "unknown[]",
+  "is_active?": "boolean | number",
+  "upstream_auth_header?": "string | null",
+  "upstream_auth_value?": "string | null",
+  "+": "delete",
+});
 
 const app = new Hono();
 app.route("/api/organizations", organizationsRoutes);
@@ -68,8 +141,7 @@ await t.test("GET /api/organizations", async (t) => {
       headers: { Cookie: `auth_token=${user.token}` },
     });
     t.equal(res.status, 200);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data = (await res.json()) as any;
+    const data = OrgResponse.array().assert(await res.json());
     t.same(data, []);
   });
 
@@ -82,10 +154,11 @@ await t.test("GET /api/organizations", async (t) => {
       headers: { Cookie: `auth_token=${user.token}` },
     });
     t.equal(res.status, 200);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data = (await res.json()) as any;
+    const data = OrgResponse.array().assert(await res.json());
     t.equal(data.length, 1);
+    if (!data[0]) throw new Error("expected data[0]");
     t.equal(data[0].name, "Test Org");
+    if (!data[0]) throw new Error("expected data[0]");
     t.equal(data[0].role, "owner");
   });
 });
@@ -113,8 +186,7 @@ await t.test("GET /api/organizations/check-slug", async (t) => {
       },
     );
     t.equal(res.status, 200);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data = (await res.json()) as any;
+    const data = SlugCheckResponse.assert(await res.json());
     t.equal(data.available, true);
     t.equal(data.slug, "fresh-slug");
   });
@@ -132,12 +204,13 @@ await t.test("GET /api/organizations/check-slug", async (t) => {
         },
       );
       t.equal(res.status, 200);
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const data = (await res.json()) as any;
+      const data = SlugCheckResponse.assert(await res.json());
       t.equal(data.available, false);
       t.ok(data.suggested);
+      if (!data.suggested) throw new Error("expected data.suggested");
       t.ok(data.suggested.startsWith("taken-slug-"));
       // Verify suffix is 4 chars
+      if (!data.suggested) throw new Error("expected data.suggested");
       const suffix = data.suggested.replace("taken-slug-", "");
       t.equal(suffix.length, 4);
       t.ok(/^[a-z0-9]+$/.test(suffix));
@@ -159,8 +232,7 @@ await t.test("POST /api/organizations", async (t) => {
     });
 
     t.equal(res.status, 201);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data = (await res.json()) as any;
+    const data = OrgResponse.assert(await res.json());
     t.equal(data.name, "New Org");
     t.equal(data.role, "owner");
     t.ok(data.slug);
@@ -179,8 +251,7 @@ await t.test("POST /api/organizations", async (t) => {
     });
 
     t.equal(res.status, 201);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data = (await res.json()) as any;
+    const data = OrgResponse.assert(await res.json());
     t.equal(data.slug, "my-custom-slug");
   });
 
@@ -200,8 +271,7 @@ await t.test("POST /api/organizations", async (t) => {
       });
 
       t.equal(res.status, 201);
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const data = (await res.json()) as any;
+      const data = OrgResponse.assert(await res.json());
       t.ok(data.slug.startsWith("existing-slug-"));
       t.not(data.slug, "existing-slug");
       // Verify suffix is 4 chars (random suffix format)
@@ -229,8 +299,7 @@ await t.test("POST /api/organizations", async (t) => {
     });
 
     t.equal(res.status, 400);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data = (await res.json()) as any;
+    const data = ErrorResponse.assert(await res.json());
     t.ok(data.error.includes("5 organizations"));
   });
 
@@ -323,8 +392,7 @@ await t.test("POST /api/organizations", async (t) => {
       body: JSON.stringify({ name: "My.Org.Name" }),
     });
     t.equal(res.status, 201);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data = (await res.json()) as any;
+    const data = OrgResponse.assert(await res.json());
     t.equal(data.name, "My.Org.Name");
     t.equal(data.slug, "my-org-name");
   });
@@ -340,8 +408,7 @@ await t.test("POST /api/organizations", async (t) => {
       body: JSON.stringify({ name: "Test.Company" }),
     });
     t.equal(res.status, 201);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data = (await res.json()) as any;
+    const data = OrgResponse.assert(await res.json());
     t.equal(data.slug, "test-company");
   });
 
@@ -356,8 +423,7 @@ await t.test("POST /api/organizations", async (t) => {
       body: JSON.stringify({ name: "My. Org" }),
     });
     t.equal(res.status, 201);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data = (await res.json()) as any;
+    const data = OrgResponse.assert(await res.json());
     t.equal(data.slug, "my-org");
   });
 
@@ -372,8 +438,7 @@ await t.test("POST /api/organizations", async (t) => {
       body: JSON.stringify({ name: "My .Org" }),
     });
     t.equal(res.status, 201);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data = (await res.json()) as any;
+    const data = OrgResponse.assert(await res.json());
     t.equal(data.slug, "my-org");
   });
 
@@ -440,8 +505,7 @@ await t.test("POST /api/organizations", async (t) => {
       body: JSON.stringify({ name: "My.-Org" }),
     });
     t.equal(res.status, 201);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data = (await res.json()) as any;
+    const data = OrgResponse.assert(await res.json());
     t.equal(data.slug, "my-org");
   });
 
@@ -456,8 +520,7 @@ await t.test("POST /api/organizations", async (t) => {
       body: JSON.stringify({ name: "My-.Org" }),
     });
     t.equal(res.status, 201);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data = (await res.json()) as any;
+    const data = OrgResponse.assert(await res.json());
     t.equal(data.slug, "my-org");
   });
 
@@ -472,8 +535,7 @@ await t.test("POST /api/organizations", async (t) => {
       body: JSON.stringify({ name: "A.B.C.D" }),
     });
     t.equal(res.status, 201);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data = (await res.json()) as any;
+    const data = OrgResponse.assert(await res.json());
     t.equal(data.slug, "a-b-c-d");
   });
 
@@ -550,8 +612,7 @@ await t.test("GET /api/organizations/:id", async (t) => {
       headers: { Cookie: `auth_token=${user.token}` },
     });
     t.equal(res.status, 200);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data = (await res.json()) as any;
+    const data = OrgResponse.assert(await res.json());
     t.equal(data.name, "My Org");
     t.equal(data.role, "member");
   });
@@ -583,8 +644,7 @@ await t.test("PUT /api/organizations/:id", async (t) => {
     });
 
     t.equal(res.status, 200);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data = (await res.json()) as any;
+    const data = OrgResponse.assert(await res.json());
     t.equal(data.name, "New Name");
   });
 
@@ -636,8 +696,7 @@ await t.test("DELETE /api/organizations/:id", async (t) => {
     });
 
     t.equal(res.status, 200);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data = (await res.json()) as any;
+    const data = DeleteResponse.assert(await res.json());
     t.equal(data.deleted, true);
 
     const check = await db
@@ -688,8 +747,7 @@ await t.test("GET /api/organizations/:id/members", async (t) => {
     });
 
     t.equal(res.status, 200);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data = (await res.json()) as any;
+    const data = MemberResponse.array().assert(await res.json());
     t.equal(data.length, 2);
   });
 
@@ -806,8 +864,7 @@ await t.test("DELETE /api/organizations/:id/members/:userId", async (t) => {
     );
 
     t.equal(res.status, 200);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data = (await res.json()) as any;
+    const data = DeleteResponse.assert(await res.json());
     t.equal(data.deleted, true);
   });
 
@@ -873,9 +930,9 @@ await t.test("GET /api/organizations/:id/invitations", async (t) => {
     });
 
     t.equal(res.status, 200);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data = (await res.json()) as any;
+    const data = MemberResponse.array().assert(await res.json());
     t.equal(data.length, 1);
+    if (!data[0]) throw new Error("expected data[0]");
     t.equal(data[0].email, "invited@example.com");
   });
 });
@@ -896,8 +953,7 @@ await t.test("POST /api/organizations/:id/invitations", async (t) => {
     });
 
     t.equal(res.status, 201);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data = (await res.json()) as any;
+    const data = InviteResponse.assert(await res.json());
     t.equal(data.email, "newinvite@example.com");
     t.ok(data.token);
   });
@@ -979,8 +1035,7 @@ await t.test(
       );
 
       t.equal(res.status, 200);
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const data = (await res.json()) as any;
+      const data = DeleteResponse.assert(await res.json());
       t.equal(data.deleted, true);
     });
 
@@ -1013,8 +1068,7 @@ await t.test("GET /api/organizations/:id/tenants", async (t) => {
     });
 
     t.equal(res.status, 200);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data = (await res.json()) as any;
+    const data = ProxyResponse.array().assert(await res.json());
     t.same(data, []);
   });
 
@@ -1060,10 +1114,11 @@ await t.test("GET /api/organizations/:id/tenants", async (t) => {
     });
 
     t.equal(res.status, 200);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data = (await res.json()) as any;
+    const data = ProxyResponse.array().assert(await res.json());
     t.equal(data.length, 1);
+    if (!data[0]) throw new Error("expected data[0]");
     t.equal(data[0].name, "my-proxy");
+    if (!data[0].nodes) throw new Error("expected data[0].nodes");
     t.equal(data[0].nodes.length, 1);
   });
 });
@@ -1082,8 +1137,7 @@ await t.test("GET /api/organizations/:id/tenants/check-name", async (t) => {
     );
 
     t.equal(res.status, 200);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data = (await res.json()) as any;
+    const data = ProxyAvailabilityResponse.assert(await res.json());
     t.equal(data.available, true);
   });
 
@@ -1114,8 +1168,7 @@ await t.test("GET /api/organizations/:id/tenants/check-name", async (t) => {
       );
 
       t.equal(res.status, 200);
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const data = (await res.json()) as any;
+      const data = ProxyAvailabilityResponse.assert(await res.json());
       t.equal(data.available, false);
     },
   );
@@ -1146,8 +1199,7 @@ await t.test("GET /api/organizations/:id/tenants/check-name", async (t) => {
       );
 
       t.equal(res.status, 200);
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const data = (await res.json()) as any;
+      const data = ProxyAvailabilityResponse.assert(await res.json());
       t.equal(data.available, true);
     },
   );
@@ -1183,8 +1235,7 @@ await t.test("GET /api/organizations/:id/tenants/check-name", async (t) => {
       );
 
       t.equal(res.status, 200);
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const data = (await res.json()) as any;
+      const data = ProxyAvailabilityResponse.assert(await res.json());
       t.equal(data.available, true);
     },
   );
@@ -1217,8 +1268,7 @@ await t.test("GET /api/organizations/:id/tenants/check-name", async (t) => {
       );
 
       t.equal(res.status, 200);
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const data = (await res.json()) as any;
+      const data = ProxyAvailabilityResponse.assert(await res.json());
       t.equal(data.available, false);
     },
   );
@@ -1238,8 +1288,7 @@ await t.test("GET /api/organizations/:id/can-create-proxy", async (t) => {
     );
 
     t.equal(res.status, 200);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data = (await res.json()) as any;
+    const data = ProxyAvailabilityResponse.assert(await res.json());
     t.equal(data.available, false);
     t.equal(data.reason, "no_wallet");
   });
@@ -1287,8 +1336,7 @@ await t.test("GET /api/organizations/:id/can-create-proxy", async (t) => {
       );
 
       t.equal(res.status, 200);
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const data = (await res.json()) as any;
+      const data = ProxyAvailabilityResponse.assert(await res.json());
       t.equal(data.available, true);
     },
   );
@@ -1336,8 +1384,7 @@ await t.test("GET /api/organizations/:id/can-create-proxy", async (t) => {
       );
 
       t.equal(res.status, 200);
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const data = (await res.json()) as any;
+      const data = ProxyAvailabilityResponse.assert(await res.json());
       t.equal(data.available, false);
       t.equal(data.reason, "insufficient_funds");
     },
@@ -1372,8 +1419,7 @@ await t.test("GET /api/organizations/:id/onboarding-status", async (t) => {
     );
 
     t.equal(res.status, 200);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data = (await res.json()) as any;
+    const data = OnboardingResponse.assert(await res.json());
     t.equal(data.steps.wallet, false);
     t.equal(data.steps.funded, false);
     t.equal(data.steps.proxy, false);
@@ -1406,8 +1452,7 @@ await t.test("GET /api/organizations/:id/onboarding-status", async (t) => {
       );
 
       t.equal(res.status, 200);
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const data = (await res.json()) as any;
+      const data = OnboardingResponse.assert(await res.json());
       t.equal(data.steps.wallet, true);
       t.equal(data.steps.funded, true);
       t.equal(data.steps.proxy, false);
@@ -1462,8 +1507,7 @@ await t.test("GET /api/organizations/:id/onboarding-status", async (t) => {
       );
 
       t.equal(res.status, 200);
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const data = (await res.json()) as any;
+      const data = OnboardingResponse.assert(await res.json());
       t.equal(data.steps.wallet, true);
       t.equal(data.steps.funded, true);
       t.equal(data.steps.proxy, true);
@@ -1504,8 +1548,7 @@ await t.test("POST /api/organizations/:id/complete-onboarding", async (t) => {
     );
 
     t.equal(res.status, 400);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data = (await res.json()) as any;
+    const data = ErrorResponse.assert(await res.json());
     t.ok(data.error.includes("onboarding steps"));
   });
 
@@ -1554,8 +1597,7 @@ await t.test("POST /api/organizations/:id/complete-onboarding", async (t) => {
     );
 
     t.equal(res.status, 200);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data = (await res.json()) as any;
+    const data = SuccessResponse.assert(await res.json());
     t.equal(data.success, true);
 
     const updated = await db
@@ -1596,8 +1638,7 @@ await t.test("Admin access tests", async (t) => {
     });
 
     t.equal(res.status, 200);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data = (await res.json()) as any;
+    const data = OrgResponse.assert(await res.json());
     t.equal(data.name, "Admin Updated");
   });
 
@@ -1727,8 +1768,7 @@ await t.test("PUT /api/organizations/:id/tenants/:tenantId", async (t) => {
     );
 
     t.equal(res.status, 400);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data = (await res.json()) as any;
+    const data = ErrorResponse.assert(await res.json());
     t.ok(data.error.includes("another operation"));
   });
 
@@ -1777,8 +1817,7 @@ await t.test("PUT /api/organizations/:id/tenants/:tenantId", async (t) => {
     );
 
     t.equal(res.status, 200);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data = (await res.json()) as any;
+    const data = ProxyResponse.assert(await res.json());
     t.equal(data.backend_url, "http://new-backend.com");
     t.equal(data.wallet_id, wallet.id);
   });
@@ -1814,8 +1853,7 @@ await t.test("PUT /api/organizations/:id/tenants/:tenantId", async (t) => {
     );
 
     t.equal(res.status, 404);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data = (await res.json()) as any;
+    const data = ErrorResponse.assert(await res.json());
     t.equal(data.error, "Wallet not found");
   });
 
@@ -1961,8 +1999,7 @@ await t.test("DELETE /api/organizations/:id/tenants/:tenantId", async (t) => {
     );
 
     t.equal(res.status, 400);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data = (await res.json()) as any;
+    const data = ErrorResponse.assert(await res.json());
     t.ok(data.error.includes("already being deleted"));
   });
 
@@ -2012,8 +2049,7 @@ await t.test("DELETE /api/organizations/:id/tenants/:tenantId", async (t) => {
     );
 
     t.equal(res.status, 400);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data = (await res.json()) as any;
+    const data = ErrorResponse.assert(await res.json());
     t.ok(data.error.includes("certificate operations"));
   });
 });
@@ -2110,8 +2146,7 @@ await t.test("POST /api/organizations/:id/tenants", async (t) => {
     });
 
     t.equal(res.status, 400);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data = (await res.json()) as any;
+    const data = ErrorResponse.assert(await res.json());
     t.ok(data.error.includes("Wallet not found"));
   });
 
@@ -2144,8 +2179,7 @@ await t.test("POST /api/organizations/:id/tenants", async (t) => {
     });
 
     t.equal(res.status, 400);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data = (await res.json()) as any;
+    const data = ErrorResponse.assert(await res.json());
     t.ok(data.error.includes("Not enough active nodes"));
   });
 
@@ -2198,8 +2232,7 @@ await t.test("POST /api/organizations/:id/tenants", async (t) => {
     });
 
     t.equal(res.status, 201);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data = (await res.json()) as any;
+    const data = ProxyResponse.assert(await res.json());
     t.equal(data.name, "my-new-proxy");
     t.equal(data.backend_url, "http://backend.com");
     t.equal(data.default_price, 0);
@@ -2259,8 +2292,7 @@ await t.test("POST /api/organizations/:id/tenants", async (t) => {
     });
 
     t.equal(res.status, 201);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data = (await res.json()) as any;
+    const data = ProxyResponse.assert(await res.json());
     t.equal(data.default_price, 0.05);
     t.equal(data.default_scheme, "exact");
     t.equal(data.upstream_auth_header, "X-API-Key");
@@ -2316,8 +2348,7 @@ await t.test("POST /api/organizations/:id/tenants", async (t) => {
     });
 
     t.equal(res.status, 201);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data = (await res.json()) as any;
+    const data = ProxyResponse.assert(await res.json());
     t.equal(data.name, "my-proxy-name");
   });
 
@@ -2387,8 +2418,7 @@ await t.test("POST /api/organizations/:id/tenants", async (t) => {
     });
 
     t.equal(res.status, 409);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data = (await res.json()) as any;
+    const data = ErrorResponse.assert(await res.json());
     t.ok(data.error.includes("already exists"));
   });
 
@@ -2439,8 +2469,7 @@ await t.test("POST /api/organizations/:id/tenants", async (t) => {
     });
 
     t.equal(res.status, 201);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data = (await res.json()) as any;
+    const data = ProxyResponse.assert(await res.json());
     t.equal(data.org_slug, "team");
   });
 
@@ -2629,8 +2658,7 @@ await t.test("POST /api/organizations/:id/tenants", async (t) => {
       });
 
       t.equal(res.status, 201);
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const data = (await res.json()) as any;
+      const data = ProxyResponse.assert(await res.json());
       t.equal(data.name, "registered-proxy");
       t.equal(data.status, "registered");
       t.equal(data.is_active, false);
@@ -2676,8 +2704,7 @@ await t.test("POST /api/organizations/:id/tenants", async (t) => {
       });
 
       t.equal(res.status, 400);
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const data = (await res.json()) as any;
+      const data = ErrorResponse.assert(await res.json());
       t.ok(data.error.toLowerCase().includes("wallet"));
     },
   );
@@ -2749,8 +2776,7 @@ await t.test(
       );
 
       t.equal(res.status, 200);
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const data = (await res.json()) as any;
+      const data = ActivateResponse.assert(await res.json());
       t.equal(data.status, "pending");
 
       const updatedTenant = await db
@@ -2799,8 +2825,7 @@ await t.test(
       );
 
       t.equal(res.status, 400);
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const data = (await res.json()) as any;
+      const data = ErrorResponse.assert(await res.json());
       t.ok(data.error.includes("registered"));
     });
 
@@ -2835,8 +2860,7 @@ await t.test(
       );
 
       t.equal(res.status, 400);
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const data = (await res.json()) as any;
+      const data = ErrorResponse.assert(await res.json());
       t.ok(data.error.toLowerCase().includes("wallet"));
     });
 
@@ -2882,8 +2906,7 @@ await t.test(
       );
 
       t.equal(res.status, 400);
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const data = (await res.json()) as any;
+      const data = ErrorResponse.assert(await res.json());
       t.ok(data.error.toLowerCase().includes("funded"));
     });
 
@@ -2929,8 +2952,7 @@ await t.test(
       );
 
       t.equal(res.status, 400);
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const data = (await res.json()) as any;
+      const data = ErrorResponse.assert(await res.json());
       t.ok(data.error.toLowerCase().includes("backend"));
     });
 
@@ -3334,8 +3356,7 @@ await t.test("GET /api/organizations/:id/analytics/earnings", async (t) => {
     );
 
     t.equal(res.status, 400);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data = (await res.json()) as any;
+    const data = ErrorResponse.assert(await res.json());
     t.ok(data.error.includes("Invalid level"));
   });
 
@@ -3350,8 +3371,7 @@ await t.test("GET /api/organizations/:id/analytics/earnings", async (t) => {
     );
 
     t.equal(res.status, 400);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data = (await res.json()) as any;
+    const data = ErrorResponse.assert(await res.json());
     t.ok(data.error.includes("Invalid granularity"));
   });
 
@@ -3366,8 +3386,7 @@ await t.test("GET /api/organizations/:id/analytics/earnings", async (t) => {
     );
 
     t.equal(res.status, 400);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data = (await res.json()) as any;
+    const data = ErrorResponse.assert(await res.json());
     t.ok(data.error.includes("targetId is required"));
   });
 
@@ -3382,8 +3401,7 @@ await t.test("GET /api/organizations/:id/analytics/earnings", async (t) => {
     );
 
     t.equal(res.status, 400);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data = (await res.json()) as any;
+    const data = ErrorResponse.assert(await res.json());
     t.ok(data.error.includes("Invalid targetId"));
   });
 
@@ -3460,8 +3478,7 @@ await t.test("GET /api/organizations/:id/analytics/earnings", async (t) => {
     );
 
     t.equal(res.status, 400);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data = (await res.json()) as any;
+    const data = ErrorResponse.assert(await res.json());
     t.ok(data.error.includes("Invalid periods"));
   });
 
@@ -3566,8 +3583,7 @@ await t.test("Admin bypass - access non-member org", async (t) => {
     });
 
     t.equal(res.status, 200);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data = (await res.json()) as any;
+    const data = OrgResponse.assert(await res.json());
     t.equal(data.name, "Other Team");
   });
 
@@ -3582,9 +3598,9 @@ await t.test("Admin bypass - access non-member org", async (t) => {
     });
 
     t.equal(res.status, 200);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data = (await res.json()) as any;
+    const data = MemberResponse.array().assert(await res.json());
     t.equal(data.length, 1);
+    if (!data[0]) throw new Error("expected data[0]");
     t.equal(data[0].email, "other@example.com");
   });
 
@@ -3610,9 +3626,9 @@ await t.test("Admin bypass - access non-member org", async (t) => {
     });
 
     t.equal(res.status, 200);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data = (await res.json()) as any;
+    const data = ProxyResponse.array().assert(await res.json());
     t.equal(data.length, 1);
+    if (!data[0]) throw new Error("expected data[0]");
     t.equal(data[0].name, "other-proxy");
   });
 });

@@ -1,5 +1,6 @@
 import "../tests/setup/env.js";
 import t from "tap";
+import { type } from "arktype";
 import { Hono } from "hono";
 import { sql } from "kysely";
 import { db, setupTestSchema, clearTestData } from "../db/instance.js";
@@ -195,9 +196,13 @@ await t.test("GET /api/tenants/:tenantId/transactions", async (t) => {
       headers: { Cookie: `auth_token=${user.token}` },
     });
     t.equal(res.status, 200);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data = (await res.json()) as any[];
+    const TransactionItem = type({ amount: "number", "+": "delete" });
+    const data = type("unknown[]")
+      .assert(await res.json())
+      .map((item) => TransactionItem.assert(item));
+    if (!data[0]) throw new Error("expected data[0]");
     t.equal(data[0].amount, 0.99);
+    if (!data[1]) throw new Error("expected data[1]");
     t.equal(data[1].amount, 0.01);
   });
 
@@ -458,8 +463,12 @@ await t.test("GET /api/tenants/:tenantId/transactions/:id", async (t) => {
       { headers: { Cookie: `auth_token=${user.token}` } },
     );
     t.equal(res.status, 200);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data = (await res.json()) as any;
+    const TransactionDetail = type({
+      amount: "number",
+      request_path: "string",
+      "+": "delete",
+    });
+    const data = TransactionDetail.assert(await res.json());
     t.equal(data.amount, 0.25);
     t.equal(data.request_path, "/api/users");
   });

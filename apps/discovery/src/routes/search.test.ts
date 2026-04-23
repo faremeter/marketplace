@@ -1,8 +1,31 @@
 import "../tests/setup/env.js";
 import t from "tap";
+import { type } from "arktype";
 import { Hono } from "hono";
 import { db, setupTestSchema, clearTestData } from "../db/instance.js";
 import { searchRoutes, buildTsquery } from "./search.js";
+
+const SearchProxy = type({
+  name: "string",
+  url: "string",
+  "org_slug?": "string | null",
+  "tags?": "string[]",
+  "+": "delete",
+});
+
+const SearchEndpoint = type({
+  path_pattern: "string",
+  "description?": "string | null",
+  proxy_id: "number",
+  "tags?": "string[]",
+  "+": "delete",
+});
+
+const SearchResponse = type({
+  proxies: SearchProxy.array(),
+  endpoints: SearchEndpoint.array(),
+  "+": "delete",
+});
 
 const app = new Hono();
 app.route("/api/v1/search", searchRoutes);
@@ -68,16 +91,14 @@ await t.test("GET /api/v1/search", async (t) => {
   await t.test("returns empty arrays for empty query", async (t) => {
     const res = await app.request("/api/v1/search");
     t.equal(res.status, 200);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data = (await res.json()) as any;
+    const data = SearchResponse.assert(await res.json());
     t.same(data, { proxies: [], endpoints: [] });
   });
 
   await t.test("returns empty arrays for whitespace query", async (t) => {
     const res = await app.request("/api/v1/search?q=   ");
     t.equal(res.status, 200);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data = (await res.json()) as any;
+    const data = SearchResponse.assert(await res.json());
     t.same(data, { proxies: [], endpoints: [] });
   });
 
@@ -87,9 +108,9 @@ await t.test("GET /api/v1/search", async (t) => {
 
     const res = await app.request("/api/v1/search?q=weather");
     t.equal(res.status, 200);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data = (await res.json()) as any;
+    const data = SearchResponse.assert(await res.json());
     t.equal(data.proxies.length, 1);
+    if (!data.proxies[0]) throw new Error("expected data.proxies[0]");
     t.equal(data.proxies[0].name, "Weather API");
   });
 
@@ -98,13 +119,13 @@ await t.test("GET /api/v1/search", async (t) => {
     await createTenant({ name: "legiscan", org_slug: "acme" });
 
     const res = await app.request("/api/v1/search?q=weather");
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data = (await res.json()) as any;
+    const data = SearchResponse.assert(await res.json());
+    if (!data.proxies[0]) throw new Error("expected data.proxies[0]");
     t.equal(data.proxies[0].url, "https://weather.api.example.test");
 
     const res2 = await app.request("/api/v1/search?q=legiscan");
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data2 = (await res2.json()) as any;
+    const data2 = SearchResponse.assert(await res2.json());
+    if (!data2.proxies[0]) throw new Error("expected data2.proxies[0]");
     t.equal(data2.proxies[0].url, "https://legiscan.acme.api.example.test");
   });
 
@@ -114,9 +135,9 @@ await t.test("GET /api/v1/search", async (t) => {
 
     const res = await app.request("/api/v1/search?q=acme");
     t.equal(res.status, 200);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data = (await res.json()) as any;
+    const data = SearchResponse.assert(await res.json());
     t.equal(data.proxies.length, 1);
+    if (!data.proxies[0]) throw new Error("expected data.proxies[0]");
     t.equal(data.proxies[0].org_slug, "acme-corp");
   });
 
@@ -129,9 +150,9 @@ await t.test("GET /api/v1/search", async (t) => {
 
     const res = await app.request("/api/v1/search?q=unique");
     t.equal(res.status, 200);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data = (await res.json()) as any;
+    const data = SearchResponse.assert(await res.json());
     t.equal(data.proxies.length, 1);
+    if (!data.proxies[0]) throw new Error("expected data.proxies[0]");
     t.equal(data.proxies[0].name, "API with Spec");
   });
 
@@ -142,9 +163,9 @@ await t.test("GET /api/v1/search", async (t) => {
 
     const res = await app.request("/api/v1/search?q=users");
     t.equal(res.status, 200);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data = (await res.json()) as any;
+    const data = SearchResponse.assert(await res.json());
     t.equal(data.endpoints.length, 1);
+    if (!data.endpoints[0]) throw new Error("expected data.endpoints[0]");
     t.equal(data.endpoints[0].path_pattern, "/users/{id}");
   });
 
@@ -161,9 +182,9 @@ await t.test("GET /api/v1/search", async (t) => {
 
     const res = await app.request("/api/v1/search?q=profile");
     t.equal(res.status, 200);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data = (await res.json()) as any;
+    const data = SearchResponse.assert(await res.json());
     t.equal(data.endpoints.length, 1);
+    if (!data.endpoints[0]) throw new Error("expected data.endpoints[0]");
     t.equal(data.endpoints[0].description, "Get user profile information");
   });
 
@@ -173,9 +194,9 @@ await t.test("GET /api/v1/search", async (t) => {
 
     const res = await app.request("/api/v1/search?q=api");
     t.equal(res.status, 200);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data = (await res.json()) as any;
+    const data = SearchResponse.assert(await res.json());
     t.equal(data.proxies.length, 1);
+    if (!data.proxies[0]) throw new Error("expected data.proxies[0]");
     t.equal(data.proxies[0].name, "Active API");
   });
 
@@ -185,9 +206,9 @@ await t.test("GET /api/v1/search", async (t) => {
 
     const res = await app.request("/api/v1/search?q=status");
     t.equal(res.status, 200);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data = (await res.json()) as any;
+    const data = SearchResponse.assert(await res.json());
     t.equal(data.proxies.length, 1);
+    if (!data.proxies[0]) throw new Error("expected data.proxies[0]");
     t.equal(data.proxies[0].name, "Active Status API");
   });
 
@@ -204,9 +225,9 @@ await t.test("GET /api/v1/search", async (t) => {
 
     const res = await app.request("/api/v1/search?q=endpoint");
     t.equal(res.status, 200);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data = (await res.json()) as any;
+    const data = SearchResponse.assert(await res.json());
     t.equal(data.endpoints.length, 1);
+    if (!data.endpoints[0]) throw new Error("expected data.endpoints[0]");
     t.equal(data.endpoints[0].path_pattern, "/active/endpoint");
   });
 
@@ -223,9 +244,9 @@ await t.test("GET /api/v1/search", async (t) => {
 
     const res = await app.request("/api/v1/search?q=path");
     t.equal(res.status, 200);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data = (await res.json()) as any;
+    const data = SearchResponse.assert(await res.json());
     t.equal(data.endpoints.length, 1);
+    if (!data.endpoints[0]) throw new Error("expected data.endpoints[0]");
     t.equal(data.endpoints[0].path_pattern, "/existing/path");
   });
 
@@ -236,8 +257,7 @@ await t.test("GET /api/v1/search", async (t) => {
 
     const res = await app.request("/api/v1/search?q=limit");
     t.equal(res.status, 200);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data = (await res.json()) as any;
+    const data = SearchResponse.assert(await res.json());
     t.equal(data.proxies.length, 20);
   });
 
@@ -249,8 +269,7 @@ await t.test("GET /api/v1/search", async (t) => {
 
     const res = await app.request("/api/v1/search?q=limit");
     t.equal(res.status, 200);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data = (await res.json()) as any;
+    const data = SearchResponse.assert(await res.json());
     t.equal(data.endpoints.length, 50);
   });
 
@@ -259,9 +278,9 @@ await t.test("GET /api/v1/search", async (t) => {
 
     const res = await app.request("/api/v1/search?q=WEATHER");
     t.equal(res.status, 200);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data = (await res.json()) as any;
+    const data = SearchResponse.assert(await res.json());
     t.equal(data.proxies.length, 1);
+    if (!data.proxies[0]) throw new Error("expected data.proxies[0]");
     t.equal(data.proxies[0].name, "Weather API");
   });
 
@@ -272,16 +291,16 @@ await t.test("GET /api/v1/search", async (t) => {
 
     const res1 = await app.request("/api/v1/search?q=%25");
     t.equal(res1.status, 200);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data1 = (await res1.json()) as any;
+    const data1 = SearchResponse.assert(await res1.json());
     t.equal(data1.proxies.length, 1);
+    if (!data1.proxies[0]) throw new Error("expected data1.proxies[0]");
     t.equal(data1.proxies[0].name, "100% Complete API");
 
     const res2 = await app.request("/api/v1/search?q=user_id");
     t.equal(res2.status, 200);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data2 = (await res2.json()) as any;
+    const data2 = SearchResponse.assert(await res2.json());
     t.equal(data2.proxies.length, 1);
+    if (!data2.proxies[0]) throw new Error("expected data2.proxies[0]");
     t.equal(data2.proxies[0].name, "user_id API");
   });
 
@@ -297,11 +316,12 @@ await t.test("GET /api/v1/search", async (t) => {
 
       const res = await app.request("/api/v1/search?q=payment");
       t.equal(res.status, 200);
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const data = (await res.json()) as any;
+      const data = SearchResponse.assert(await res.json());
       t.equal(data.proxies.length, 1);
+      if (!data.proxies[0]) throw new Error("expected data.proxies[0]");
       t.equal(data.proxies[0].name, "Payment Gateway");
       t.equal(data.endpoints.length, 1);
+      if (!data.endpoints[0]) throw new Error("expected data.endpoints[0]");
       t.equal(data.endpoints[0].path_pattern, "/payment/process");
     },
   );
@@ -317,9 +337,9 @@ await t.test("GET /api/v1/search", async (t) => {
 
       const res = await app.request("/api/v1/search?q=searchable");
       t.equal(res.status, 200);
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const data = (await res.json()) as any;
+      const data = SearchResponse.assert(await res.json());
       t.equal(data.proxies.length, 1);
+      if (!data.proxies[0]) throw new Error("expected data.proxies[0]");
       t.equal(data.proxies[0].name, "API with spec");
     },
   );
@@ -335,9 +355,9 @@ await t.test("GET /api/v1/search", async (t) => {
 
     const res = await app.request("/api/v1/search?q=shared");
     t.equal(res.status, 200);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data = (await res.json()) as any;
+    const data = SearchResponse.assert(await res.json());
     t.equal(data.endpoints.length, 1);
+    if (!data.endpoints[0]) throw new Error("expected data.endpoints[0]");
     t.equal(data.endpoints[0].proxy_id, activeTenant.id);
   });
 
@@ -357,9 +377,9 @@ await t.test("GET /api/v1/search", async (t) => {
 
       const res = await app.request("/api/v1/search?q=common");
       t.equal(res.status, 200);
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const data = (await res.json()) as any;
+      const data = SearchResponse.assert(await res.json());
       t.equal(data.endpoints.length, 1);
+      if (!data.endpoints[0]) throw new Error("expected data.endpoints[0]");
       t.equal(data.endpoints[0].proxy_id, activeTenant.id);
     },
   );
@@ -370,9 +390,9 @@ await t.test("GET /api/v1/search", async (t) => {
 
     const res = await app.request("/api/v1/search?q=finance");
     t.equal(res.status, 200);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data = (await res.json()) as any;
+    const data = SearchResponse.assert(await res.json());
     t.equal(data.proxies.length, 1);
+    if (!data.proxies[0]) throw new Error("expected data.proxies[0]");
     t.equal(data.proxies[0].name, "Tagged API");
   });
 
@@ -389,9 +409,9 @@ await t.test("GET /api/v1/search", async (t) => {
 
     const res = await app.request("/api/v1/search?q=legacy");
     t.equal(res.status, 200);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data = (await res.json()) as any;
+    const data = SearchResponse.assert(await res.json());
     t.equal(data.endpoints.length, 1);
+    if (!data.endpoints[0]) throw new Error("expected data.endpoints[0]");
     t.equal(data.endpoints[0].path_pattern, "/api/v1");
   });
 
@@ -408,11 +428,12 @@ await t.test("GET /api/v1/search", async (t) => {
 
     const res = await app.request("/api/v1/search?q=xyzzy-unique-tag");
     t.equal(res.status, 200);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data = (await res.json()) as any;
+    const data = SearchResponse.assert(await res.json());
     t.equal(data.proxies.length, 1);
+    if (!data.proxies[0]) throw new Error("expected data.proxies[0]");
     t.same(data.proxies[0].tags, ["xyzzy-unique-tag", "ml"]);
     t.equal(data.endpoints.length, 1);
+    if (!data.endpoints[0]) throw new Error("expected data.endpoints[0]");
     t.same(data.endpoints[0].tags, ["xyzzy-unique-tag", "experimental"]);
   });
 
@@ -426,16 +447,16 @@ await t.test("GET /api/v1/search", async (t) => {
 
     const res = await app.request("/api/v1/search?q=PRODUCTION");
     t.equal(res.status, 200);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data = (await res.json()) as any;
+    const data = SearchResponse.assert(await res.json());
     t.equal(data.proxies.length, 1);
+    if (!data.proxies[0]) throw new Error("expected data.proxies[0]");
     t.equal(data.proxies[0].name, "Case API");
 
     const res2 = await app.request("/api/v1/search?q=staging");
     t.equal(res2.status, 200);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data2 = (await res2.json()) as any;
+    const data2 = SearchResponse.assert(await res2.json());
     t.equal(data2.endpoints.length, 1);
+    if (!data2.endpoints[0]) throw new Error("expected data2.endpoints[0]");
     t.equal(data2.endpoints[0].path_pattern, "/case/path");
   });
 
@@ -445,9 +466,9 @@ await t.test("GET /api/v1/search", async (t) => {
 
     const res = await app.request("/api/v1/search?q=\\");
     t.equal(res.status, 200);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data = (await res.json()) as any;
+    const data = SearchResponse.assert(await res.json());
     t.equal(data.proxies.length, 1);
+    if (!data.proxies[0]) throw new Error("expected data.proxies[0]");
     t.equal(data.proxies[0].name, "Tenant with \\ backslash");
   });
 });
@@ -538,8 +559,7 @@ await t.test("GET /api/v1/search with special-char-only query", async (t) => {
 
       const res = await app.request("/api/v1/search?q=!@%23$");
       t.equal(res.status, 200);
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const data = (await res.json()) as any;
+      const data = SearchResponse.assert(await res.json());
       t.equal(data.proxies.length, 0);
       t.equal(data.endpoints.length, 0);
     },

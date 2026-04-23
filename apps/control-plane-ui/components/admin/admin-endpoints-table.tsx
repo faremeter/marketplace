@@ -40,7 +40,7 @@ interface Endpoint {
 }
 
 interface OpenApiSpecResponse {
-  spec: unknown | null;
+  spec: unknown;
   hasSpec: boolean;
 }
 
@@ -95,7 +95,7 @@ export function AdminEndpointsTable({
         title: "Endpoint deleted",
         variant: "success",
       });
-      mutate();
+      void mutate();
       setEndpointToDelete(null);
     } catch {
       toast({
@@ -168,7 +168,7 @@ export function AdminEndpointsTable({
                 defaultPrice={defaultPrice}
                 defaultScheme={defaultScheme}
                 hasOpenApiSpec={hasOpenApiSpec}
-                onUpdate={() => mutate()}
+                onUpdate={() => void mutate()}
                 onEdit={() => setEditingEndpoint(endpoint)}
                 onDelete={() => setEndpointToDelete(endpoint)}
               />
@@ -179,7 +179,7 @@ export function AdminEndpointsTable({
               defaultScheme={defaultScheme}
               hasOpenApiSpec={hasOpenApiSpec}
               onUpdate={() => {
-                mutate();
+                void mutate();
                 onDefaultsChange?.();
               }}
             />
@@ -210,7 +210,7 @@ export function AdminEndpointsTable({
                 </button>
               </AlertDialog.Cancel>
               <button
-                onClick={handleDelete}
+                onClick={() => void handleDelete()}
                 disabled={isDeleting}
                 className="rounded-md bg-red-600 px-3 py-2 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-50"
               >
@@ -230,7 +230,7 @@ export function AdminEndpointsTable({
           onClose={() => setEditingEndpoint(null)}
           onSuccess={() => {
             setEditingEndpoint(null);
-            mutate();
+            void mutate();
           }}
         />
       )}

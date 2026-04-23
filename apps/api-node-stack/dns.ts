@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-base-to-string */
 import * as pulumi from "@pulumi/pulumi";
 import * as aws from "@pulumi/aws";
 import { RecordType } from "@pulumi/aws/route53";
@@ -15,7 +16,7 @@ type Zoneish = {
 };
 
 export const alternateZoneNamesList =
-  (config.getObject("alternateZoneNames") as string[] | undefined) ?? [];
+  config.getObject<string[]>("alternateZoneNames") ?? [];
 
 const alternateZoneNames: string[] | undefined =
   alternateZoneNamesList.length > 0 ? alternateZoneNamesList : undefined;

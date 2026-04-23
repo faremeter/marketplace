@@ -66,11 +66,11 @@ export async function syncOpenApiSpec(tenantId: number): Promise<void> {
     };
   }
 
-  const existingPaths = (baseSpec.paths ?? {}) as Record<string, unknown>;
+  const existingPaths = baseSpec.paths ?? {};
   const newPaths: Record<string, unknown> = {};
 
   for (const endpoint of endpoints) {
-    const sourcePaths = endpoint.openapi_source_paths as string[] | null;
+    const sourcePaths = endpoint.openapi_source_paths;
 
     if (sourcePaths && sourcePaths.length > 0) {
       for (const sp of sourcePaths) {

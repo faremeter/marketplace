@@ -98,7 +98,7 @@ export default function EndpointsPage() {
               key={tenant.id}
               tenant={tenant}
               orgId={currentOrg.id}
-              onUpdate={() => mutate()}
+              onUpdate={() => void mutate()}
             />
           ))}
         </div>
@@ -205,7 +205,7 @@ function TenantCard({
               <code className="text-sm text-gray-11">{proxyUrl}</code>
             </div>
             <button
-              onClick={handleCopy}
+              onClick={() => void handleCopy()}
               className="border-l border-gray-6 px-2 py-1.5 text-gray-11 hover:bg-gray-4 hover:text-gray-12 transition-colors"
               title="Copy URL"
             >
@@ -279,7 +279,7 @@ function TenantCard({
                         endpoint={endpoint}
                         tenant={tenant}
                         orgId={orgId}
-                        onUpdate={() => mutateEndpoints()}
+                        onUpdate={() => void mutateEndpoints()}
                       />
                     ),
                   )}
@@ -338,7 +338,7 @@ function CatchAllRow({
         <div className="inline-flex items-center gap-1">
           <button
             onClick={() => {
-              navigator.clipboard.writeText(proxyUrl);
+              void navigator.clipboard.writeText(proxyUrl);
               toast({ title: "URL copied to clipboard", variant: "success" });
             }}
             className="rounded border border-gray-6 p-1 text-gray-11 hover:bg-gray-4 hover:text-gray-12"
@@ -460,7 +460,7 @@ function EndpointRow({
         <div className="inline-flex items-center gap-1">
           <button
             onClick={() => {
-              navigator.clipboard.writeText(fullUrl);
+              void navigator.clipboard.writeText(fullUrl);
               toast({ title: "URL copied to clipboard", variant: "success" });
             }}
             className="rounded border border-gray-6 p-1 text-gray-11 hover:bg-gray-4 hover:text-gray-12"

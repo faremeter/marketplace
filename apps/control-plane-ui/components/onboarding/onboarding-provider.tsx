@@ -19,7 +19,7 @@ function getHiddenOrgs(): number[] {
   if (typeof window === "undefined") return [];
   try {
     const stored = localStorage.getItem(ONBOARDING_HIDDEN_KEY);
-    return stored ? JSON.parse(stored) : [];
+    return stored ? (JSON.parse(stored) as number[]) : [];
   } catch {
     return [];
   }
@@ -147,7 +147,7 @@ export function OnboardingProvider({
           onOpenChange={handleDialogOpenChange}
           steps={status.steps}
           allComplete={status.all_steps_complete}
-          onComplete={handleComplete}
+          onComplete={() => void handleComplete()}
           onDontShowAgain={handleDontShowAgain}
         />
       )}
@@ -187,7 +187,7 @@ export function OnboardingProvider({
                   View Docs
                 </a>
                 <button
-                  onClick={handleFinishOnboarding}
+                  onClick={() => void handleFinishOnboarding()}
                   disabled={isFinishing}
                   className="inline-flex items-center justify-center gap-2 rounded-md bg-brand-orange px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-brand-orange/90 disabled:opacity-70"
                 >

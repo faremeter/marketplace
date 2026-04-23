@@ -66,71 +66,75 @@ export function AddEndpointDialog({
       return;
     }
 
-    const timer = setTimeout(async () => {
-      const catchAllPatterns = ["/", "/*", "^/$", "^/.*$"];
-      if (catchAllPatterns.includes(pathPattern)) {
-        setValidation({
-          valid: false,
-          isValidRegex: false,
-          matches: [],
-          error: "Edit the catch-all row in the table to set pricing for /",
-        });
-        return;
-      }
+    const timer = setTimeout(() => {
+      void (async () => {
+        const catchAllPatterns = ["/", "/*", "^/$", "^/.*$"];
+        if (catchAllPatterns.includes(pathPattern)) {
+          setValidation({
+            valid: false,
+            isValidRegex: false,
+            matches: [],
+            error: "Edit the catch-all row in the table to set pricing for /",
+          });
+          return;
+        }
 
-      // Only validate as regex if it starts with ^
-      // Otherwise it's either OpenAPI-style ({param}) or literal prefix
-      if (pathPattern.startsWith("^")) {
-        try {
-          new RegExp(pathPattern);
+        // Only validate as regex if it starts with ^
+        // Otherwise it's either OpenAPI-style ({param}) or literal prefix
+        if (pathPattern.startsWith("^")) {
+          try {
+            new RegExp(pathPattern);
+            setValidation({
+              valid: true,
+              isValidRegex: true,
+              matches: [],
+              hasSpec: false,
+            });
+          } catch {
+            setValidation({
+              valid: false,
+              isValidRegex: false,
+              matches: [],
+              error: "Invalid regex pattern",
+            });
+          }
+        } else {
+          // Non-regex patterns are always valid
           setValidation({
             valid: true,
             isValidRegex: true,
             matches: [],
             hasSpec: false,
           });
-        } catch {
-          setValidation({
-            valid: false,
-            isValidRegex: false,
-            matches: [],
-            error: "Invalid regex pattern",
-          });
         }
-      } else {
-        // Non-regex patterns are always valid
-        setValidation({
-          valid: true,
-          isValidRegex: true,
-          matches: [],
-          hasSpec: false,
-        });
-      }
 
-      // If we have an OpenAPI spec, also check for matches
-      if (hasOpenApiSpec) {
-        setValidating(true);
-        try {
-          const result = await api.post<ValidatePatternResponse>(
-            `/api/tenants/${tenantId}/openapi/validate-pattern`,
-            { pattern: pathPattern },
-          );
-          setSelectedPaths(result.matches);
-          setValidation((prev) =>
-            prev ? { ...prev, matches: result.matches } : null,
-          );
-        } catch {
-          // Ignore validation errors for OpenAPI matching
-        } finally {
-          setValidating(false);
+        // If we have an OpenAPI spec, also check for matches
+        if (hasOpenApiSpec) {
+          setValidating(true);
+          try {
+            const result = await api.post<ValidatePatternResponse>(
+              `/api/tenants/${tenantId}/openapi/validate-pattern`,
+              { pattern: pathPattern },
+            );
+            setSelectedPaths(result.matches);
+            setValidation((prev) =>
+              prev ? { ...prev, matches: result.matches } : null,
+            );
+          } catch {
+            // Ignore validation errors for OpenAPI matching
+          } finally {
+            setValidating(false);
+          }
         }
-      }
+      })();
     }, 300);
 
     return () => clearTimeout(timer);
   }, [pathPattern, tenantId, hasOpenApiSpec]);
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (
+    e: React.SyntheticEvent<HTMLFormElement, SubmitEvent>,
+  ) => {
     e.preventDefault();
 
     if (!pathPattern.trim()) return;
@@ -195,7 +199,10 @@ export function AddEndpointDialog({
             </Dialog.Close>
           </div>
 
-          <form onSubmit={handleSubmit} className="mt-4 space-y-4">
+          <form
+            onSubmit={(e) => void handleSubmit(e)}
+            className="mt-4 space-y-4"
+          >
             <div>
               <label className="block text-sm font-medium text-gray-11">
                 Path <span className="text-red-400">*</span>

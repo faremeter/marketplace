@@ -16,7 +16,7 @@ export interface OnboardingStatus {
 }
 
 export function refreshOnboardingStatus(orgId: number) {
-  globalMutate(`/api/organizations/${orgId}/onboarding-status`);
+  void globalMutate(`/api/organizations/${orgId}/onboarding-status`);
 }
 
 export function useOnboarding() {

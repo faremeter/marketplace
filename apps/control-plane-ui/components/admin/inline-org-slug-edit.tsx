@@ -93,26 +93,28 @@ export function InlineOrgSlugEdit({
 
     const cacheKey = `${tenantName}:${trimmed}`;
 
-    checkTimeoutRef.current = setTimeout(async () => {
-      lastCheckedRef.current = cacheKey;
+    checkTimeoutRef.current = setTimeout(() => {
+      void (async () => {
+        lastCheckedRef.current = cacheKey;
 
-      try {
-        const orgSlugParam = trimmed ? encodeURIComponent(trimmed) : "null";
-        const url = `/api/admin/tenants/check-name?name=${encodeURIComponent(tenantName)}&org_slug=${orgSlugParam}&excludeId=${tenantId}`;
-        const result = await api.get<{ available: boolean }>(url);
+        try {
+          const orgSlugParam = trimmed ? encodeURIComponent(trimmed) : "null";
+          const url = `/api/admin/tenants/check-name?name=${encodeURIComponent(tenantName)}&org_slug=${orgSlugParam}&excludeId=${tenantId}`;
+          const result = await api.get<{ available: boolean }>(url);
 
-        if (lastCheckedRef.current === cacheKey) {
-          setIsAvailable(result.available);
+          if (lastCheckedRef.current === cacheKey) {
+            setIsAvailable(result.available);
+          }
+        } catch {
+          if (lastCheckedRef.current === cacheKey) {
+            setIsAvailable(null);
+          }
+        } finally {
+          if (lastCheckedRef.current === cacheKey) {
+            setIsChecking(false);
+          }
         }
-      } catch {
-        if (lastCheckedRef.current === cacheKey) {
-          setIsAvailable(null);
-        }
-      } finally {
-        if (lastCheckedRef.current === cacheKey) {
-          setIsChecking(false);
-        }
-      }
+      })();
     }, 500);
 
     return () => {
@@ -159,7 +161,7 @@ export function InlineOrgSlugEdit({
       let message = "Unknown error";
       if (err instanceof ApiError && err.data) {
         const data = err.data as { error?: string };
-        message = data.error || err.message;
+        message = data.error ?? err.message;
       } else if (err instanceof Error) {
         message = err.message;
       }
@@ -184,7 +186,7 @@ export function InlineOrgSlugEdit({
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter") {
-      handleSave();
+      void handleSave();
     } else if (e.key === "Escape") {
       setIsOpen(false);
     }
@@ -205,7 +207,7 @@ export function InlineOrgSlugEdit({
           disabled={disabled}
           title={disabledReason ?? undefined}
         >
-          {orgSlug || <span className="text-gray-9">-</span>}
+          {orgSlug ?? <span className="text-gray-9">-</span>}
           {!disabled && (
             <Pencil1Icon className="h-3 w-3 text-gray-11 opacity-0 group-hover:opacity-100" />
           )}
@@ -280,7 +282,7 @@ export function InlineOrgSlugEdit({
                 Cancel
               </button>
               <button
-                onClick={handleSave}
+                onClick={() => void handleSave()}
                 disabled={!canSave}
                 className="inline-flex items-center gap-1 rounded bg-accent-9 px-2 py-1 text-xs text-white hover:bg-accent-10 disabled:opacity-50"
               >

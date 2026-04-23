@@ -66,7 +66,7 @@ function VerifyEmailContent() {
       }
     }
 
-    verify();
+    void verify();
   }, [token, router, user, toast]);
 
   if (status === "loading") {

@@ -44,7 +44,7 @@ export function TenantTransactionsSection({
             <code className="text-sm text-gray-11">{proxyUrl}</code>
           </div>
           <button
-            onClick={handleCopy}
+            onClick={() => void handleCopy()}
             className="border-l border-gray-6 px-2 py-1.5 text-gray-11 hover:bg-gray-4 hover:text-gray-12 transition-colors"
             title="Copy URL"
           >

@@ -45,12 +45,12 @@ async function reseedSupportedTokens() {
     .execute();
 }
 
-t.test("GET /api/token-rates/supported-tokens", async (t) => {
+await t.test("GET /api/token-rates/supported-tokens", async (t) => {
   t.beforeEach(async () => {
     await clearTestData();
   });
 
-  t.test("returns all supported tokens", async (t) => {
+  await t.test("returns all supported tokens", async (t) => {
     const res = await app.request("/api/token-rates/supported-tokens");
     t.equal(res.status, 200);
     const body = (await res.json()) as { data: SupportedToken[] };
@@ -60,7 +60,7 @@ t.test("GET /api/token-rates/supported-tokens", async (t) => {
     t.ok(body.data.find((t: { symbol: string }) => t.symbol === "EURC"));
   });
 
-  t.test("returns correct shape", async (t) => {
+  await t.test("returns correct shape", async (t) => {
     const res = await app.request("/api/token-rates/supported-tokens");
     const body = (await res.json()) as { data: SupportedToken[] };
     const [usdc] = body.data.filter(
@@ -72,7 +72,7 @@ t.test("GET /api/token-rates/supported-tokens", async (t) => {
     t.equal(usdc?.isUsdPegged, true);
   });
 
-  t.test("returns isUsdPegged=false for non-USD tokens", async (t) => {
+  await t.test("returns isUsdPegged=false for non-USD tokens", async (t) => {
     const res = await app.request("/api/token-rates/supported-tokens");
     const body = (await res.json()) as { data: SupportedToken[] };
     const [eurc] = body.data.filter((tok) => tok.symbol === "EURC");
@@ -80,7 +80,7 @@ t.test("GET /api/token-rates/supported-tokens", async (t) => {
     t.equal(eurc?.isUsdPegged, false);
   });
 
-  t.test("returns empty when no tokens seeded", async (t) => {
+  await t.test("returns empty when no tokens seeded", async (t) => {
     await db.deleteFrom("supported_tokens").execute();
     const res = await app.request("/api/token-rates/supported-tokens");
     const body = (await res.json()) as { data: SupportedToken[] };
@@ -89,12 +89,12 @@ t.test("GET /api/token-rates/supported-tokens", async (t) => {
   });
 });
 
-t.test("seedTokenPricesForTenant", async (t) => {
+await t.test("seedTokenPricesForTenant", async (t) => {
   t.beforeEach(async () => {
     await clearTestData();
   });
 
-  t.test(
+  await t.test(
     "seeds only USD-pegged tokens from supported_tokens table",
     async (t) => {
       const org = await db
@@ -146,7 +146,7 @@ t.test("seedTokenPricesForTenant", async (t) => {
     },
   );
 
-  t.test("does not seed when amount is 0", async (t) => {
+  await t.test("does not seed when amount is 0", async (t) => {
     const org = await db
       .insertInto("organizations")
       .values({ name: "test-org2", slug: "test-org2" })
@@ -188,7 +188,7 @@ t.test("seedTokenPricesForTenant", async (t) => {
     t.equal(prices.length, 0);
   });
 
-  t.test("does not seed when no supported tokens exist", async (t) => {
+  await t.test("does not seed when no supported tokens exist", async (t) => {
     await db.deleteFrom("supported_tokens").execute();
 
     const org = await db

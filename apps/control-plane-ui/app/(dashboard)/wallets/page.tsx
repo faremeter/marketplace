@@ -117,17 +117,19 @@ function CreateWalletModal({
       clearTimeout(checkTimeoutRef.current);
     }
 
-    checkTimeoutRef.current = setTimeout(async () => {
-      try {
-        const result = await api.get<{ available: boolean }>(
-          `/api/wallets/organization/${organizationId}/check-name?name=${encodeURIComponent(name.trim())}`,
-        );
-        setNameAvailable(result.available);
-      } catch {
-        setNameAvailable(null);
-      } finally {
-        setIsCheckingName(false);
-      }
+    checkTimeoutRef.current = setTimeout(() => {
+      void (async () => {
+        try {
+          const result = await api.get<{ available: boolean }>(
+            `/api/wallets/organization/${organizationId}/check-name?name=${encodeURIComponent(name.trim())}`,
+          );
+          setNameAvailable(result.available);
+        } catch {
+          setNameAvailable(null);
+        } finally {
+          setIsCheckingName(false);
+        }
+      })();
     }, 500);
 
     return () => {
@@ -338,17 +340,19 @@ function EditWalletModal({
       clearTimeout(checkTimeoutRef.current);
     }
 
-    checkTimeoutRef.current = setTimeout(async () => {
-      try {
-        const result = await api.get<{ available: boolean }>(
-          `/api/wallets/organization/${organizationId}/check-name?name=${encodeURIComponent(name.trim())}&excludeId=${walletId}`,
-        );
-        setNameAvailable(result.available);
-      } catch {
-        setNameAvailable(null);
-      } finally {
-        setIsCheckingName(false);
-      }
+    checkTimeoutRef.current = setTimeout(() => {
+      void (async () => {
+        try {
+          const result = await api.get<{ available: boolean }>(
+            `/api/wallets/organization/${organizationId}/check-name?name=${encodeURIComponent(name.trim())}&excludeId=${walletId}`,
+          );
+          setNameAvailable(result.available);
+        } catch {
+          setNameAvailable(null);
+        } finally {
+          setIsCheckingName(false);
+        }
+      })();
     }, 500);
 
     return () => {
@@ -602,7 +606,7 @@ function WalletCard({
             </button>
           )}
           <button
-            onClick={handleRefresh}
+            onClick={() => void handleRefresh()}
             disabled={isRefreshing}
             className="flex items-center gap-1.5 rounded-md border border-gray-6 px-3 py-1.5 text-xs text-gray-11 hover:bg-gray-3 disabled:opacity-50"
           >
@@ -631,14 +635,14 @@ function WalletCard({
             <div className="flex items-center gap-2">
               <span className="text-xs text-gray-11 w-16">Solana:</span>
               <code
-                onClick={() => copyToClipboard(solana)}
+                onClick={() => void copyToClipboard(solana)}
                 className="flex-1 rounded border border-gray-6 bg-gray-3 px-2 py-1 font-mono text-xs text-gray-12 truncate cursor-pointer hover:bg-gray-4"
                 title="Click to copy"
               >
                 {solana}
               </code>
               <button
-                onClick={() => copyToClipboard(solana)}
+                onClick={() => void copyToClipboard(solana)}
                 className="rounded p-1 text-gray-11 hover:bg-gray-3 hover:text-gray-12"
               >
                 {copiedAddress === solana ? (
@@ -657,14 +661,14 @@ function WalletCard({
             <div className="flex items-center gap-2">
               <span className="text-xs text-gray-11 w-16">EVM:</span>
               <code
-                onClick={() => copyToClipboard(evm)}
+                onClick={() => void copyToClipboard(evm)}
                 className="flex-1 rounded border border-gray-6 bg-gray-3 px-2 py-1 font-mono text-xs text-gray-12 truncate cursor-pointer hover:bg-gray-4"
                 title="Click to copy"
               >
                 {evm}
               </code>
               <button
-                onClick={() => copyToClipboard(evm)}
+                onClick={() => void copyToClipboard(evm)}
                 className="rounded p-1 text-gray-11 hover:bg-gray-3 hover:text-gray-12"
               >
                 {copiedAddress === evm ? (
@@ -739,11 +743,11 @@ function WalletCard({
       <EditWalletModal
         open={showEditModal}
         onOpenChange={setShowEditModal}
-        onSave={handleSave}
+        onSave={(data) => void handleSave(data)}
         isSaving={isSaving}
         initialName={wallet.name}
-        initialSolana={addresses.solana || ""}
-        initialEvm={addresses.evm || ""}
+        initialSolana={addresses.solana ?? ""}
+        initialEvm={addresses.evm ?? ""}
         walletId={wallet.id}
         organizationId={organizationId}
       />
@@ -1026,7 +1030,7 @@ export default function WalletsPage() {
               wallet={wallet}
               isOwner={isOwner ?? false}
               onEdit={handleEditWallet}
-              onDelete={handleDeleteClick}
+              onDelete={(wallet) => void handleDeleteClick(wallet)}
               organizationId={currentOrg.id}
             />
           ))}
@@ -1062,7 +1066,7 @@ export default function WalletsPage() {
       <CreateWalletModal
         open={showCreateModal}
         onOpenChange={setShowCreateModal}
-        onSave={handleCreateWallet}
+        onSave={(data) => void handleCreateWallet(data)}
         isSaving={isSaving}
         organizationId={currentOrg.id}
       />
@@ -1099,7 +1103,7 @@ export default function WalletsPage() {
                 Cancel
               </button>
               <button
-                onClick={handleDeleteConfirm}
+                onClick={() => void handleDeleteConfirm()}
                 disabled={isDeleting}
                 className="rounded-md bg-red-600 px-3 py-2 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-50"
               >
@@ -1222,8 +1226,8 @@ export default function WalletsPage() {
                                 </code>
                                 <button
                                   onClick={() =>
-                                    copyFundingAddress(
-                                      addresses.solana as string,
+                                    void copyFundingAddress(
+                                      addresses.solana ?? "",
                                     )
                                   }
                                   className="rounded p-1.5 text-gray-11 hover:bg-gray-3 hover:text-gray-12 focus:outline-none"
@@ -1326,16 +1330,18 @@ export default function WalletsPage() {
                 <button
                   onClick={() => {
                     setIsContinuing(true);
-                    import("@hiseb/confetti").then(({ default: confetti }) => {
-                      confetti({
-                        position: {
-                          x: window.innerWidth * 0.5,
-                          y: window.innerHeight * 0.4,
-                        },
-                        count: 150,
-                        velocity: 200,
-                      });
-                    });
+                    void import("@hiseb/confetti").then(
+                      ({ default: confetti }) => {
+                        confetti({
+                          position: {
+                            x: window.innerWidth * 0.5,
+                            y: window.innerHeight * 0.4,
+                          },
+                          count: 150,
+                          velocity: 200,
+                        });
+                      },
+                    );
                     setTimeout(() => {
                       router.push("/proxies");
                       refreshOnboardingStatus(currentOrg?.id ?? 0);
@@ -1378,11 +1384,11 @@ export default function WalletsPage() {
         <EditWalletModal
           open={showFundingEditModal}
           onOpenChange={setShowFundingEditModal}
-          onSave={handleFundingEditSave}
+          onSave={(data) => void handleFundingEditSave(data)}
           isSaving={isSavingFundingEdit}
           initialName={wallets[0].name}
-          initialSolana={firstWalletSolanaAddress || ""}
-          initialEvm={extractAddresses(wallets[0].wallet_config).evm || ""}
+          initialSolana={firstWalletSolanaAddress ?? ""}
+          initialEvm={extractAddresses(wallets[0].wallet_config).evm ?? ""}
           walletId={wallets[0].id}
           organizationId={currentOrg?.id ?? 0}
         />

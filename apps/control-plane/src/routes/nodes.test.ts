@@ -1,9 +1,21 @@
 import "../tests/setup/env.js";
 import t from "tap";
+import { type } from "arktype";
 import { Hono } from "hono";
 import { db, setupTestSchema, clearTestData } from "../db/instance.js";
 import { signToken } from "../middleware/auth.js";
 import { nodesRoutes } from "./nodes.js";
+
+const NodeResponse = type({
+  "name?": "string",
+  "internal_ip?": "string",
+  "public_ip?": "string | null",
+  "status?": "string",
+  "deleted?": "boolean",
+  "wireguard_public_key?": "string | null",
+  "wireguard_address?": "string | null",
+  "+": "delete",
+});
 
 const app = new Hono();
 app.route("/api/admin/nodes", nodesRoutes);
@@ -146,8 +158,7 @@ await t.test("GET /api/admin/nodes/:id", async (t) => {
       headers: { Cookie: `auth_token=${admin.token}` },
     });
     t.equal(res.status, 200);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data = (await res.json()) as any;
+    const data = NodeResponse.assert(await res.json());
     t.equal(data.name, "test-node");
     t.equal(data.internal_ip, "10.0.0.5");
   });
@@ -183,8 +194,7 @@ await t.test("POST /api/admin/nodes", async (t) => {
       }),
     });
     t.equal(res.status, 201);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data = (await res.json()) as any;
+    const data = NodeResponse.assert(await res.json());
     t.equal(data.name, "new-node");
     t.equal(data.internal_ip, "10.0.0.10");
     t.equal(data.public_ip, "1.2.3.4");
@@ -287,8 +297,7 @@ await t.test("PUT /api/admin/nodes/:id", async (t) => {
       body: JSON.stringify({ name: "new-name" }),
     });
     t.equal(res.status, 200);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data = (await res.json()) as any;
+    const data = NodeResponse.assert(await res.json());
     t.equal(data.name, "new-name");
   });
 
@@ -305,8 +314,7 @@ await t.test("PUT /api/admin/nodes/:id", async (t) => {
       body: JSON.stringify({ internal_ip: "10.0.0.99" }),
     });
     t.equal(res.status, 200);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data = (await res.json()) as any;
+    const data = NodeResponse.assert(await res.json());
     t.equal(data.internal_ip, "10.0.0.99");
   });
 
@@ -323,8 +331,7 @@ await t.test("PUT /api/admin/nodes/:id", async (t) => {
       body: JSON.stringify({ status: "inactive" }),
     });
     t.equal(res.status, 200);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data = (await res.json()) as any;
+    const data = NodeResponse.assert(await res.json());
     t.equal(data.status, "inactive");
   });
 });
@@ -348,8 +355,7 @@ await t.test("DELETE /api/admin/nodes/:id", async (t) => {
       headers: { Cookie: `auth_token=${admin.token}` },
     });
     t.equal(res.status, 200);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data = (await res.json()) as any;
+    const data = NodeResponse.assert(await res.json());
     t.equal(data.deleted, true);
   });
 
@@ -365,8 +371,7 @@ await t.test("DELETE /api/admin/nodes/:id", async (t) => {
       headers: { Cookie: `auth_token=${admin.token}` },
     });
     t.equal(res.status, 200);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data = (await res.json()) as any;
+    const data = NodeResponse.assert(await res.json());
     t.equal(data.deleted, true);
   });
 });
@@ -390,8 +395,7 @@ await t.test(
         }),
       });
       t.equal(res.status, 201);
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const data = (await res.json()) as any;
+      const data = NodeResponse.assert(await res.json());
       t.equal(data.name, "no-wg-node");
       t.equal(data.wireguard_public_key, null);
       t.equal(data.wireguard_address, null);
@@ -415,8 +419,7 @@ await t.test(
         }),
       });
       t.equal(res.status, 201);
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const data = (await res.json()) as any;
+      const data = NodeResponse.assert(await res.json());
       t.equal(data.wireguard_public_key, "abc123pubkey");
       t.equal(data.wireguard_address, "10.11.0.50");
     });
@@ -449,8 +452,7 @@ await t.test("PUT /api/admin/nodes/:id - status transitions", async (t) => {
     });
 
     t.equal(res.status, 200);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data = (await res.json()) as any;
+    const data = NodeResponse.assert(await res.json());
     t.equal(data.status, "inactive");
   });
 
@@ -477,8 +479,7 @@ await t.test("PUT /api/admin/nodes/:id - status transitions", async (t) => {
     });
 
     t.equal(res.status, 200);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data = (await res.json()) as any;
+    const data = NodeResponse.assert(await res.json());
     t.equal(data.status, "active");
   });
 });

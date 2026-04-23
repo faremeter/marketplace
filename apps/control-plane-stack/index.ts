@@ -69,7 +69,7 @@ new runner.SSHDeployer(
     connection: node.connection,
     environment: {
       APP_NAME,
-      AWS_REGION: awsRegion.name,
+      AWS_REGION: awsRegion.region,
       WIREGUARD_PRIVATE_KEY: wgConfig.require("privateKey"),
       WIREGUARD_WG0_ADDRESS: wgConfig.require("address"),
       WIREGUARD_WG1_ADDRESS: wgConfig.require("multiAddress"),

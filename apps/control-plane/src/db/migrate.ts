@@ -71,11 +71,13 @@ async function runMigration() {
 
   if (error) {
     logger.error("Failed to migrate");
-    logger.error(String(error));
+    logger.error(
+      error instanceof Error ? error.message : JSON.stringify(error),
+    );
     process.exit(1);
   }
 
   await db.destroy();
 }
 
-runMigration();
+void runMigration();

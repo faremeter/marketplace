@@ -60,7 +60,9 @@ export function AdminEditEndpointDialog({
   const [saving, setSaving] = useState(false);
   const { toast } = useToast();
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (
+    e: React.SyntheticEvent<HTMLFormElement, SubmitEvent>,
+  ) => {
     e.preventDefault();
 
     setSaving(true);
@@ -104,7 +106,10 @@ export function AdminEditEndpointDialog({
             </Dialog.Close>
           </div>
 
-          <form onSubmit={handleSubmit} className="mt-4 space-y-4">
+          <form
+            onSubmit={(e) => void handleSubmit(e)}
+            className="mt-4 space-y-4"
+          >
             <div>
               <label className="block text-sm font-medium text-gray-11">
                 Path
