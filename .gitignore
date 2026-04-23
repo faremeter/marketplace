@@ -19,3 +19,4 @@ tickets/
 Pulumi.*.yaml
 !Pulumi.example.yaml
 dispatch/
+tmp/
