@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/prefer-nullish-coalescing -- empty env vars should fall back to defaults */
 export const SITE_NAME =
   process.env.NEXT_PUBLIC_SITE_NAME || "Faremeter Marketplace";
 export const DOCS_URL =

@@ -56,7 +56,7 @@ export function AdminRoute({ children, fallback }: GuardProps) {
     return fallback ?? <LoadingSpinner />;
   }
 
-  if (!user || !user.is_admin) {
+  if (!user?.is_admin) {
     return fallback ?? <LoadingSpinner />;
   }
 

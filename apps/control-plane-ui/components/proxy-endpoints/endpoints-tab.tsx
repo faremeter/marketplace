@@ -88,7 +88,7 @@ export function EndpointsTab({
         title: "Endpoint deleted",
         variant: "success",
       });
-      mutate();
+      void mutate();
       setEndpointToDelete(null);
     } catch {
       toast({
@@ -213,7 +213,7 @@ export function EndpointsTab({
                         <InlinePriceEdit
                           priceMicro={endpoint.price ?? defaultPrice}
                           defaultPriceMicro={defaultPrice}
-                          onUpdate={() => mutate()}
+                          onUpdate={() => void mutate()}
                           apiEndpoint={`/api/tenants/${tenantId}/endpoints/${endpoint.id}`}
                           fieldName="price"
                           label="Price"
@@ -229,7 +229,7 @@ export function EndpointsTab({
                       <InlineSchemeEdit
                         scheme={endpoint.scheme ?? defaultScheme}
                         defaultScheme={defaultScheme}
-                        onUpdate={() => mutate()}
+                        onUpdate={() => void mutate()}
                         apiEndpoint={`/api/tenants/${tenantId}/endpoints/${endpoint.id}`}
                         fieldName="scheme"
                         label="Scheme"
@@ -374,7 +374,7 @@ export function EndpointsTab({
         onOpenChange={setImportDialogOpen}
         tenantId={tenantId}
         onSuccess={() => {
-          mutate();
+          void mutate();
           onSpecChange();
         }}
       />
@@ -390,7 +390,7 @@ export function EndpointsTab({
         onOpenChange={setAddDialogOpen}
         tenantId={tenantId}
         hasOpenApiSpec={hasOpenApiSpec}
-        onSuccess={() => mutate()}
+        onSuccess={() => void mutate()}
         defaultPrice={defaultPrice}
         defaultScheme={defaultScheme}
       />
@@ -402,7 +402,7 @@ export function EndpointsTab({
           onClose={() => setEditingEndpoint(null)}
           onSuccess={() => {
             setEditingEndpoint(null);
-            mutate();
+            void mutate();
           }}
         />
       )}
@@ -430,7 +430,7 @@ export function EndpointsTab({
                 </button>
               </AlertDialog.Cancel>
               <button
-                onClick={handleDelete}
+                onClick={() => void handleDelete()}
                 disabled={isDeleting}
                 className="rounded-md bg-red-600 px-3 py-2 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-50"
               >

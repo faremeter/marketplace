@@ -33,10 +33,10 @@ async function triggerCertProvisioningHttp(
 }
 
 const db = createDatabase({
-  host: process.env.DATABASE_HOST || "localhost",
-  port: parseInt(process.env.DATABASE_PORT || "5432"),
-  database: process.env.DATABASE_NAME || "control_plane",
-  user: process.env.DATABASE_USER || "control_plane",
+  host: process.env.DATABASE_HOST ?? "localhost",
+  port: parseInt(process.env.DATABASE_PORT ?? "5432"),
+  database: process.env.DATABASE_NAME ?? "control_plane",
+  user: process.env.DATABASE_USER ?? "control_plane",
   password: process.env.DATABASE_PASSWORD!,
 });
 
@@ -58,9 +58,10 @@ async function main() {
   const skipNodeUpdate = configFile === "--from-db";
 
   if (!skipNodeUpdate) {
-    const nodeMapping: Record<string, string> = JSON.parse(
-      readFileSync(configFile, "utf-8"),
-    );
+    const nodeMapping = JSON.parse(readFileSync(configFile, "utf-8")) as Record<
+      string,
+      string
+    >;
 
     console.log("Updating node public IPs...");
     for (const [nodeName, publicIp] of Object.entries(nodeMapping)) {
@@ -202,7 +203,7 @@ async function main() {
   await db.destroy();
 }
 
-main().catch((err) => {
+main().catch((err: unknown) => {
   console.error("Migration failed:", err);
   process.exit(1);
 });

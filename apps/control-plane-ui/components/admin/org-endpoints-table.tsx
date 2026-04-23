@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo } from "react";
 import useSWR from "swr";
 import { api } from "@/lib/api/client";
 import {
@@ -118,7 +118,7 @@ export function OrgEndpointsTable({
         title: "Endpoint deleted",
         variant: "success",
       });
-      mutate();
+      void mutate();
       setEndpointToDelete(null);
     } catch {
       toast({
@@ -129,10 +129,6 @@ export function OrgEndpointsTable({
       setIsDeleting(false);
     }
   };
-
-  const mutateForTenant = useCallback(() => {
-    mutate();
-  }, [mutate]);
 
   const getLineageStatus = (endpoint: Endpoint) => {
     if (
@@ -198,7 +194,7 @@ export function OrgEndpointsTable({
                     <InlinePriceEdit
                       priceMicro={tenant.default_price}
                       onUpdate={() => {
-                        mutateForTenant();
+                        void mutate();
                         onUpdate?.();
                       }}
                       apiEndpoint={`/api/admin/tenants/${tenant.id}`}
@@ -216,7 +212,7 @@ export function OrgEndpointsTable({
                   <InlineSchemeEdit
                     scheme={tenant.default_scheme}
                     onUpdate={() => {
-                      mutateForTenant();
+                      void mutate();
                       onUpdate?.();
                     }}
                     apiEndpoint={`/api/admin/tenants/${tenant.id}`}
@@ -261,7 +257,7 @@ export function OrgEndpointsTable({
                           endpoint.price ?? endpoint.tenant.default_price
                         }
                         defaultPriceMicro={endpoint.tenant.default_price}
-                        onUpdate={() => mutateForTenant()}
+                        onUpdate={() => void mutate()}
                         apiEndpoint={`/api/admin/tenants/${endpoint.tenant_id}/endpoints/${endpoint.id}`}
                         fieldName="price"
                         label="Price"
@@ -278,7 +274,7 @@ export function OrgEndpointsTable({
                     <InlineSchemeEdit
                       scheme={endpoint.scheme ?? endpoint.tenant.default_scheme}
                       defaultScheme={endpoint.tenant.default_scheme}
-                      onUpdate={() => mutateForTenant()}
+                      onUpdate={() => void mutate()}
                       apiEndpoint={`/api/admin/tenants/${endpoint.tenant_id}/endpoints/${endpoint.id}`}
                       fieldName="scheme"
                       label="Scheme"
@@ -383,7 +379,7 @@ export function OrgEndpointsTable({
                 </button>
               </AlertDialog.Cancel>
               <button
-                onClick={handleDelete}
+                onClick={() => void handleDelete()}
                 disabled={isDeleting}
                 className="rounded-md bg-red-600 px-3 py-2 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-50"
               >

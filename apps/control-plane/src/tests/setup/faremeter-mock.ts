@@ -1,7 +1,7 @@
 import * as fixtures from "../fixtures/faremeter.js";
 
 const FAREMETER_API_URL =
-  process.env.FAREMETER_DASH_API_URL || "http://localhost:9999";
+  process.env.FAREMETER_DASH_API_URL ?? "http://localhost:9999";
 
 let originalFetch: typeof globalThis.fetch;
 let mockEnabled = false;
@@ -10,7 +10,12 @@ function mockFetch(
   input: string | URL | Request,
   init?: RequestInit,
 ): Promise<Response> {
-  const url = typeof input === "string" ? input : input.toString();
+  const url =
+    typeof input === "string"
+      ? input
+      : input instanceof URL
+        ? input.href
+        : input.url;
 
   if (!url.startsWith(FAREMETER_API_URL)) {
     return originalFetch(input, init);
@@ -18,8 +23,8 @@ function mockFetch(
 
   const path = url.slice(FAREMETER_API_URL.length);
 
-  const nameMatch = path.match(/\/accounts\?name=([^&]+)/);
-  if (nameMatch && nameMatch[1]) {
+  const nameMatch = /\/accounts\?name=([^&]+)/.exec(path);
+  if (nameMatch?.[1]) {
     const name = decodeURIComponent(nameMatch[1]);
     const account = fixtures.accounts.data.find((a) => a.name === name);
     return Promise.resolve(
@@ -38,8 +43,8 @@ function mockFetch(
     );
   }
 
-  const addrMatch = path.match(/\/tracked-addresses\?account_id=(\d+)/);
-  if (addrMatch && addrMatch[1]) {
+  const addrMatch = /\/tracked-addresses\?account_id=(\d+)/.exec(path);
+  if (addrMatch?.[1]) {
     const accountId = parseInt(addrMatch[1]);
     const addresses = fixtures.trackedAddresses.data.filter(
       (a) => a.account_id === accountId,

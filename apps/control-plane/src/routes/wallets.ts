@@ -11,7 +11,6 @@ import {
   checkBalancesMeetMinimum,
   BALANCE_CACHE_TTL_MS,
   type WalletConfig,
-  type WalletBalances,
 } from "../lib/balances.js";
 import { enqueueBalanceCheck } from "../lib/queue.js";
 import { logger } from "../logger.js";
@@ -159,10 +158,10 @@ walletsRoutes.get("/:id/balances", async (c) => {
     Date.now() - new Date(cachedAt).getTime() < BALANCE_CACHE_TTL_MS;
 
   if (isCacheFresh) {
-    const cached =
+    const cached: Record<string, unknown> =
       typeof wallet.cached_balances === "string"
-        ? JSON.parse(wallet.cached_balances)
-        : wallet.cached_balances;
+        ? (JSON.parse(wallet.cached_balances) as Record<string, unknown>)
+        : (wallet.cached_balances as Record<string, unknown>);
     return c.json({
       ...cached,
       isFunded: wallet.funding_status === "funded",
@@ -181,11 +180,7 @@ walletsRoutes.get("/:id/balances", async (c) => {
 
   const minSol = adminSettings?.minimum_balance_sol ?? 0.001;
   const minUsdc = adminSettings?.minimum_balance_usdc ?? 0.01;
-  const isFunded = checkBalancesMeetMinimum(
-    balances as WalletBalances,
-    minSol,
-    minUsdc,
-  );
+  const isFunded = checkBalancesMeetMinimum(balances, minSol, minUsdc);
 
   await db
     .updateTable("wallets")
@@ -247,7 +242,7 @@ walletsRoutes.post(
       .returningAll()
       .executeTakeFirstOrThrow();
 
-    enqueueBalanceCheck(wallet.id, addresses.solana).catch((err) => {
+    enqueueBalanceCheck(wallet.id, addresses.solana).catch((err: unknown) => {
       logger.error(
         `Failed to enqueue balance check for wallet ${wallet.id}: ${err}`,
       );
@@ -318,11 +313,13 @@ walletsRoutes.put(
 
     if (body.wallet_config) {
       const addresses = extractAddresses(body.wallet_config as WalletConfig);
-      enqueueBalanceCheck(updated.id, addresses.solana).catch((err) => {
-        logger.error(
-          `Failed to enqueue balance check for wallet ${updated.id}: ${err}`,
-        );
-      });
+      enqueueBalanceCheck(updated.id, addresses.solana).catch(
+        (err: unknown) => {
+          logger.error(
+            `Failed to enqueue balance check for wallet ${updated.id}: ${err}`,
+          );
+        },
+      );
     }
 
     return c.json(updated);

@@ -120,7 +120,7 @@ export function isDeleteDisabled(
   const hasCertInFlight = tenant.nodes?.some(
     (n) => n.cert_status === "pending" || n.cert_status === "deleting",
   );
-  return !!hasCertInFlight;
+  return hasCertInFlight ?? false;
 }
 
 export function getDeleteDisabledReason(
@@ -152,7 +152,7 @@ export function isEditDisabled(tenant: TenantStatusInput): boolean {
   const hasCertInFlight = tenant.nodes?.some(
     (n) => n.cert_status === "pending" || n.cert_status === "deleting",
   );
-  return !!hasCertInFlight;
+  return hasCertInFlight ?? false;
 }
 
 export function getEditDisabledReason(

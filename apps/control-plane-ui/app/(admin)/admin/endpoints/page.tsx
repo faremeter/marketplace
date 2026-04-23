@@ -148,7 +148,7 @@ export default function AdminEndpointsPage() {
                 key={org.id}
                 org={org}
                 tenants={orgTenants}
-                onTenantUpdate={() => mutateTenants()}
+                onTenantUpdate={() => void mutateTenants()}
               />
             ) : null,
           )}

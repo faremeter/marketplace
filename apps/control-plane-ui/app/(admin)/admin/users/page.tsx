@@ -148,7 +148,7 @@ export default function AdminUsersPage() {
                     <td className="px-4 py-3 text-right">
                       {user.id !== currentUser?.id && (
                         <button
-                          onClick={() => handleImpersonate(user.id)}
+                          onClick={() => void handleImpersonate(user.id)}
                           disabled={
                             !!currentUser?.impersonating ||
                             impersonatingId === user.id

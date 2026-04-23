@@ -128,7 +128,7 @@ organizationsRoutes.post(
       );
     }
 
-    let slug = body.slug || slugify(body.name);
+    let slug = body.slug ?? slugify(body.name);
 
     const maxRetries = 5;
     for (let i = 0; i < maxRetries; i++) {
@@ -140,7 +140,7 @@ organizationsRoutes.post(
 
       if (!existingSlug) break;
 
-      const baseSlug = body.slug || slugify(body.name);
+      const baseSlug = body.slug ?? slugify(body.name);
       slug = `${baseSlug}-${generateSlugSuffix()}`;
     }
 
@@ -191,7 +191,7 @@ organizationsRoutes.get("/:id", async (c) => {
     return c.json({ error: "Organization not found" }, 404);
   }
 
-  return c.json({ ...org, role: membership?.role || "admin" });
+  return c.json({ ...org, role: membership?.role ?? "admin" });
 });
 
 organizationsRoutes.put(
@@ -373,7 +373,7 @@ organizationsRoutes.post(
       return c.json({ error: "User is already a member" }, 409);
     }
 
-    const role = body.role || "member";
+    const role = body.role ?? "member";
 
     await db
       .insertInto("user_organizations")
@@ -619,10 +619,10 @@ organizationsRoutes.put(
     }
     if (body.is_active !== undefined) updateData.is_active = body.is_active;
     if (body.upstream_auth_header !== undefined) {
-      updateData.upstream_auth_header = body.upstream_auth_header || null;
+      updateData.upstream_auth_header = body.upstream_auth_header || null; // eslint-disable-line @typescript-eslint/prefer-nullish-coalescing -- empty string means clear
     }
     if (body.upstream_auth_value !== undefined) {
-      updateData.upstream_auth_value = body.upstream_auth_value || null;
+      updateData.upstream_auth_value = body.upstream_auth_value || null; // eslint-disable-line @typescript-eslint/prefer-nullish-coalescing -- empty string means clear
     }
     if (body.default_price !== undefined) {
       updateData.default_price = body.default_price;
@@ -682,7 +682,9 @@ organizationsRoutes.put(
         .execute();
 
       for (const tn of tenantNodes) {
-        syncToNode(tn.node_id).catch((err) => logger.error(String(err)));
+        syncToNode(tn.node_id).catch((err: unknown) =>
+          logger.error(String(err)),
+        );
       }
 
       if (newWalletConfig) {
@@ -693,7 +695,7 @@ organizationsRoutes.put(
           monad: newWalletConfig.evm?.monad?.address,
         };
 
-        updateAccountAddresses(tenant.name, addresses).catch((err) =>
+        updateAccountAddresses(tenant.name, addresses).catch((err: unknown) =>
           logger.error(
             `Failed to update faremeter dash addresses for ${tenant.name}: ${err}`,
           ),
@@ -838,14 +840,16 @@ organizationsRoutes.post(
           tn.node_id,
           tn.public_ip,
           healthCheckId,
-        ).catch((err) => logger.error(`Failed to create DNS record: ${err}`));
+        ).catch((err: unknown) =>
+          logger.error(`Failed to create DNS record: ${err}`),
+        );
       }
 
       if (tn.node_status === "active") {
         activeNodeIds.push(tn.node_id);
       }
 
-      syncToNode(tn.node_id).catch((err) => logger.error(String(err)));
+      syncToNode(tn.node_id).catch((err: unknown) => logger.error(String(err)));
     }
 
     if (activeNodeIds.length > 0) {
@@ -853,7 +857,7 @@ organizationsRoutes.post(
         activeNodeIds,
         tenant.name,
         tenant.org_slug ?? null,
-      ).catch((err) =>
+      ).catch((err: unknown) =>
         logger.error(`Failed to enqueue cert provisioning: ${err}`),
       );
     }
@@ -869,7 +873,7 @@ organizationsRoutes.post(
       };
 
       setupAccountWithAddresses(tenant.name, accessToken, addresses).catch(
-        (err) =>
+        (err: unknown) =>
           logger.error(
             `Failed to setup faremeter dash account for ${tenant.name}: ${err}`,
           ),
@@ -1275,21 +1279,24 @@ organizationsRoutes.post(
             nodeId,
             node.public_ip,
             healthCheckId,
-          ).catch((err) => logger.error(`Failed to create DNS record: ${err}`));
+          ).catch((err: unknown) =>
+            logger.error(`Failed to create DNS record: ${err}`),
+          );
         }
 
         if (node.status === "active") {
           activeNodeIds.push(nodeId);
         }
 
-        syncToNode(nodeId).catch((err) => logger.error(String(err)));
+        syncToNode(nodeId).catch((err: unknown) => logger.error(String(err)));
       }
     }
 
     // Skip cert provisioning for registered tenants
     if (!isRegisterOnly && activeNodeIds.length > 0) {
       enqueueCertProvisioning(activeNodeIds, tenant.name, org.slug).catch(
-        (err) => logger.error(`Failed to enqueue cert provisioning: ${err}`),
+        (err: unknown) =>
+          logger.error(`Failed to enqueue cert provisioning: ${err}`),
       );
     }
 
@@ -1306,7 +1313,7 @@ organizationsRoutes.post(
         };
 
         setupAccountWithAddresses(tenant.name, accessToken, addresses).catch(
-          (err) =>
+          (err: unknown) =>
             logger.error(
               `Failed to setup faremeter dash account for ${tenant.name}: ${err}`,
             ),
@@ -1424,7 +1431,7 @@ organizationsRoutes.post(
       );
     }
 
-    const role = body.role || "member";
+    const role = body.role ?? "member";
 
     const token = randomBytes(32).toString("hex");
     const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
@@ -1820,7 +1827,7 @@ organizationsRoutes.get("/:id/analytics/earnings", async (c) => {
   const orgId = parseInt(c.req.param("id"));
   const level = c.req.query("level") as "organization" | "tenant" | "endpoint";
   const targetIdStr = c.req.query("targetId");
-  const granularityParam = c.req.query("granularity") || "month";
+  const granularityParam = c.req.query("granularity") ?? "month";
   const periodsStr = c.req.query("periods");
 
   const membership = await db

@@ -50,7 +50,7 @@ export function GoLiveButton({ tenant, orgId, onActivate }: GoLiveButtonProps) {
         const data = err.data as { error?: string };
         toast({
           title: "Activation failed",
-          description: data.error || "Failed to activate proxy",
+          description: data.error ?? "Failed to activate proxy",
           variant: "error",
         });
       } else {
@@ -184,7 +184,7 @@ export function GoLiveButton({ tenant, orgId, onActivate }: GoLiveButtonProps) {
                 </button>
                 {canActivate && (
                   <button
-                    onClick={handleActivate}
+                    onClick={() => void handleActivate()}
                     disabled={isActivating}
                     className="inline-flex items-center gap-2 rounded-md bg-brand-orange px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-brand-orange/90 disabled:opacity-50"
                   >

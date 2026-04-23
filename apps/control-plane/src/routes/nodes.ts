@@ -133,7 +133,7 @@ nodesRoutes.put(
           [id],
           tenant.name,
           tenant.org_slug ?? null,
-        ).catch((err) =>
+        ).catch((err: unknown) =>
           logger.error(`Failed to enqueue cert provisioning: ${err}`),
         );
       }
@@ -172,12 +172,12 @@ nodesRoutes.delete("/:id", async (c) => {
   }
 
   for (const tenant of affectedTenants) {
-    deleteNodeDnsRecord(toDomainInfo(tenant), id).catch((err) =>
+    deleteNodeDnsRecord(toDomainInfo(tenant), id).catch((err: unknown) =>
       logger.error(`Failed to delete DNS record: ${err}`),
     );
 
     if (tenant.health_check_id) {
-      deleteHealthCheck(tenant.health_check_id).catch((err) =>
+      deleteHealthCheck(tenant.health_check_id).catch((err: unknown) =>
         logger.error(`Failed to delete health check: ${err}`),
       );
     }

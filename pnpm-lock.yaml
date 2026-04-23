@@ -527,6 +527,9 @@ importers:
       '@logtape/logtape':
         specifier: 'catalog:'
         version: 1.0.4
+      arktype:
+        specifier: 'catalog:'
+        version: 2.2.0
       dotenv:
         specifier: 'catalog:'
         version: 17.2.2

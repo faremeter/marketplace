@@ -65,7 +65,7 @@ export function OpenApiExportDialog({
       }
     };
 
-    fetchExport();
+    void fetchExport();
   }, [open, tenantId, toast]);
 
   const getExportSpec = () => {
@@ -220,7 +220,7 @@ export function OpenApiExportDialog({
                   Cancel
                 </button>
                 <button
-                  onClick={handleCopy}
+                  onClick={() => void handleCopy()}
                   className="inline-flex items-center gap-1.5 rounded-md border border-gray-6 bg-gray-3 px-3 py-2 text-sm font-medium text-gray-12 hover:bg-gray-4"
                 >
                   {copied ? (

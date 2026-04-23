@@ -33,7 +33,8 @@ export async function withRetry<T>(
     }
   }
 
-  throw lastError;
+  // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+  throw lastError!;
 }
 
 const SOLANA_USDC = solana.lookupKnownSPLToken("mainnet-beta", "USDC");
@@ -42,7 +43,7 @@ const POLYGON_USDC = evm.lookupKnownAsset("eip155:137", "USDC");
 const MONAD_USDC = evm.lookupKnownAsset("eip155:143", "USDC");
 
 const SOLANA_RPC_URL =
-  process.env.SOLANA_RPC_URL || "https://api.mainnet-beta.solana.com";
+  process.env.SOLANA_RPC_URL ?? "https://api.mainnet-beta.solana.com";
 
 const monad = {
   id: 143,

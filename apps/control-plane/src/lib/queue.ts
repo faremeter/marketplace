@@ -146,7 +146,7 @@ export async function checkAndUpdateTenantStatus(
       .where("tenant_id", "=", tenantId)
       .execute();
     for (const tn of tenantNodeIds) {
-      syncToNode(tn.node_id).catch((err) => logger.error(String(err)));
+      syncToNode(tn.node_id).catch((err: unknown) => logger.error(String(err)));
     }
 
     logger.info(`Tenant ${tenantId} status updated to active`);
@@ -281,7 +281,7 @@ export async function startQueue(config: {
 
           await Promise.all(
             tenantNodes.map(({ node_id }) =>
-              syncToNode(node_id).catch((err) =>
+              syncToNode(node_id).catch((err: unknown) =>
                 logger.error(
                   `Failed to sync deactivation to node ${node_id}: ${err}`,
                 ),
@@ -291,14 +291,15 @@ export async function startQueue(config: {
 
           for (const { node_id, health_check_id } of tenantNodes) {
             if (health_check_id) {
-              await deleteHealthCheck(health_check_id).catch((err) =>
+              await deleteHealthCheck(health_check_id).catch((err: unknown) =>
                 logger.error(`Failed to delete health check: ${err}`),
               );
             }
-            await deleteNodeDnsRecord(domainInfo, node_id).catch((err) =>
-              logger.error(`Failed to delete DNS record: ${err}`),
+            await deleteNodeDnsRecord(domainInfo, node_id).catch(
+              (err: unknown) =>
+                logger.error(`Failed to delete DNS record: ${err}`),
             );
-            await deleteCertOnNode(node_id, domainInfo).catch((err) =>
+            await deleteCertOnNode(node_id, domainInfo).catch((err: unknown) =>
               logger.error(`Failed to delete cert on node ${node_id}: ${err}`),
             );
             await db
@@ -308,7 +309,7 @@ export async function startQueue(config: {
               .execute();
           }
 
-          await deleteAllTenantDnsRecords(domainInfo).catch((err) =>
+          await deleteAllTenantDnsRecords(domainInfo).catch((err: unknown) =>
             logger.error(
               `Failed to delete DNS for tenant ${tenantName}: ${err}`,
             ),
@@ -386,7 +387,7 @@ export async function startQueue(config: {
             .execute();
 
           for (const tn of tenantNodes) {
-            await syncToNode(tn.node_id).catch((err) =>
+            await syncToNode(tn.node_id).catch((err: unknown) =>
               logger.error(
                 `Failed to sync deactivation to node ${tn.node_id}: ${err}`,
               ),
@@ -431,7 +432,7 @@ export async function startQueue(config: {
             .execute();
 
           for (const tn of tenantNodes) {
-            await syncToNode(tn.node_id).catch((err) =>
+            await syncToNode(tn.node_id).catch((err: unknown) =>
               logger.error(`Failed to sync to node ${tn.node_id}: ${err}`),
             );
           }
@@ -451,19 +452,20 @@ export async function startQueue(config: {
           }
 
           for (const tn of tenantNodes) {
-            await deleteNodeDnsRecord(oldDomainInfo, tn.node_id).catch((err) =>
-              logger.error(`Failed to delete old DNS record: ${err}`),
+            await deleteNodeDnsRecord(oldDomainInfo, tn.node_id).catch(
+              (err: unknown) =>
+                logger.error(`Failed to delete old DNS record: ${err}`),
             );
           }
 
           for (const healthCheckId of oldHealthCheckIds) {
-            await deleteHealthCheck(healthCheckId).catch((err) =>
+            await deleteHealthCheck(healthCheckId).catch((err: unknown) =>
               logger.error(`Failed to delete old health check: ${err}`),
             );
           }
 
           if (oldName !== newName) {
-            await renameAccount(oldName, newName).catch((err) =>
+            await renameAccount(oldName, newName).catch((err: unknown) =>
               logger.error(
                 `Failed to rename Faremeter account from ${oldName} to ${newName}: ${err}`,
               ),
@@ -478,7 +480,9 @@ export async function startQueue(config: {
               .execute();
 
             for (const tn of tenantNodes) {
-              syncToNode(tn.node_id).catch((err) => logger.error(String(err)));
+              syncToNode(tn.node_id).catch((err: unknown) =>
+                logger.error(String(err)),
+              );
             }
 
             logger.info(
@@ -506,7 +510,9 @@ export async function startQueue(config: {
             .where("tenant_id", "=", tenantId)
             .execute();
           for (const n of nodes) {
-            syncToNode(n.node_id).catch((err) => logger.error(String(err)));
+            syncToNode(n.node_id).catch((err: unknown) =>
+              logger.error(String(err)),
+            );
           }
 
           throw error;
@@ -786,7 +792,7 @@ export async function startQueue(config: {
       const { to, type, variables } = job.data;
       logger.info(`Processing email job ${job.id}: ${type} to ${to}`);
       try {
-        await sendEmail(to, type, variables as EmailTemplateVars[typeof type]);
+        await sendEmail(to, type, variables);
         logger.info(`Email sent: ${type} to ${to}`);
       } catch (error) {
         logger.error(`Failed to send ${type} email to ${to}: ${error}`);

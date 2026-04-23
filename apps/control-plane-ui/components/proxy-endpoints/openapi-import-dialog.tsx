@@ -86,7 +86,7 @@ export function OpenApiImportDialog({
       reader.onload = (e) => {
         const text = e.target?.result as string;
         setJsonText(text);
-        handleParse(text);
+        void handleParse(text);
       };
       reader.readAsText(file);
     },
@@ -248,7 +248,7 @@ export function OpenApiImportDialog({
                     value={jsonText}
                     onChange={(e) => {
                       setJsonText(e.target.value);
-                      handleParse(e.target.value);
+                      void handleParse(e.target.value);
                     }}
                     placeholder="Paste OpenAPI spec (JSON or YAML)"
                     className="h-48 w-full rounded-md border border-gray-6 bg-gray-3 px-3 py-2 font-mono text-sm text-gray-12 placeholder-gray-9 focus:border-accent-8 focus:outline-none focus:ring-1 focus:ring-accent-8"
@@ -274,7 +274,7 @@ export function OpenApiImportDialog({
                   <div className="mb-3 flex items-center justify-between">
                     <div>
                       <p className="text-sm font-medium text-gray-12">
-                        {parsedSpec.info.title || "Unnamed Spec"}
+                        {parsedSpec.info.title ?? "Unnamed Spec"}
                       </p>
                       {parsedSpec.info.version && (
                         <p className="text-xs text-gray-11">
@@ -314,7 +314,7 @@ export function OpenApiImportDialog({
                   Cancel
                 </button>
                 <button
-                  onClick={handleImport}
+                  onClick={() => void handleImport()}
                   disabled={!parsedSpec || importing}
                   className="rounded-md bg-white px-3 py-2 text-sm font-medium text-black shadow-button transition-colors hover:bg-white/90 disabled:opacity-50"
                 >

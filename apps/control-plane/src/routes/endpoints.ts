@@ -59,7 +59,7 @@ async function syncTenantNodes(tenantId: number) {
     .execute();
 
   for (const tn of tenantNodes) {
-    syncToNode(tn.node_id).catch((err) => logger.error(String(err)));
+    syncToNode(tn.node_id).catch((err: unknown) => logger.error(String(err)));
   }
 }
 
@@ -147,8 +147,8 @@ endpointsRoutes.post(
       .returningAll()
       .executeTakeFirstOrThrow();
 
-    syncTenantNodes(tenantId);
-    syncOpenApiSpec(tenantId).catch((err) =>
+    void syncTenantNodes(tenantId);
+    syncOpenApiSpec(tenantId).catch((err: unknown) =>
       logger.error(
         `Failed to sync OpenAPI spec for tenant ${tenantId}: ${err}`,
       ),
@@ -200,8 +200,8 @@ endpointsRoutes.put(
       return c.json({ error: "Endpoint not found" }, 404);
     }
 
-    syncTenantNodes(tenantId);
-    syncOpenApiSpec(tenantId).catch((err) =>
+    void syncTenantNodes(tenantId);
+    syncOpenApiSpec(tenantId).catch((err: unknown) =>
       logger.error(
         `Failed to sync OpenAPI spec for tenant ${tenantId}: ${err}`,
       ),
@@ -231,8 +231,8 @@ endpointsRoutes.delete("/:id", modifyResourceLimiter, async (c) => {
     return c.json({ error: "Endpoint not found" }, 404);
   }
 
-  syncTenantNodes(tenantId);
-  syncOpenApiSpec(tenantId).catch((err) =>
+  void syncTenantNodes(tenantId);
+  syncOpenApiSpec(tenantId).catch((err: unknown) =>
     logger.error(`Failed to sync OpenAPI spec for tenant ${tenantId}: ${err}`),
   );
 
@@ -276,8 +276,8 @@ endpointsRoutes.get("/:id/stats", async (c) => {
   return c.json({
     endpoint_id: id,
     path_pattern: endpoint.path_pattern,
-    total_transactions: Number(stats?.total_transactions ?? 0),
-    total_spent: Number(stats?.total_spent ?? 0),
+    total_transactions: Number(stats?.total_transactions ?? 0), // eslint-disable-line @typescript-eslint/no-unnecessary-type-conversion -- pg driver returns bigint aggregates as strings
+    total_spent: Number(stats?.total_spent ?? 0), // eslint-disable-line @typescript-eslint/no-unnecessary-type-conversion -- pg driver returns bigint aggregates as strings
     period: { from: from ?? null, to: to ?? null },
   });
 });

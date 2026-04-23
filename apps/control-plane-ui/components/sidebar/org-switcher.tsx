@@ -13,7 +13,7 @@ export function OrgSwitcher() {
   const { user, currentOrg, setCurrentOrg } = useAuth();
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
 
-  if (!user || !user.organizations.length) {
+  if (!user?.organizations.length) {
     return null;
   }
 

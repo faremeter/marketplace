@@ -1,7 +1,56 @@
 import "../tests/setup/env.js";
 import t from "tap";
+import { type } from "arktype";
 import { db, setupTestSchema, clearTestData } from "../db/instance.js";
 import { endpointPathToOpenApiPath, syncOpenApiSpec } from "./openapi-sync.js";
+
+const PathOperation = type({
+  "summary?": "string",
+  "operationId?": "string",
+  "parameters?": "unknown[]",
+  "responses?": "Record<string, unknown>",
+  "+": "delete",
+});
+
+const PathItem = type({
+  "get?": PathOperation,
+  "post?": PathOperation,
+  "put?": PathOperation,
+  "delete?": PathOperation,
+  "patch?": PathOperation,
+  "+": "delete",
+});
+
+const ServerEntry = type({ url: "string", "+": "delete" });
+const TagEntry = type({ name: "string", "+": "delete" });
+
+const OpenApiSpec = type({
+  openapi: "string",
+  info: {
+    title: "string",
+    "version?": "string",
+    "description?": "string",
+    "+": "delete",
+  },
+  paths: type("Record<string, unknown>"),
+  "servers?": ServerEntry.array(),
+  "components?": {
+    "schemas?": "Record<string, unknown>",
+    "securitySchemes?": "Record<string, unknown>",
+    "+": "delete",
+  },
+  "security?": "Record<string, unknown>[]",
+  "tags?": TagEntry.array(),
+  "externalDocs?": "Record<string, unknown>",
+  "+": "delete",
+});
+
+function pathItem(val: unknown) {
+  const item = PathItem.assert(val);
+  const get = item.get;
+  if (!get) throw new Error("expected GET operation on path item");
+  return { ...item, get };
+}
 
 await setupTestSchema();
 
@@ -46,14 +95,15 @@ async function createEndpoint(
     .executeTakeFirstOrThrow();
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-async function getTenantSpec(tenantId: number): Promise<any> {
+async function getTenantSpec(tenantId: number) {
   const tenant = await db
     .selectFrom("tenants")
     .select(["openapi_spec"])
     .where("id", "=", tenantId)
     .executeTakeFirst();
-  return tenant?.openapi_spec ?? null;
+  const raw = tenant?.openapi_spec;
+  if (raw == null) throw new Error("tenant spec is null");
+  return OpenApiSpec.assert(raw);
 }
 
 t.beforeEach(async () => {
@@ -265,8 +315,10 @@ await t.test("syncOpenApiSpec", async (t) => {
     t.equal(spec.info.title, "Test API");
     t.equal(spec.info.version, "1.0.0");
     t.ok(spec.paths["/users/{id}"]);
-    t.equal(spec.paths["/users/{id}"].get.summary, "Get user by ID");
-    t.ok(spec.paths["/users/{id}"].get.responses["200"]);
+    const item = pathItem(spec.paths["/users/{id}"]);
+    t.equal(item.get.summary, "Get user by ID");
+    if (!item.get.responses) throw new Error("expected responses");
+    t.ok(item.get.responses["200"]);
   });
 
   await t.test("uses tenant name as spec title in fresh spec", async (t) => {
@@ -392,7 +444,10 @@ await t.test("syncOpenApiSpec", async (t) => {
 
       const spec = await getTenantSpec(tenant.id);
       t.ok(spec.paths["/users/{param1}"]);
-      t.equal(spec.paths["/users/{param1}"].get.summary, "From regex");
+      t.equal(
+        pathItem(spec.paths["/users/{param1}"]).get.summary,
+        "From regex",
+      );
     },
   );
 
@@ -407,7 +462,7 @@ await t.test("syncOpenApiSpec", async (t) => {
     await syncOpenApiSpec(tenant.id);
 
     const spec = await getTenantSpec(tenant.id);
-    t.equal(spec.paths["/users"].get.summary, "List all users");
+    t.equal(pathItem(spec.paths["/users"]).get.summary, "List all users");
   });
 
   await t.test("uses fallback summary when description is null", async (t) => {
@@ -419,7 +474,7 @@ await t.test("syncOpenApiSpec", async (t) => {
     await syncOpenApiSpec(tenant.id);
 
     const spec = await getTenantSpec(tenant.id);
-    t.equal(spec.paths["/users"].get.summary, "Endpoint: /users");
+    t.equal(pathItem(spec.paths["/users"]).get.summary, "Endpoint: /users");
   });
 
   await t.test(
@@ -434,7 +489,7 @@ await t.test("syncOpenApiSpec", async (t) => {
 
       const spec = await getTenantSpec(tenant.id);
       // ?? only coalesces null/undefined, not empty string
-      t.equal(spec.paths["/users"].get.summary, "");
+      t.equal(pathItem(spec.paths["/users"]).get.summary, "");
     },
   );
 
@@ -454,7 +509,7 @@ await t.test("syncOpenApiSpec", async (t) => {
     await syncOpenApiSpec(tenant.id);
 
     const spec = await getTenantSpec(tenant.id);
-    t.equal(spec.paths["/missing"].get.summary, "Endpoint: /missing");
+    t.equal(pathItem(spec.paths["/missing"]).get.summary, "Endpoint: /missing");
   });
 
   // --- lineage (openapi_source_paths) behavior ---
@@ -499,13 +554,15 @@ await t.test("syncOpenApiSpec", async (t) => {
       await syncOpenApiSpec(tenant.id);
 
       const spec = await getTenantSpec(tenant.id);
-      const pathItem = spec.paths["/users/{id}"];
+      const item = pathItem(spec.paths["/users/{id}"]);
       // Entire original path item preserved including all methods
-      t.equal(pathItem.get.summary, "Get user");
-      t.equal(pathItem.get.operationId, "getUser");
-      t.ok(pathItem.get.parameters);
-      t.ok(pathItem.get.responses["404"]);
-      t.equal(pathItem.delete.summary, "Delete user");
+      t.equal(item.get.summary, "Get user");
+      t.equal(item.get.operationId, "getUser");
+      t.ok(item.get.parameters);
+      if (!item.get.responses) throw new Error("expected item.get.responses");
+      t.ok(item.get.responses["404"]);
+      if (!item.delete) throw new Error("expected item.delete");
+      t.equal(item.delete.summary, "Delete user");
     },
   );
 
@@ -528,11 +585,10 @@ await t.test("syncOpenApiSpec", async (t) => {
 
       const spec = await getTenantSpec(tenant.id);
       t.ok(spec.paths["/gone-path"]);
-      t.equal(
-        spec.paths["/gone-path"].get.summary,
-        "Was imported but path removed from spec",
-      );
-      t.ok(spec.paths["/gone-path"].get.responses["200"]);
+      const goneItem = pathItem(spec.paths["/gone-path"]);
+      t.equal(goneItem.get.summary, "Was imported but path removed from spec");
+      if (!goneItem.get.responses) throw new Error("expected responses");
+      t.ok(goneItem.get.responses["200"]);
     },
   );
 
@@ -568,8 +624,8 @@ await t.test("syncOpenApiSpec", async (t) => {
       const spec = await getTenantSpec(tenant.id);
       t.ok(spec.paths["/users"]);
       t.ok(spec.paths["/users/{id}"]);
-      t.equal(spec.paths["/users"].get.summary, "List users");
-      t.equal(spec.paths["/users/{id}"].get.summary, "Get user");
+      t.equal(pathItem(spec.paths["/users"]).get.summary, "List users");
+      t.equal(pathItem(spec.paths["/users/{id}"]).get.summary, "Get user");
     },
   );
 
@@ -599,9 +655,12 @@ await t.test("syncOpenApiSpec", async (t) => {
 
       const spec = await getTenantSpec(tenant.id);
       // Existing path preserved from base
-      t.equal(spec.paths["/exists"].get.summary, "Exists");
+      t.equal(pathItem(spec.paths["/exists"]).get.summary, "Exists");
       // Missing path gets stub with endpoint description
-      t.equal(spec.paths["/does-not-exist"].get.summary, "Mixed endpoint");
+      t.equal(
+        pathItem(spec.paths["/does-not-exist"]).get.summary,
+        "Mixed endpoint",
+      );
     },
   );
 
@@ -619,7 +678,7 @@ await t.test("syncOpenApiSpec", async (t) => {
       const spec = await getTenantSpec(tenant.id);
       // Should be treated as manual (no lineage), path derived from endpoint.path
       t.ok(spec.paths["/manual"]);
-      t.equal(spec.paths["/manual"].get.summary, "Manual endpoint");
+      t.equal(pathItem(spec.paths["/manual"]).get.summary, "Manual endpoint");
     },
   );
 
@@ -680,8 +739,11 @@ await t.test("syncOpenApiSpec", async (t) => {
     await syncOpenApiSpec(tenant.id);
 
     const spec = await getTenantSpec(tenant.id);
+    if (!spec.servers) throw new Error("expected spec.servers");
     t.equal(spec.servers.length, 2);
+    if (!spec.servers[0]) throw new Error("expected spec.servers[0]");
     t.equal(spec.servers[0].url, "https://api.example.com");
+    if (!spec.servers[1]) throw new Error("expected spec.servers[1]");
     t.equal(spec.servers[1].url, "https://staging.example.com");
   });
 
@@ -709,7 +771,12 @@ await t.test("syncOpenApiSpec", async (t) => {
     await syncOpenApiSpec(tenant.id);
 
     const spec = await getTenantSpec(tenant.id);
+    if (!spec.components) throw new Error("expected spec.components");
+    if (!spec.components.schemas)
+      throw new Error("expected spec.components.schemas");
     t.ok(spec.components.schemas.User);
+    if (!spec.components.securitySchemes)
+      throw new Error("expected spec.components.securitySchemes");
     t.ok(spec.components.securitySchemes.bearerAuth);
   });
 
@@ -730,7 +797,9 @@ await t.test("syncOpenApiSpec", async (t) => {
     await syncOpenApiSpec(tenant.id);
 
     const spec = await getTenantSpec(tenant.id);
+    if (!spec.tags) throw new Error("expected spec.tags");
     t.equal(spec.tags.length, 2);
+    if (!spec.tags[0]) throw new Error("expected spec.tags[0]");
     t.equal(spec.tags[0].name, "users");
   });
 
@@ -748,6 +817,7 @@ await t.test("syncOpenApiSpec", async (t) => {
     await syncOpenApiSpec(tenant.id);
 
     const spec = await getTenantSpec(tenant.id);
+    if (!spec.security) throw new Error("expected spec.security");
     t.equal(spec.security.length, 1);
     t.same(spec.security[0], { bearerAuth: [] });
   });
@@ -769,6 +839,7 @@ await t.test("syncOpenApiSpec", async (t) => {
     await syncOpenApiSpec(tenant.id);
 
     const spec = await getTenantSpec(tenant.id);
+    if (!spec.externalDocs) throw new Error("expected spec.externalDocs");
     t.equal(spec.externalDocs.url, "https://docs.example.com");
   });
 
@@ -885,7 +956,7 @@ await t.test("syncOpenApiSpec", async (t) => {
       const spec = await getTenantSpec(tenant.id);
       t.equal(Object.keys(spec.paths).length, 1);
       // Both map to "/users", second overwrites first (ordered by priority asc)
-      t.equal(spec.paths["/users"].get.summary, "Second");
+      t.equal(pathItem(spec.paths["/users"]).get.summary, "Second");
     },
   );
 
@@ -932,11 +1003,14 @@ await t.test("syncOpenApiSpec", async (t) => {
       const spec = await getTenantSpec(tenant.id);
       t.equal(Object.keys(spec.paths).length, 3);
       // Lineage preserved from base
-      t.equal(spec.paths["/imported"].get.summary, "Imported");
+      t.equal(pathItem(spec.paths["/imported"]).get.summary, "Imported");
       // Manual with param included
-      t.equal(spec.paths["/manual/{id}"].get.summary, "Manual with param");
+      t.equal(
+        pathItem(spec.paths["/manual/{id}"]).get.summary,
+        "Manual with param",
+      );
       // Literal included
-      t.equal(spec.paths["/literal"].get.summary, "Literal path");
+      t.equal(pathItem(spec.paths["/literal"]).get.summary, "Literal path");
       // Unconvertible regex skipped
       t.notOk(spec.paths["^/regex/v[0-9]+$"]);
       t.notOk(spec.paths["/regex/v[0-9]+"]);
@@ -994,6 +1068,7 @@ await t.test("syncOpenApiSpec", async (t) => {
 
       const spec = await getTenantSpec(tenant.id);
       t.equal(spec.openapi, "3.0.1");
+      if (!spec.servers) throw new Error("expected spec.servers");
       t.equal(spec.servers.length, 1);
       t.ok(spec.paths["/users"]);
       t.ok(spec.paths["/extra"]);
@@ -1012,13 +1087,17 @@ await t.test("syncOpenApiSpec", async (t) => {
     await syncOpenApiSpec(tenantA.id);
 
     const specA = await getTenantSpec(tenantA.id);
-    const specB = await getTenantSpec(tenantB.id);
-
     t.ok(specA);
     t.ok(specA.paths["/a-endpoint"]);
     t.notOk(specA.paths["/b-endpoint"]);
+
     // Tenant B should not have a spec yet (never synced)
-    t.equal(specB, null);
+    const tenantB_row = await db
+      .selectFrom("tenants")
+      .select(["openapi_spec"])
+      .where("id", "=", tenantB.id)
+      .executeTakeFirst();
+    t.equal(tenantB_row?.openapi_spec ?? null, null);
   });
 
   await t.test(
@@ -1172,7 +1251,7 @@ await t.test("syncOpenApiSpec", async (t) => {
       spec = await getTenantSpec(tenant.id);
       t.notOk(spec.paths["/old-name"]);
       t.ok(spec.paths["/new-name"]);
-      t.equal(spec.paths["/new-name"].get.summary, "Renamed");
+      t.equal(pathItem(spec.paths["/new-name"]).get.summary, "Renamed");
     },
   );
 
@@ -1187,7 +1266,7 @@ await t.test("syncOpenApiSpec", async (t) => {
       await syncOpenApiSpec(tenant.id);
 
       let spec = await getTenantSpec(tenant.id);
-      t.equal(spec.paths["/users"].get.summary, "Old description");
+      t.equal(pathItem(spec.paths["/users"]).get.summary, "Old description");
 
       // Update description
       await db
@@ -1199,7 +1278,7 @@ await t.test("syncOpenApiSpec", async (t) => {
       await syncOpenApiSpec(tenant.id);
 
       spec = await getTenantSpec(tenant.id);
-      t.equal(spec.paths["/users"].get.summary, "New description");
+      t.equal(pathItem(spec.paths["/users"]).get.summary, "New description");
     },
   );
 
@@ -1310,9 +1389,10 @@ await t.test("syncOpenApiSpec", async (t) => {
       t.ok(spec.paths["/users/{id}"]);
       t.notOk(spec.paths["/health"]);
       // Original path details still preserved
-      t.equal(spec.paths["/users"].get.summary, "List users");
-      t.ok(spec.paths["/users/{id}"].get.parameters);
+      t.equal(pathItem(spec.paths["/users"]).get.summary, "List users");
+      t.ok(pathItem(spec.paths["/users/{id}"]).get.parameters);
       // Non-path structure still intact
+      if (!spec.servers) throw new Error("expected spec.servers");
       t.equal(spec.servers.length, 1);
     },
   );

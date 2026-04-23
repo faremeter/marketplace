@@ -16,8 +16,66 @@ const EndpointResponse = type({
   "scheme?": "string | null",
   "priority?": "number",
   "is_active?": "boolean",
+  "openapi_source_paths?": "string[] | null",
+  "tags?": "string[]",
+  "deleted_at?": "string | null",
+  "description?": "string | null",
   "+": "delete",
 });
+
+const ErrorResponse = type({ error: "string", "+": "delete" });
+
+const DeleteEndpointResponse = type({
+  deleted: "boolean",
+  endpoint: {
+    "is_active?": "boolean",
+    "deleted_at?": "string | null",
+    "+": "delete",
+  },
+  "+": "delete",
+});
+
+const EndpointStatsResponse = type({
+  endpoint_id: "number",
+  total_transactions: "number",
+  total_spent: "number",
+  period: { from: "string | null", to: "string | null", "+": "delete" },
+  "path_pattern?": "string",
+  "+": "delete",
+});
+
+const TransactionItem = type({
+  id: "number",
+  "endpoint_id?": "number | null",
+  tenant_id: "number",
+  amount: "number",
+  ngx_request_id: "string",
+  request_path: "string",
+  "organization_id?": "number | null",
+  "tx_hash?": "string | null",
+  "network?": "string | null",
+  "token_symbol?": "string | null",
+  "mint_address?": "string | null",
+  "created_at?": "string",
+  "+": "delete",
+});
+
+const OpenApiSpec = type({
+  paths: "Record<string, unknown>",
+  "+": "delete",
+});
+
+const PathItem = type({
+  "get?": { "summary?": "string", "+": "delete" },
+  "post?": { "summary?": "string", "+": "delete" },
+  "put?": { "summary?": "string", "+": "delete" },
+  "delete?": { "summary?": "string", "+": "delete" },
+  "+": "delete",
+});
+
+function pathItem(val: unknown) {
+  return PathItem.assert(val);
+}
 
 const app = new Hono();
 app.route("/api/tenants/:tenantId/endpoints", endpointsRoutes);
@@ -150,8 +208,7 @@ await t.test("GET /api/tenants/:tenantId/endpoints", async (t) => {
       headers: { Cookie: `auth_token=${user.token}` },
     });
     t.equal(res.status, 200);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data = (await res.json()) as any;
+    const data = EndpointResponse.array().assert(await res.json());
     t.same(data, []);
   });
 
@@ -169,11 +226,13 @@ await t.test("GET /api/tenants/:tenantId/endpoints", async (t) => {
       headers: { Cookie: `auth_token=${user.token}` },
     });
     t.equal(res.status, 200);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data = (await res.json()) as any;
+    const data = EndpointResponse.array().assert(await res.json());
     t.equal(data.length, 3);
+    if (!data[0]) throw new Error("expected data[0]");
     t.equal(data[0].path, "/high-priority");
+    if (!data[1]) throw new Error("expected data[1]");
     t.equal(data[1].path, "/medium-priority");
+    if (!data[2]) throw new Error("expected data[2]");
     t.equal(data[2].path, "/low-priority");
   });
 
@@ -190,9 +249,9 @@ await t.test("GET /api/tenants/:tenantId/endpoints", async (t) => {
       headers: { Cookie: `auth_token=${user.token}` },
     });
     t.equal(res.status, 200);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data = (await res.json()) as any;
+    const data = EndpointResponse.array().assert(await res.json());
     t.equal(data.length, 1);
+    if (!data[0]) throw new Error("expected data[0]");
     t.equal(data[0].path, "/active");
   });
 
@@ -210,8 +269,7 @@ await t.test("GET /api/tenants/:tenantId/endpoints", async (t) => {
       { headers: { Cookie: `auth_token=${user.token}` } },
     );
     t.equal(res.status, 200);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data = (await res.json()) as any;
+    const data = EndpointResponse.array().assert(await res.json());
     t.equal(data.length, 2);
   });
 
@@ -226,8 +284,7 @@ await t.test("GET /api/tenants/:tenantId/endpoints", async (t) => {
       headers: { Cookie: `auth_token=${admin.token}` },
     });
     t.equal(res.status, 200);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data = (await res.json()) as any;
+    const data = EndpointResponse.array().assert(await res.json());
     t.equal(data.length, 1);
   });
 });
@@ -277,8 +334,7 @@ await t.test("GET /api/tenants/:tenantId/endpoints/:id", async (t) => {
       { headers: { Cookie: `auth_token=${user.token}` } },
     );
     t.equal(res.status, 200);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data = (await res.json()) as any;
+    const data = EndpointResponse.assert(await res.json());
     t.equal(data.path, "/users/list");
     t.equal(data.price, 0.05);
     t.equal(data.priority, 50);
@@ -305,8 +361,7 @@ await t.test("POST /api/tenants/:tenantId/endpoints", async (t) => {
     });
 
     t.equal(res.status, 201);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data = (await res.json()) as any;
+    const data = EndpointResponse.assert(await res.json());
     t.equal(data.path, "/users/list");
     t.equal(data.path_pattern, "/users/list");
     t.equal(data.price, 0.02);
@@ -331,8 +386,7 @@ await t.test("POST /api/tenants/:tenantId/endpoints", async (t) => {
     });
 
     t.equal(res.status, 201);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data = (await res.json()) as any;
+    const data = EndpointResponse.assert(await res.json());
     t.equal(data.path, "/users/{userId}/orders/{orderId}");
     t.equal(data.path_pattern, "^/users/[^/]+/orders/[^/]+$");
   });
@@ -355,8 +409,7 @@ await t.test("POST /api/tenants/:tenantId/endpoints", async (t) => {
     });
 
     t.equal(res.status, 201);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data = (await res.json()) as any;
+    const data = EndpointResponse.assert(await res.json());
     t.equal(data.path, "^/api/v[0-9]+/users$");
     t.equal(data.path_pattern, "^/api/v[0-9]+/users$");
   });
@@ -379,8 +432,7 @@ await t.test("POST /api/tenants/:tenantId/endpoints", async (t) => {
     });
 
     t.equal(res.status, 400);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data = (await res.json()) as any;
+    const data = ErrorResponse.assert(await res.json());
     t.ok(data.error.includes("performance"));
   });
 
@@ -403,8 +455,7 @@ await t.test("POST /api/tenants/:tenantId/endpoints", async (t) => {
       });
 
       t.equal(res.status, 400, `should reject ${pattern}`);
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const data = (await res.json()) as any;
+      const data = ErrorResponse.assert(await res.json());
       t.ok(data.error.includes("catch-all"));
     }
   });
@@ -431,8 +482,7 @@ await t.test("POST /api/tenants/:tenantId/endpoints", async (t) => {
     });
 
     t.equal(res.status, 201);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data = (await res.json()) as any;
+    const data = EndpointResponse.assert(await res.json());
     t.equal(data.price, 1.5);
     t.equal(data.scheme, "exact");
     t.equal(data.description, "Premium API endpoint");
@@ -470,8 +520,7 @@ await t.test("POST /api/tenants/:tenantId/endpoints", async (t) => {
     });
 
     t.equal(res.status, 201);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data = (await res.json()) as any;
+    const data = EndpointResponse.assert(await res.json());
     t.equal(data.path, "/api/test");
   });
 
@@ -551,8 +600,7 @@ await t.test("POST /api/tenants/:tenantId/endpoints", async (t) => {
     });
 
     t.equal(res.status, 201);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data = (await res.json()) as any;
+    const data = EndpointResponse.assert(await res.json());
     t.equal(data.path, "/{dataset}/{version}/fields");
     t.same(data.openapi_source_paths, sourcePaths);
   });
@@ -621,8 +669,7 @@ await t.test("POST /api/tenants/:tenantId/endpoints", async (t) => {
     });
 
     t.equal(res.status, 201);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data = (await res.json()) as any;
+    const data = EndpointResponse.assert(await res.json());
     t.same(data.tags, ["production", "api"]);
   });
 
@@ -646,8 +693,7 @@ await t.test("POST /api/tenants/:tenantId/endpoints", async (t) => {
       });
 
       t.equal(res.status, 201);
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const data = (await res.json()) as any;
+      const data = EndpointResponse.assert(await res.json());
       t.same(data.tags, []);
     },
   );
@@ -713,8 +759,7 @@ await t.test("POST /api/tenants/:tenantId/endpoints", async (t) => {
     });
 
     t.equal(res.status, 201);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data = (await res.json()) as any;
+    const data = EndpointResponse.assert(await res.json());
     t.equal(data.path, "/null-openapi-test");
     t.equal(data.openapi_source_paths, null);
   });
@@ -788,8 +833,7 @@ await t.test("PUT /api/tenants/:tenantId/endpoints/:id", async (t) => {
     );
 
     t.equal(res.status, 200);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data = (await res.json()) as any;
+    const data = EndpointResponse.assert(await res.json());
     t.equal(data.path, "/new-path");
     t.equal(data.price, 0.1);
     t.equal(data.priority, 50);
@@ -856,8 +900,7 @@ await t.test("PUT /api/tenants/:tenantId/endpoints/:id", async (t) => {
     );
 
     t.equal(res.status, 200);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data = (await res.json()) as any;
+    const data = EndpointResponse.assert(await res.json());
     t.equal(data.path, "/my-path");
     t.equal(data.price, 0.01);
     t.equal(data.priority, 25);
@@ -884,8 +927,7 @@ await t.test("PUT /api/tenants/:tenantId/endpoints/:id", async (t) => {
     );
 
     t.equal(res.status, 200);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data = (await res.json()) as any;
+    const data = EndpointResponse.assert(await res.json());
     t.equal(data.is_active, false);
   });
 
@@ -933,8 +975,7 @@ await t.test("PUT /api/tenants/:tenantId/endpoints/:id", async (t) => {
     );
 
     t.equal(res.status, 200);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data = (await res.json()) as any;
+    const data = EndpointResponse.assert(await res.json());
     t.equal(data.scheme, "exact");
   });
 
@@ -959,8 +1000,7 @@ await t.test("PUT /api/tenants/:tenantId/endpoints/:id", async (t) => {
     );
 
     t.equal(res.status, 200);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data = (await res.json()) as any;
+    const data = EndpointResponse.assert(await res.json());
     t.same(data.tags, ["production", "v2"]);
   });
 
@@ -996,8 +1036,7 @@ await t.test("PUT /api/tenants/:tenantId/endpoints/:id", async (t) => {
     );
 
     t.equal(res.status, 200);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data = (await res.json()) as any;
+    const data = EndpointResponse.assert(await res.json());
     t.same(data.tags, []);
   });
 
@@ -1046,8 +1085,7 @@ await t.test("PUT /api/tenants/:tenantId/endpoints/:id", async (t) => {
     );
 
     t.equal(res.status, 200);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data = (await res.json()) as any;
+    const data = EndpointResponse.assert(await res.json());
     t.same(data.openapi_source_paths, sourcePaths);
   });
 
@@ -1108,8 +1146,7 @@ await t.test("DELETE /api/tenants/:tenantId/endpoints/:id", async (t) => {
     );
 
     t.equal(res.status, 200);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data = (await res.json()) as any;
+    const data = DeleteEndpointResponse.assert(await res.json());
     t.equal(data.deleted, true);
     t.equal(data.endpoint.is_active, false);
     t.ok(data.endpoint.deleted_at);
@@ -1186,8 +1223,7 @@ await t.test("GET /api/tenants/:tenantId/endpoints/:id/stats", async (t) => {
     );
 
     t.equal(res.status, 200);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data = (await res.json()) as any;
+    const data = EndpointStatsResponse.assert(await res.json());
     t.equal(data.endpoint_id, endpoint.id);
     t.equal(data.total_transactions, 0);
     t.equal(data.total_spent, 0);
@@ -1227,8 +1263,7 @@ await t.test("GET /api/tenants/:tenantId/endpoints/:id/stats", async (t) => {
     );
 
     t.equal(res.status, 200);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data = (await res.json()) as any;
+    const data = EndpointStatsResponse.assert(await res.json());
     t.equal(data.total_transactions, 2);
     t.ok(
       Math.abs(data.total_spent - 0.15) < 0.001,
@@ -1265,8 +1300,7 @@ await t.test("GET /api/tenants/:tenantId/endpoints/:id/stats", async (t) => {
     );
 
     t.equal(res.status, 200);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data = (await res.json()) as any;
+    const data = EndpointStatsResponse.assert(await res.json());
     t.equal(data.total_transactions, 1);
     t.ok(data.period.from);
     t.ok(data.period.to);
@@ -1304,8 +1338,7 @@ await t.test(
       );
 
       t.equal(res.status, 200);
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const data = (await res.json()) as any;
+      const data = TransactionItem.array().assert(await res.json());
       t.same(data, []);
     });
 
@@ -1343,8 +1376,7 @@ await t.test(
       );
 
       t.equal(res.status, 200);
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const data = (await res.json()) as any;
+      const data = TransactionItem.array().assert(await res.json());
       t.equal(data.length, 2);
     });
 
@@ -1375,8 +1407,7 @@ await t.test(
       );
 
       t.equal(res.status, 200);
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const data = (await res.json()) as any;
+      const data = TransactionItem.array().assert(await res.json());
       t.equal(data.length, 2);
     });
 
@@ -1421,8 +1452,7 @@ await t.test(
       );
 
       t.equal(res.status, 200);
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const data = (await res.json()) as any;
+      const data = TransactionItem.array().assert(await res.json());
       t.equal(data.length, 1);
     });
 
@@ -1465,8 +1495,7 @@ await t.test(
       });
 
       t.equal(res.status, 201);
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const data = (await res.json()) as any;
+      const data = EndpointResponse.assert(await res.json());
       t.equal(data.path, "/api/usuarios/cafe");
     });
 
@@ -1488,8 +1517,7 @@ await t.test(
       });
 
       t.equal(res.status, 201);
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const data = (await res.json()) as any;
+      const data = EndpointResponse.assert(await res.json());
       t.equal(data.path, longPath);
     });
 
@@ -1513,8 +1541,7 @@ await t.test(
         });
 
         t.equal(res.status, 201);
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const data = (await res.json()) as any;
+        const data = EndpointResponse.assert(await res.json());
         t.equal(
           data.path,
           "/users/{userId}/posts/{postId}/comments/{commentId}",
@@ -1550,8 +1577,7 @@ await t.test(
       );
 
       t.equal(res.status, 200);
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const data = (await res.json()) as any;
+      const data = EndpointResponse.assert(await res.json());
       t.equal(data.price, null);
     });
 
@@ -1587,8 +1613,7 @@ await t.test(
       );
 
       t.equal(res.status, 200);
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const data = (await res.json()) as any;
+      const data = EndpointResponse.assert(await res.json());
       t.equal(data.scheme, null);
     });
   },
@@ -1644,8 +1669,7 @@ await t.test(
       );
 
       t.equal(res.status, 200);
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const data = (await res.json()) as any;
+      const data = EndpointStatsResponse.assert(await res.json());
       // Backwards range returns 0 results
       t.equal(data.total_transactions, 0);
     });
@@ -1691,10 +1715,12 @@ await t.test(
           t.fail("expected tenantRow");
           return;
         }
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const spec = tenantRow.openapi_spec as any;
+        const spec = OpenApiSpec.assert(tenantRow.openapi_spec);
         t.ok(spec.paths["/users/{id}"]);
-        t.equal(spec.paths["/users/{id}"].get.summary, "Get user by ID");
+        t.equal(
+          pathItem(spec.paths["/users/{id}"]).get?.summary,
+          "Get user by ID",
+        );
       },
     );
 
@@ -1719,8 +1745,7 @@ await t.test(
           }),
         },
       );
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const created = (await createRes.json()) as any;
+      const created = EndpointResponse.assert(await createRes.json());
       await new Promise((r) => setTimeout(r, 100));
 
       // Update path
@@ -1751,11 +1776,13 @@ await t.test(
         t.fail("expected tenantRow");
         return;
       }
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const spec = tenantRow.openapi_spec as any;
+      const spec = OpenApiSpec.assert(tenantRow.openapi_spec);
       t.notOk(spec.paths["/old-path"]);
       t.ok(spec.paths["/new-path"]);
-      t.equal(spec.paths["/new-path"].get.summary, "Updated endpoint");
+      t.equal(
+        pathItem(spec.paths["/new-path"]).get?.summary,
+        "Updated endpoint",
+      );
     });
 
     await t.test("DELETE removes endpoint from OpenAPI spec", async (t) => {
@@ -1783,8 +1810,7 @@ await t.test(
         },
         body: JSON.stringify({ path: "/delete-me" }),
       });
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const ep2 = (await res2.json()) as any;
+      const ep2 = EndpointResponse.assert(await res2.json());
       await new Promise((r) => setTimeout(r, 100));
 
       // Delete second endpoint
@@ -1808,8 +1834,7 @@ await t.test(
         t.fail("expected tenantRow");
         return;
       }
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const spec = tenantRow.openapi_spec as any;
+      const spec = OpenApiSpec.assert(tenantRow.openapi_spec);
       t.ok(spec.paths["/keep-me"]);
       t.notOk(spec.paths["/delete-me"]);
     });

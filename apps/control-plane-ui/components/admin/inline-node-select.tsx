@@ -140,7 +140,7 @@ export function InlineNodeSelect({
 
   const handleCheckboxChange = (node: Node, checked: boolean) => {
     if (checked) {
-      handleAddNode(node.id);
+      void handleAddNode(node.id);
     } else {
       const tenantNode = nodes.find((n) => n.id === node.id);
       if (tenantNode) {
@@ -290,7 +290,9 @@ export function InlineNodeSelect({
               </AlertDialog.Cancel>
               <AlertDialog.Action asChild>
                 <button
-                  onClick={() => nodeToRemove && handleRemoveNode(nodeToRemove)}
+                  onClick={() => {
+                    if (nodeToRemove) void handleRemoveNode(nodeToRemove);
+                  }}
                   disabled={isSaving}
                   className="rounded-md bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-50"
                 >

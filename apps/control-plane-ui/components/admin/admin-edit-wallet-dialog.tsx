@@ -265,7 +265,7 @@ export function AdminEditWalletDialog({
               </button>
             </Dialog.Close>
             <button
-              onClick={handleSave}
+              onClick={() => void handleSave()}
               disabled={!canSave || isSaving}
               className="rounded-md bg-white px-4 py-2 text-sm font-medium text-black shadow-button transition-colors hover:bg-white/90 disabled:opacity-50 disabled:cursor-not-allowed"
             >

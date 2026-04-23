@@ -20,10 +20,10 @@ export async function apiFetch<T>(
   const response = await fetch(url, {
     ...options,
     credentials: "include",
-    headers: {
-      "Content-Type": "application/json",
-      ...options?.headers,
-    },
+    headers: Object.assign(
+      { "Content-Type": "application/json" },
+      options?.headers,
+    ),
   });
 
   if (!response.ok) {
@@ -38,12 +38,11 @@ export async function apiFetch<T>(
       const data = errorData as Record<string, unknown>;
       if (typeof data.error === "string") {
         message = data.error;
-      } else if (
-        Array.isArray(data.errors) &&
-        data.errors.length > 0 &&
-        typeof data.errors[0].message === "string"
-      ) {
-        message = data.errors[0].message;
+      } else if (Array.isArray(data.errors) && data.errors.length > 0) {
+        const firstError = data.errors[0] as Record<string, unknown>;
+        if (typeof firstError?.message === "string") {
+          message = firstError.message;
+        }
       }
     }
     throw new ApiError(message, response.status, errorData);

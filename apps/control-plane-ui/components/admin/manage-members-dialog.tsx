@@ -176,7 +176,7 @@ export function ManageMembersDialog({
           description: `${selectedEmail} added as ${role}.`,
           variant: "success",
         });
-        mutateMembers();
+        void mutateMembers();
       }
       resetForm();
     } catch (err) {
@@ -201,7 +201,7 @@ export function ManageMembersDialog({
         description: `${member.email} has been removed.`,
         variant: "success",
       });
-      mutateMembers();
+      void mutateMembers();
     } catch (err) {
       toast({
         title: "Failed to remove member",
@@ -225,7 +225,7 @@ export function ManageMembersDialog({
         description: `${member.email} is now ${newRole}.`,
         variant: "success",
       });
-      mutateMembers();
+      void mutateMembers();
     } catch (err) {
       toast({
         title: "Failed to update role",
@@ -293,7 +293,7 @@ export function ManageMembersDialog({
                       <td className="px-3 py-2">
                         <Select.Root
                           value={m.role}
-                          onValueChange={(v) => handleRoleChange(m, v)}
+                          onValueChange={(v) => void handleRoleChange(m, v)}
                           disabled={updatingRoleId === m.id}
                         >
                           <Select.Trigger
@@ -328,7 +328,7 @@ export function ManageMembersDialog({
                       </td>
                       <td className="px-3 py-2 text-right">
                         <button
-                          onClick={() => handleRemove(m)}
+                          onClick={() => void handleRemove(m)}
                           disabled={removingId === m.id}
                           className="rounded p-1 text-gray-11 hover:bg-red-900/30 hover:text-red-400 disabled:opacity-50"
                           title={`Remove ${m.email}`}
@@ -406,7 +406,7 @@ export function ManageMembersDialog({
                 </Select.Root>
                 <button
                   type="button"
-                  onClick={handleAdd}
+                  onClick={() => void handleAdd()}
                   disabled={isAdding}
                   className="inline-flex items-center gap-1.5 rounded-md bg-white px-3 py-2 text-sm font-medium text-black shadow-button transition-colors hover:bg-white/90 disabled:opacity-50"
                 >

@@ -74,7 +74,7 @@ export function UserMenu() {
           <DropdownMenu.Separator className="my-1 h-px bg-white/5" />
 
           <DropdownMenu.Item
-            onSelect={() => logout()}
+            onSelect={() => void logout()}
             className="flex cursor-pointer items-center gap-2.5 rounded-lg px-2.5 py-2 text-[13px] text-red-400 outline-none transition-colors hover:bg-red-500/10 focus:bg-red-500/10"
           >
             <ExitIcon className="h-4 w-4" />

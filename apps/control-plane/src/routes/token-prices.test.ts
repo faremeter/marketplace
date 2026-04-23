@@ -1,9 +1,23 @@
 import "../tests/setup/env.js";
 import t from "tap";
+import { type } from "arktype";
 import { Hono } from "hono";
 import { db, setupTestSchema, clearTestData } from "../db/instance.js";
 import { signToken } from "../middleware/auth.js";
 import { tokenPricesRoutes } from "./token-prices.js";
+
+const TokenPriceResponse = type({
+  token_symbol: "string",
+  "endpoint_id?": "number | null",
+  "amount?": "number",
+  "decimals?": "number",
+  "+": "delete",
+});
+
+const TokenPriceListResponse = type({
+  data: TokenPriceResponse.array(),
+  "+": "delete",
+});
 
 const app = new Hono();
 app.route("/api/tenants/:tenantId/token-prices", tokenPricesRoutes);
@@ -154,8 +168,7 @@ await t.test("GET / (list)", async (t) => {
       headers: { Cookie: `auth_token=${user.token}` },
     });
     t.equal(res.status, 200);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data = (await res.json()) as any;
+    const data = TokenPriceListResponse.assert(await res.json());
     t.equal(data.data.length, 0);
   });
 
@@ -180,10 +193,11 @@ await t.test("GET / (list)", async (t) => {
     const res = await app.request(`/api/tenants/${tenant.id}/token-prices`, {
       headers: { Cookie: `auth_token=${user.token}` },
     });
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data = (await res.json()) as any;
+    const data = TokenPriceListResponse.assert(await res.json());
     t.equal(data.data.length, 2);
+    if (!data.data[0]) throw new Error("expected data.data[0]");
     t.equal(data.data[0].token_symbol, "USDC");
+    if (!data.data[1]) throw new Error("expected data.data[1]");
     t.equal(data.data[1].token_symbol, "USDT");
   });
 
@@ -205,9 +219,9 @@ await t.test("GET / (list)", async (t) => {
       `/api/tenants/${tenant.id}/token-prices?endpoint_id=${endpoint.id}`,
       { headers: { Cookie: `auth_token=${user.token}` } },
     );
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data = (await res.json()) as any;
+    const data = TokenPriceListResponse.assert(await res.json());
     t.equal(data.data.length, 1);
+    if (!data.data[0]) throw new Error("expected data.data[0]");
     t.equal(data.data[0].token_symbol, "PYUSD");
   });
 });
@@ -229,8 +243,7 @@ await t.test("GET /:id", async (t) => {
       { headers: { Cookie: `auth_token=${user.token}` } },
     );
     t.equal(res.status, 200);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data = (await res.json()) as any;
+    const data = TokenPriceResponse.assert(await res.json());
     t.equal(data.token_symbol, "USDT");
   });
 
@@ -284,8 +297,7 @@ await t.test("POST / (create)", async (t) => {
       }),
     });
     t.equal(res.status, 201);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data = (await res.json()) as any;
+    const data = TokenPriceResponse.assert(await res.json());
     t.equal(data.token_symbol, "USDT");
     t.equal(data.endpoint_id, null);
   });
@@ -312,8 +324,7 @@ await t.test("POST / (create)", async (t) => {
       }),
     });
     t.equal(res.status, 201);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data = (await res.json()) as any;
+    const data = TokenPriceResponse.assert(await res.json());
     t.equal(data.endpoint_id, endpoint.id);
   });
 
@@ -481,9 +492,8 @@ await t.test("PUT /:id (update)", async (t) => {
       },
     );
     t.equal(res.status, 200);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data = (await res.json()) as any;
-    t.equal(Number(data.amount), 5000);
+    const data = TokenPriceResponse.assert(await res.json());
+    t.equal(data.amount, 5000);
   });
 
   await t.test("updates decimals", async (t) => {
@@ -505,8 +515,7 @@ await t.test("PUT /:id (update)", async (t) => {
       },
     );
     t.equal(res.status, 200);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data = (await res.json()) as any;
+    const data = TokenPriceResponse.assert(await res.json());
     t.equal(data.decimals, 8);
   });
 

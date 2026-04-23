@@ -46,12 +46,13 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [currentOrg, setCurrentOrgState] = useState<Organization | null>(null);
 
+  /* eslint-disable @typescript-eslint/no-unsafe-assignment -- SWR fetcher type inference limitation */
   const {
     data: user,
     error,
     isLoading,
     mutate,
-  } = useSWR<User>("/api/auth/me", {
+  } = useSWR<User>("/api/auth/me", (url: string) => api.get<User>(url), {
     revalidateOnFocus: false,
     shouldRetryOnError: false,
     onSuccess: (data) => {
@@ -60,13 +61,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const savedOrg = savedOrgId
           ? data.organizations.find((o) => o.id === parseInt(savedOrgId))
           : null;
-        setCurrentOrgState(savedOrg || data.organizations[0]);
+        setCurrentOrgState(savedOrg ?? data.organizations[0]);
       }
     },
     onError: () => {
       setCurrentOrgState(null);
     },
   });
+  /* eslint-enable @typescript-eslint/no-unsafe-assignment */
 
   const setCurrentOrg = useCallback((org: Organization | null) => {
     setCurrentOrgState(org);

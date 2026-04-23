@@ -28,6 +28,7 @@ export function InlineActiveToggle({
   const { toast } = useToast();
   const [isSaving, setIsSaving] = useState(false);
 
+  // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- disabled=false must not override isSaving=true
   const isDisabled = disabled || isSaving;
 
   const handleToggle = async () => {
@@ -56,7 +57,7 @@ export function InlineActiveToggle({
   const toggle = (
     <Switch.Root
       checked={isActive}
-      onCheckedChange={handleToggle}
+      onCheckedChange={() => void handleToggle()}
       disabled={isDisabled}
       className={`relative h-5 w-9 rounded-full transition-colors ${
         isDisabled

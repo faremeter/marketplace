@@ -94,7 +94,7 @@ export function CreateUserTenantDialog({
   useEffect(() => {
     if (isCelebrating) {
       const timer = setTimeout(() => {
-        import("@hiseb/confetti").then(({ default: confetti }) => {
+        void import("@hiseb/confetti").then(({ default: confetti }) => {
           const positions = [
             { x: window.innerWidth * 0.5, y: window.innerHeight * 0.4 },
             { x: window.innerWidth * 0.3, y: window.innerHeight * 0.5 },
@@ -156,7 +156,7 @@ export function CreateUserTenantDialog({
       customPrefix.trim() !== "" ||
       defaultPrice !== "0.01" ||
       defaultScheme !== "exact" ||
-      registerOnly !== false
+      registerOnly
     );
   }, [
     name,
@@ -213,7 +213,7 @@ export function CreateUserTenantDialog({
       reader.onload = (e) => {
         const text = e.target?.result as string;
         setJsonText(text);
-        handleParse(text);
+        void handleParse(text);
       };
       reader.readAsText(file);
     },
@@ -281,7 +281,7 @@ export function CreateUserTenantDialog({
       } catch (err) {
         if (err instanceof ApiError && err.data) {
           const data = err.data as { error?: string };
-          setError(data.error || "Failed to create proxy");
+          setError(data.error ?? "Failed to create proxy");
         } else {
           setError(
             err instanceof Error ? err.message : "Failed to create proxy",
@@ -310,7 +310,7 @@ export function CreateUserTenantDialog({
     } catch (err) {
       if (err instanceof ApiError && err.data) {
         const data = err.data as { error?: string };
-        setError(data.error || "Failed to import OpenAPI spec");
+        setError(data.error ?? "Failed to import OpenAPI spec");
       } else {
         setError(
           err instanceof Error ? err.message : "Failed to import OpenAPI spec",
@@ -361,23 +361,25 @@ export function CreateUserTenantDialog({
       clearTimeout(checkTimeoutRef.current);
     }
 
-    checkTimeoutRef.current = setTimeout(async () => {
-      try {
-        const sanitized = sanitizeProxyName(name);
-        if (!sanitized) {
+    checkTimeoutRef.current = setTimeout(() => {
+      void (async () => {
+        try {
+          const sanitized = sanitizeProxyName(name);
+          if (!sanitized) {
+            setNameAvailable(null);
+            setIsCheckingName(false);
+            return;
+          }
+          const result = await api.get<{ available: boolean }>(
+            `/api/organizations/${organizationId}/tenants/check-name?name=${encodeURIComponent(sanitized)}`,
+          );
+          setNameAvailable(result.available);
+        } catch {
           setNameAvailable(null);
+        } finally {
           setIsCheckingName(false);
-          return;
         }
-        const result = await api.get<{ available: boolean }>(
-          `/api/organizations/${organizationId}/tenants/check-name?name=${encodeURIComponent(sanitized)}`,
-        );
-        setNameAvailable(result.available);
-      } catch {
-        setNameAvailable(null);
-      } finally {
-        setIsCheckingName(false);
-      }
+      })();
     }, 500);
 
     return () => {
@@ -442,7 +444,9 @@ export function CreateUserTenantDialog({
     onOpenChange(false);
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (
+    e: React.SyntheticEvent<HTMLFormElement, SubmitEvent>,
+  ) => {
     e.preventDefault();
     setError("");
 
@@ -595,7 +599,7 @@ export function CreateUserTenantDialog({
     } catch (err) {
       if (err instanceof ApiError && err.data) {
         const data = err.data as { error?: string };
-        setError(data.error || "Failed to create proxy");
+        setError(data.error ?? "Failed to create proxy");
       } else {
         setError(err instanceof Error ? err.message : "Failed to create proxy");
       }
@@ -672,20 +676,22 @@ export function CreateUserTenantDialog({
                   View Docs
                 </a>
                 <button
-                  onClick={async () => {
-                    await api.post(
-                      `/api/organizations/${organizationId}/complete-onboarding`,
-                      {},
-                    );
-                    refreshOnboardingStatus(organizationId);
-                    router.push("/dashboard");
-                    setTimeout(() => {
-                      resetForm();
-                      setIsCelebrating(false);
-                      onOpenChange(false);
-                      onSuccess();
-                    }, 1000);
-                  }}
+                  onClick={() =>
+                    void (async () => {
+                      await api.post(
+                        `/api/organizations/${organizationId}/complete-onboarding`,
+                        {},
+                      );
+                      refreshOnboardingStatus(organizationId);
+                      router.push("/dashboard");
+                      setTimeout(() => {
+                        resetForm();
+                        setIsCelebrating(false);
+                        onOpenChange(false);
+                        onSuccess();
+                      }, 1000);
+                    })()
+                  }
                   className="inline-flex items-center justify-center gap-2 rounded-md bg-brand-orange px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-brand-orange/90"
                 >
                   Finish
@@ -825,7 +831,7 @@ export function CreateUserTenantDialog({
                         value={jsonText}
                         onChange={(e) => {
                           setJsonText(e.target.value);
-                          handleParse(e.target.value);
+                          void handleParse(e.target.value);
                         }}
                         placeholder='{"openapi": "3.0.3", "info": {...}, "paths": {...}}'
                         className="h-48 w-full rounded-md border border-gray-6 bg-gray-3 px-3 py-2 font-mono text-sm text-gray-12 placeholder-gray-9 focus:border-accent-8 focus:outline-none focus:ring-1 focus:ring-accent-8"
@@ -857,7 +863,7 @@ export function CreateUserTenantDialog({
                       <div className="mb-3 flex items-center justify-between">
                         <div>
                           <p className="text-sm font-medium text-gray-12">
-                            {parsedSpec.info.title || "Unnamed Spec"}
+                            {parsedSpec.info.title ?? "Unnamed Spec"}
                           </p>
                           {parsedSpec.info.version && (
                             <p className="text-xs text-gray-11">
@@ -891,7 +897,7 @@ export function CreateUserTenantDialog({
                   <div className="flex justify-between pt-2">
                     <button
                       type="button"
-                      onClick={handleGoBack}
+                      onClick={() => void handleGoBack()}
                       disabled={importing || isGoingBack}
                       className="inline-flex items-center gap-2 rounded-md border border-gray-6 px-4 py-2 text-sm text-gray-11 hover:bg-gray-3 disabled:opacity-50"
                     >
@@ -916,7 +922,7 @@ export function CreateUserTenantDialog({
                     </button>
                     <button
                       type="button"
-                      onClick={handleImport}
+                      onClick={() => void handleImport()}
                       disabled={!parsedSpec || importing || isGoingBack}
                       className="inline-flex items-center justify-center gap-2 rounded-md bg-brand-orange px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-brand-orange/90 disabled:cursor-not-allowed disabled:opacity-70"
                     >
@@ -1002,7 +1008,10 @@ export function CreateUserTenantDialog({
                 )}
               </div>
 
-              <form onSubmit={handleSubmit} className="space-y-6">
+              <form
+                onSubmit={(e) => void handleSubmit(e)}
+                className="space-y-6"
+              >
                 {/* Basic Info */}
                 <section>
                   <h3 className="mb-3 text-xs font-medium uppercase tracking-wider text-gray-11">
@@ -1551,7 +1560,7 @@ export function CreateUserTenantDialog({
                   </AlertDialog.Cancel>
                   <AlertDialog.Action asChild>
                     <button
-                      onClick={confirmDiscard}
+                      onClick={() => void confirmDiscard()}
                       className="rounded-md bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700"
                     >
                       Discard

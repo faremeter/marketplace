@@ -123,7 +123,7 @@ export async function flush(): Promise<void> {
 
 export function startFlushTimer(): void {
   if (flushTimer) return;
-  flushTimer = setInterval(flush, FLUSH_INTERVAL_MS);
+  flushTimer = setInterval(() => void flush(), FLUSH_INTERVAL_MS);
 }
 
 export function stopFlushTimer(): void {

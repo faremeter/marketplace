@@ -95,6 +95,7 @@ async function getFilteredEarnings(
 ): Promise<EarningsAnalytics> {
   const { currentMonthStart, previousMonthStart } = getMonthBoundaries();
 
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-conversion -- pg driver returns bigint aggregates as strings despite Kysely's sql<number> annotation
   const toSubs = (rows: { symbol: string; total: number }[]) =>
     rows.map((r) => ({ symbol: r.symbol, total: Number(r.total) }));
 
@@ -166,6 +167,7 @@ async function getFilteredEarnings(
     toSubs(previousBreakdown),
   );
 
+  /* eslint-disable @typescript-eslint/no-unnecessary-type-conversion -- pg driver returns bigint aggregates as strings despite Kysely's sql<number> annotation */
   const { adjusted: totalEarned, breakdown: tokenBreakdown } = adjustWithRates(
     Number(totals?.total ?? 0),
     toSubs(breakdown),
@@ -188,6 +190,7 @@ async function getFilteredEarnings(
     previous_month_earned: previousEarned,
     percent_change: calculatePercentChange(currentEarned, previousEarned),
     total_transactions: Number(totals?.count ?? 0),
+    /* eslint-enable @typescript-eslint/no-unnecessary-type-conversion */
     token_breakdown: tokenBreakdown,
   };
 }
@@ -302,7 +305,7 @@ export async function getEarningsByPeriod(
 
   const periodAdjustments = new Map<string, number>();
   for (const r of nonUsdSubs) {
-    const raw = Number(r.total);
+    const raw = Number(r.total); // eslint-disable-line @typescript-eslint/no-unnecessary-type-conversion -- pg driver returns bigint aggregates as strings
     const rate = rates[r.symbol];
     const converted = rate ? Math.round(raw * rate) : raw;
     const diff = converted - raw;
@@ -312,9 +315,11 @@ export async function getEarningsByPeriod(
     );
   }
 
+  /* eslint-disable @typescript-eslint/no-unnecessary-type-conversion -- pg driver returns bigint aggregates as strings */
   return result.map((r) => ({
     period: r.period,
     total: Number(r.total) + (periodAdjustments.get(r.period) ?? 0),
     call_count: Number(r.call_count),
   }));
+  /* eslint-enable @typescript-eslint/no-unnecessary-type-conversion */
 }

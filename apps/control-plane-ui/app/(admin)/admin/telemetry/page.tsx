@@ -264,7 +264,7 @@ function ActivityChart({
     const dataMap = new Map<string, { searches: number; views: number }>();
     for (const p of data) {
       const day = p.bucket.slice(0, 10);
-      const entry = dataMap.get(day) || { searches: 0, views: 0 };
+      const entry = dataMap.get(day) ?? { searches: 0, views: 0 };
       if (p.event_type === "search") entry.searches += p.total;
       else entry.views += p.total;
       dataMap.set(day, entry);
@@ -284,7 +284,7 @@ function ActivityChart({
       const date = new Date(today);
       date.setDate(date.getDate() - i);
       const period = date.toISOString().slice(0, 10);
-      const entry = dataMap.get(period) || { searches: 0, views: 0 };
+      const entry = dataMap.get(period) ?? { searches: 0, views: 0 };
       result.push({ date: period, label: period.slice(5), ...entry });
     }
     return result;

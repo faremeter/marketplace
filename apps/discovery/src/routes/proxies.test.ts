@@ -1,8 +1,12 @@
 import "../tests/setup/env.js";
 import t from "tap";
+import { type } from "arktype";
 import { Hono } from "hono";
 import { db, setupTestSchema, clearTestData } from "../db/instance.js";
 import { proxiesRoutes } from "./proxies.js";
+
+const ProxyEntry = type({ url: "string", "+": "delete" });
+const ProxyListResponse = type({ data: ProxyEntry.array(), "+": "delete" });
 
 const app = new Hono();
 app.route("/api/v1/proxies", proxiesRoutes);
@@ -218,8 +222,8 @@ await t.test("GET /api/v1/proxies", async (t) => {
 
     const res = await app.request("/api/v1/proxies");
     t.equal(res.status, 200);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data = (await res.json()) as any;
+    const data = ProxyListResponse.assert(await res.json());
+    if (!data.data[0]) throw new Error("expected data.data[0]");
     t.equal(data.data[0].url, "https://weather.api.example.test");
   });
 

@@ -123,7 +123,7 @@ const transformer = new SqliteTransformer();
 
 export class SqliteAdapterPlugin implements KyselyPlugin {
   transformQuery(args: PluginTransformQueryArgs): RootOperationNode {
-    return transformer.transformNode(args.node) as RootOperationNode;
+    return transformer.transformNode(args.node);
   }
 
   async transformResult(

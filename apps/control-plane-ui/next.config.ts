@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/prefer-nullish-coalescing -- empty env vars should fall back to defaults */
 import { withSentryConfig } from "@sentry/nextjs";
 import type { NextConfig } from "next";
 

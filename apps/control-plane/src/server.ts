@@ -31,7 +31,7 @@ if (process.env.WALLET_ENCRYPTION_KEY.length !== 64) {
 app.use(
   "*",
   cors({
-    origin: process.env.FRONTEND_URL || "http://localhost:1338",
+    origin: process.env.FRONTEND_URL ?? "http://localhost:1338",
     credentials: true,
   }),
 );
@@ -51,18 +51,19 @@ app.route("/api/wallets", walletsRoutes);
 app.route("/api", publicRoutes);
 app.route("/internal", internalRoutes);
 
-const port = parseInt(process.env.HTTP_PORT || "1337");
+const port = parseInt(process.env.HTTP_PORT ?? "1337");
 
 const dbConfig = {
-  host: process.env.DATABASE_HOST || "localhost",
-  port: parseInt(process.env.DATABASE_PORT || "5432"),
-  database: process.env.DATABASE_NAME || "control_plane",
-  user: process.env.DATABASE_USER || "control_plane",
-  password: process.env.DATABASE_PASSWORD as string, // validated by db/instance.ts
+  host: process.env.DATABASE_HOST ?? "localhost",
+  port: parseInt(process.env.DATABASE_PORT ?? "5432"),
+  database: process.env.DATABASE_NAME ?? "control_plane",
+  user: process.env.DATABASE_USER ?? "control_plane",
+  // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+  password: process.env.DATABASE_PASSWORD!, // validated by db/instance.ts
   ssl: process.env.DATABASE_SSL === "true",
 };
 
-startQueue(dbConfig).catch((err) => {
+startQueue(dbConfig).catch((err: unknown) => {
   logger.error(`Failed to start queue: ${err}`);
 });
 
@@ -74,16 +75,20 @@ exec("sudo systemctl start wg-peers", (err) => {
   }
 });
 
-process.on("SIGTERM", async () => {
-  logger.info("Received SIGTERM, shutting down...");
-  await stopQueue();
-  process.exit(0);
+process.on("SIGTERM", () => {
+  void (async () => {
+    logger.info("Received SIGTERM, shutting down...");
+    await stopQueue();
+    process.exit(0);
+  })();
 });
 
-process.on("SIGINT", async () => {
-  logger.info("Received SIGINT, shutting down...");
-  await stopQueue();
-  process.exit(0);
+process.on("SIGINT", () => {
+  void (async () => {
+    logger.info("Received SIGINT, shutting down...");
+    await stopQueue();
+    process.exit(0);
+  })();
 });
 
 logger.info(`Control plane starting on http://localhost:${port}`);

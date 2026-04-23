@@ -160,7 +160,7 @@ export function ImportOrgsDialog({
 
     const filtered = rowsWithData
       .filter((row) => row.some((cell) => cell?.toString().trim() !== ""))
-      .map((row) => row.slice(colStart).map((c) => c?.toString() || ""));
+      .map((row) => row.slice(colStart).map((c) => c ?? ""));
 
     if (filtered.length < 1) {
       setParseError(`${fileType} must have at least one data row`);
@@ -512,7 +512,7 @@ export function ImportOrgsDialog({
               >
                 <UploadIcon className="h-8 w-8 text-gray-11 mb-3" />
                 <p className="text-gray-12 text-sm mb-1">
-                  {fileName ? fileName : "Drop your CSV or Excel file here"}
+                  {fileName ?? "Drop your CSV or Excel file here"}
                 </p>
                 <p className="text-gray-11 text-xs mb-3">or</p>
                 <label className="cursor-pointer rounded-md bg-gray-4 px-3 py-1.5 text-sm font-medium text-gray-12 hover:bg-gray-5 transition-colors">
@@ -608,7 +608,7 @@ export function ImportOrgsDialog({
                   Back
                 </button>
                 <button
-                  onClick={goToPreviewStep}
+                  onClick={() => void goToPreviewStep()}
                   disabled={!nameColumn || checkingDuplicates}
                   className="rounded-md bg-white px-3 py-2 text-sm font-medium text-black shadow-button transition-colors hover:bg-white/90 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
@@ -771,7 +771,7 @@ export function ImportOrgsDialog({
                   Back
                 </button>
                 <button
-                  onClick={handleImport}
+                  onClick={() => void handleImport()}
                   disabled={
                     importCount === 0 || importing || checkingDuplicates
                   }

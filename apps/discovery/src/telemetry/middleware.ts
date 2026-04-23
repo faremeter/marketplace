@@ -14,6 +14,7 @@ export async function telemetryMiddleware(
   const ua = c.req.header("user-agent");
   if (isBot(ua)) return;
 
+  // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- empty string from trimmed header must fall through to x-real-ip
   const ip =
     c.req.header("x-forwarded-for")?.split(",")[0]?.trim() ||
     c.req.header("x-real-ip") ||
@@ -38,23 +39,22 @@ export async function telemetryMiddleware(
     return;
   }
 
-  const proxyMatch = path.match(/^\/api\/v1\/proxies\/(\d+)/);
-  if (proxyMatch && proxyMatch[1]) {
+  const proxyMatch = /^\/api\/v1\/proxies\/(\d+)/.exec(path);
+  if (proxyMatch?.[1]) {
     const proxyId = parseInt(proxyMatch[1], 10);
     if (isNaN(proxyId)) return;
 
-    const endpointMatch = path.match(
-      /^\/api\/v1\/proxies\/\d+\/endpoints\/(\d+)/,
+    const endpointMatch = /^\/api\/v1\/proxies\/\d+\/endpoints\/(\d+)/.exec(
+      path,
     );
 
-    const event =
-      endpointMatch && endpointMatch[1]
-        ? {
-            event_type: "view" as const,
-            proxy_id: proxyId,
-            endpoint_id: parseInt(endpointMatch[1], 10),
-          }
-        : { event_type: "view" as const, proxy_id: proxyId };
+    const event = endpointMatch?.[1]
+      ? {
+          event_type: "view" as const,
+          proxy_id: proxyId,
+          endpoint_id: parseInt(endpointMatch[1], 10),
+        }
+      : { event_type: "view" as const, proxy_id: proxyId };
 
     record(event, ip);
   }

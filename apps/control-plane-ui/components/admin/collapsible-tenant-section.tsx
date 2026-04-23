@@ -64,7 +64,7 @@ export function CollapsibleTenantSection({
         <span className="text-sm font-medium text-gray-12">{tenant.name}</span>
         <code className="text-xs text-gray-11">{apiUrl}</code>
         <button
-          onClick={handleCopy}
+          onClick={(e) => void handleCopy(e)}
           className="p-1 rounded hover:bg-gray-4 text-gray-11 hover:text-gray-12"
           title="Copy API URL"
         >

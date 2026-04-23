@@ -117,7 +117,7 @@ export async function buildNodeConfig(nodeId: number) {
         token_symbol: tp.token_symbol,
         mint_address: tp.mint_address,
         network: tp.network,
-        amount: String(tp.amount),
+        amount: String(tp.amount), // eslint-disable-line @typescript-eslint/no-unnecessary-type-conversion -- runtime type differs from Kysely schema
         decimals: tp.decimals,
         endpoint_id: tp.endpoint_id,
       })),

@@ -117,7 +117,7 @@ export function InlineOnboardingEdit({
                 Cancel
               </button>
               <button
-                onClick={handleSave}
+                onClick={() => void handleSave()}
                 disabled={isSaving || selected === isCompleted}
                 className="inline-flex items-center gap-1 rounded bg-accent-9 px-2 py-1 text-xs text-white hover:bg-accent-10 disabled:opacity-50"
               >

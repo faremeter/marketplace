@@ -53,13 +53,13 @@ export function TokenPricesSection({
   // Fetch on mount to show count in collapsed state
   useEffect(() => {
     if (!initialLoaded) {
-      fetchPrices();
+      void fetchPrices();
     }
   }, [tenantId, endpointId]);
 
   useEffect(() => {
     if (expanded && initialLoaded) {
-      fetchPrices();
+      void fetchPrices();
     }
   }, [expanded, tenantId, endpointId]);
 
@@ -72,7 +72,7 @@ export function TokenPricesSection({
         amount: microAmount,
       });
       toast({ title: `${tp.token_symbol} price updated`, variant: "default" });
-      fetchPrices();
+      void fetchPrices();
       onUpdated?.();
     } catch {
       toast({ title: "Failed to update price", variant: "error" });
@@ -83,7 +83,7 @@ export function TokenPricesSection({
     try {
       await api.delete(`/api/tenants/${tenantId}/token-prices/${tp.id}`);
       toast({ title: `${tp.token_symbol} removed`, variant: "default" });
-      fetchPrices();
+      void fetchPrices();
       onUpdated?.();
     } catch {
       toast({ title: "Failed to remove token", variant: "error" });
@@ -101,7 +101,7 @@ export function TokenPricesSection({
         endpoint_id: endpointId ?? null,
       });
       toast({ title: `${token.symbol} added`, variant: "default" });
-      fetchPrices();
+      void fetchPrices();
       onUpdated?.();
     } catch {
       toast({ title: "Failed to add token", variant: "error" });
@@ -152,8 +152,8 @@ export function TokenPricesSection({
                 <TokenPriceRow
                   key={tp.id}
                   tokenPrice={tp}
-                  onSave={(newAmount) => handleUpdateAmount(tp, newAmount)}
-                  onDelete={() => handleDelete(tp)}
+                  onSave={(newAmount) => void handleUpdateAmount(tp, newAmount)}
+                  onDelete={() => void handleDelete(tp)}
                 />
               ))}
             </div>
@@ -161,7 +161,10 @@ export function TokenPricesSection({
 
           {availableTokens.length > 0 && (
             <div className="pt-1 border-t border-gray-6">
-              <AddTokenDropdown tokens={availableTokens} onAdd={handleAdd} />
+              <AddTokenDropdown
+                tokens={availableTokens}
+                onAdd={(token) => void handleAdd(token)}
+              />
             </div>
           )}
         </div>

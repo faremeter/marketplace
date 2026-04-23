@@ -65,7 +65,7 @@ interface Tenant {
 }
 
 interface OpenApiSpecResponse {
-  spec: unknown | null;
+  spec: unknown;
   hasSpec: boolean;
 }
 
@@ -237,7 +237,7 @@ export default function ProxyDetailPage() {
         const data = err.data as { error?: string };
         toast({
           title: "Cannot delete proxy",
-          description: data.error || "Failed to delete proxy",
+          description: data.error ?? "Failed to delete proxy",
           variant: "error",
         });
       } else {
@@ -276,16 +276,18 @@ export default function ProxyDetailPage() {
               </code>
             </div>
             <button
-              onClick={async () => {
-                const proxyUrl = getProxyUrl({
-                  proxyName: tenant.name,
-                  orgSlug: tenant.org_slug,
-                });
-                await navigator.clipboard.writeText(proxyUrl);
-                setCopied(true);
-                setTimeout(() => setCopied(false), 2000);
-                toast({ title: "URL copied to clipboard" });
-              }}
+              onClick={() =>
+                void (async () => {
+                  const proxyUrl = getProxyUrl({
+                    proxyName: tenant.name,
+                    orgSlug: tenant.org_slug,
+                  });
+                  await navigator.clipboard.writeText(proxyUrl);
+                  setCopied(true);
+                  setTimeout(() => setCopied(false), 2000);
+                  toast({ title: "URL copied to clipboard" });
+                })()
+              }
               className="border-l border-gray-6 px-2 py-1.5 text-gray-11 hover:bg-gray-4 hover:text-gray-12 transition-colors"
               title="Copy URL"
             >
@@ -315,7 +317,7 @@ export default function ProxyDetailPage() {
             <GoLiveButton
               tenant={tenant}
               orgId={currentOrg.id}
-              onActivate={() => mutateTenants()}
+              onActivate={() => void mutateTenants()}
             />
           )}
         </div>
@@ -515,8 +517,8 @@ export default function ProxyDetailPage() {
             defaultPrice={tenant.default_price}
             defaultScheme={tenant.default_scheme}
             hasOpenApiSpec={specData?.hasSpec ?? false}
-            onSpecChange={() => mutateSpec()}
-            onDefaultsChange={() => mutateTenants()}
+            onSpecChange={() => void mutateSpec()}
+            onDefaultsChange={() => void mutateTenants()}
           />
         )}
 
@@ -534,7 +536,7 @@ export default function ProxyDetailPage() {
                       tenantId={tenant.id}
                       tenantName={tenant.name}
                       isActive={tenant.is_active}
-                      onUpdate={() => mutateTenants()}
+                      onUpdate={() => void mutateTenants()}
                       apiEndpoint={apiEndpoint}
                       disabled={tenant.status === "registered"}
                       disabledTooltip="Go live to enable this setting"
@@ -550,7 +552,7 @@ export default function ProxyDetailPage() {
                       currentWalletId={tenant.wallet_id}
                       currentWalletName={tenant.wallet_name}
                       apiEndpoint={apiEndpoint}
-                      onUpdate={() => mutateTenants()}
+                      onUpdate={() => void mutateTenants()}
                     />
                   </dd>
                 </div>
@@ -561,7 +563,7 @@ export default function ProxyDetailPage() {
                       tenantId={tenant.id}
                       tenantName={tenant.name}
                       backendUrl={tenant.backend_url}
-                      onUpdate={() => mutateTenants()}
+                      onUpdate={() => void mutateTenants()}
                       apiEndpoint={apiEndpoint}
                     />
                   </dd>
@@ -574,7 +576,7 @@ export default function ProxyDetailPage() {
                       tenantName={tenant.name}
                       authHeader={tenant.upstream_auth_header}
                       authValue={tenant.upstream_auth_value}
-                      onUpdate={() => mutateTenants()}
+                      onUpdate={() => void mutateTenants()}
                       apiEndpoint={apiEndpoint}
                     />
                   </dd>
@@ -584,7 +586,7 @@ export default function ProxyDetailPage() {
                   <dd className="mt-1">
                     <InlinePriceEdit
                       priceMicro={tenant.default_price}
-                      onUpdate={() => mutateTenants()}
+                      onUpdate={() => void mutateTenants()}
                       apiEndpoint={apiEndpoint}
                     />
                   </dd>
@@ -592,7 +594,7 @@ export default function ProxyDetailPage() {
                 <div className="col-span-2">
                   <TokenPricesSection
                     tenantId={tenant.id}
-                    onUpdated={() => mutateTenants()}
+                    onUpdated={() => void mutateTenants()}
                   />
                 </div>
                 <div>
@@ -600,7 +602,7 @@ export default function ProxyDetailPage() {
                   <dd className="mt-1">
                     <InlineSchemeEdit
                       scheme={tenant.default_scheme}
-                      onUpdate={() => mutateTenants()}
+                      onUpdate={() => void mutateTenants()}
                       apiEndpoint={apiEndpoint}
                     />
                   </dd>
@@ -676,7 +678,7 @@ export default function ProxyDetailPage() {
                   Cancel
                 </button>
                 <button
-                  onClick={handleDeleteProxy}
+                  onClick={() => void handleDeleteProxy()}
                   disabled={isDeleting || deleteConfirmation !== tenant.name}
                   className="rounded-md bg-red-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-red-700 disabled:opacity-50"
                 >

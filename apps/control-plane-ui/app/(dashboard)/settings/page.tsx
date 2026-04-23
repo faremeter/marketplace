@@ -78,7 +78,7 @@ export default function SettingsPage() {
         const data = err.data as { error?: string };
         toast({
           title: "Cannot delete organization",
-          description: data.error || "Failed to delete organization",
+          description: data.error ?? "Failed to delete organization",
           variant: "error",
         });
       } else {
@@ -109,7 +109,7 @@ export default function SettingsPage() {
       await api.delete(
         `/api/organizations/${currentOrg.id}/invitations/${invitationId}`,
       );
-      mutateInvitations();
+      void mutateInvitations();
       toast({
         title: "Invitation cancelled",
         description: "The invitation has been removed.",
@@ -317,7 +317,7 @@ export default function SettingsPage() {
                       </div>
                       <div className="flex items-center gap-2">
                         <button
-                          onClick={() => handleCopyInviteLink(invitation)}
+                          onClick={() => void handleCopyInviteLink(invitation)}
                           className="flex items-center gap-1 rounded px-2 py-1 text-gray-11 hover:bg-gray-4 hover:text-gray-12"
                           title="Copy invite link"
                         >
@@ -333,7 +333,9 @@ export default function SettingsPage() {
                           )}
                         </button>
                         <button
-                          onClick={() => handleCancelInvitation(invitation.id)}
+                          onClick={() =>
+                            void handleCancelInvitation(invitation.id)
+                          }
                           className="flex h-8 w-8 items-center justify-center rounded text-gray-11 hover:bg-red-900/20 hover:text-red-400"
                           title="Cancel invitation"
                         >
@@ -350,7 +352,7 @@ export default function SettingsPage() {
               open={inviteDialogOpen}
               onOpenChange={setInviteDialogOpen}
               organizationId={currentOrg.id}
-              onSuccess={() => mutateInvitations()}
+              onSuccess={() => void mutateInvitations()}
             />
 
             {isOwner && (
@@ -424,7 +426,7 @@ export default function SettingsPage() {
                         Cancel
                       </button>
                       <button
-                        onClick={handleDeleteOrg}
+                        onClick={() => void handleDeleteOrg()}
                         disabled={
                           isDeleting || deleteConfirmation !== currentOrg.name
                         }

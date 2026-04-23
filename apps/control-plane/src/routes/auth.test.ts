@@ -1,10 +1,37 @@
 import "../tests/setup/env.js";
 import t from "tap";
+import { type } from "arktype";
 import { Hono } from "hono";
 import bcrypt from "bcrypt";
 import { db, setupTestSchema, clearTestData } from "../db/instance.js";
 import { signToken } from "../middleware/auth.js";
 import { authRoutes } from "./auth.js";
+
+const OrgEntry = type({
+  name: "string",
+  slug: "string",
+  role: "string",
+  "+": "delete",
+});
+
+const AuthUserResponse = type({
+  user: {
+    email: "string",
+    organizations: OrgEntry.array(),
+    "+": "delete",
+  },
+  "verification_token?": "string",
+  "+": "delete",
+});
+
+const ErrorResponse = type({ error: "string", "+": "delete" });
+const SuccessResponse = type({ success: "boolean", "+": "delete" });
+
+const MeResponse = type({
+  email: "string",
+  organizations: OrgEntry.array(),
+  "+": "delete",
+});
 
 const app = new Hono();
 app.route("/api/auth", authRoutes);
@@ -27,12 +54,13 @@ await t.test("POST /api/auth/signup", async (t) => {
     });
 
     t.equal(res.status, 201);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data = (await res.json()) as any;
+    const data = AuthUserResponse.assert(await res.json());
     t.ok(data.user);
     t.equal(data.user.email, "new@example.com");
     t.ok(data.user.organizations);
     t.equal(data.user.organizations.length, 1);
+    if (!data.user.organizations[0])
+      throw new Error("expected organizations[0]");
     t.equal(data.user.organizations[0].role, "owner");
     t.ok(data.verification_token);
 
@@ -59,8 +87,7 @@ await t.test("POST /api/auth/signup", async (t) => {
     });
 
     t.equal(res.status, 409);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data = (await res.json()) as any;
+    const data = ErrorResponse.assert(await res.json());
     t.equal(data.error, "Email already registered");
   });
 
@@ -75,8 +102,7 @@ await t.test("POST /api/auth/signup", async (t) => {
     });
 
     t.equal(res.status, 201);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data = (await res.json()) as any;
+    const data = AuthUserResponse.assert(await res.json());
     t.equal(data.user.email, "upper@example.com");
   });
 
@@ -150,8 +176,9 @@ await t.test("POST /api/auth/signup", async (t) => {
     });
 
     t.equal(res.status, 201);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data = (await res.json()) as any;
+    const data = AuthUserResponse.assert(await res.json());
+    if (!data.user.organizations[0])
+      throw new Error("expected organizations[0]");
     t.equal(data.user.organizations[0].slug, "uniqueuser");
   });
 
@@ -171,8 +198,9 @@ await t.test("POST /api/auth/signup", async (t) => {
     });
 
     t.equal(res.status, 201);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data = (await res.json()) as any;
+    const data = AuthUserResponse.assert(await res.json());
+    if (!data.user.organizations[0])
+      throw new Error("expected organizations[0]");
     const slug = data.user.organizations[0].slug;
     t.ok(
       slug.startsWith("colliding-"),
@@ -223,8 +251,7 @@ await t.test("POST /api/auth/login", async (t) => {
     });
 
     t.equal(res.status, 200);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data = (await res.json()) as any;
+    const data = AuthUserResponse.assert(await res.json());
     t.equal(data.user.email, "login@example.com");
     t.ok(data.user.organizations);
     t.equal(data.user.organizations.length, 1);
@@ -253,8 +280,7 @@ await t.test("POST /api/auth/login", async (t) => {
     });
 
     t.equal(res.status, 401);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data = (await res.json()) as any;
+    const data = ErrorResponse.assert(await res.json());
     t.equal(data.error, "Invalid email or password");
   });
 
@@ -269,8 +295,7 @@ await t.test("POST /api/auth/login", async (t) => {
     });
 
     t.equal(res.status, 401);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data = (await res.json()) as any;
+    const data = ErrorResponse.assert(await res.json());
     t.equal(data.error, "Invalid email or password");
   });
 
@@ -302,12 +327,12 @@ await t.test("POST /api/auth/logout", async (t) => {
     const res = await app.request("/api/auth/logout", { method: "POST" });
 
     t.equal(res.status, 200);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data = (await res.json()) as any;
+    const data = SuccessResponse.assert(await res.json());
     t.equal(data.success, true);
 
     const cookie = res.headers.get("set-cookie");
     t.ok(
+      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- boolean OR on possibly-undefined values
       cookie?.includes("auth_token=;") ||
         cookie?.includes("auth_token=deleted"),
     );
@@ -361,10 +386,10 @@ await t.test("GET /api/auth/me", async (t) => {
     });
 
     t.equal(res.status, 200);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data = (await res.json()) as any;
+    const data = MeResponse.assert(await res.json());
     t.equal(data.email, "me@example.com");
     t.equal(data.organizations.length, 1);
+    if (!data.organizations[0]) throw new Error("expected organizations[0]");
     t.equal(data.organizations[0].name, "My Org");
   });
 
@@ -392,8 +417,7 @@ await t.test("GET /api/auth/me", async (t) => {
       });
 
       t.equal(res.status, 200);
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const data = (await res.json()) as any;
+      const data = MeResponse.assert(await res.json());
       t.equal(data.email, "no-orgs@example.com");
       t.equal(data.organizations.length, 0);
     },
@@ -420,8 +444,7 @@ await t.test("POST /api/auth/verify", async (t) => {
     });
 
     t.equal(res.status, 200);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data = (await res.json()) as any;
+    const data = SuccessResponse.assert(await res.json());
     t.equal(data.success, true);
 
     const user = await db
@@ -440,8 +463,7 @@ await t.test("POST /api/auth/verify", async (t) => {
     });
 
     t.equal(res.status, 400);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data = (await res.json()) as any;
+    const data = ErrorResponse.assert(await res.json());
     t.equal(data.error, "Invalid verification token");
   });
 
@@ -464,8 +486,7 @@ await t.test("POST /api/auth/verify", async (t) => {
     });
 
     t.equal(res.status, 400);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data = (await res.json()) as any;
+    const data = ErrorResponse.assert(await res.json());
     t.equal(data.error, "Verification token expired");
   });
 
@@ -498,8 +519,7 @@ await t.test("POST /api/auth/verify", async (t) => {
         body: JSON.stringify({ token: "one-time-token" }),
       });
       t.equal(res2.status, 400);
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const data = (await res2.json()) as any;
+      const data = ErrorResponse.assert(await res2.json());
       t.equal(data.error, "Invalid verification token");
     },
   );
@@ -527,8 +547,7 @@ await t.test("POST /api/auth/login - organization edge cases", async (t) => {
     });
 
     t.equal(res.status, 200);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data = (await res.json()) as any;
+    const data = AuthUserResponse.assert(await res.json());
     t.same(data.user.organizations, []);
   });
 
@@ -574,11 +593,14 @@ await t.test("POST /api/auth/login - organization edge cases", async (t) => {
     });
 
     t.equal(res.status, 200);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data = (await res.json()) as any;
+    const data = AuthUserResponse.assert(await res.json());
     t.equal(data.user.organizations.length, 2);
     // Should be sorted by name ascending
+    if (!data.user.organizations[0])
+      throw new Error("expected organizations[0]");
     t.equal(data.user.organizations[0].name, "Alpha Org");
+    if (!data.user.organizations[1])
+      throw new Error("expected organizations[1]");
     t.equal(data.user.organizations[1].name, "Beta Org");
   });
 });
@@ -606,8 +628,7 @@ await t.test("GET /api/auth/me - organization edge cases", async (t) => {
     });
 
     t.equal(res.status, 200);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data = (await res.json()) as any;
+    const data = MeResponse.assert(await res.json());
     t.same(data.organizations, []);
   });
 
@@ -653,10 +674,11 @@ await t.test("GET /api/auth/me - organization edge cases", async (t) => {
     });
 
     t.equal(res.status, 200);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data = (await res.json()) as any;
+    const data = MeResponse.assert(await res.json());
     t.equal(data.organizations.length, 2);
+    if (!data.organizations[0]) throw new Error("expected organizations[0]");
     t.equal(data.organizations[0].name, "Alpha Org");
+    if (!data.organizations[1]) throw new Error("expected organizations[1]");
     t.equal(data.organizations[1].name, "Zeta Org");
   });
 });
@@ -705,8 +727,7 @@ await t.test("POST /api/auth/update-password", async (t) => {
     });
 
     t.equal(res.status, 200);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data = (await res.json()) as any;
+    const data = SuccessResponse.assert(await res.json());
     t.equal(data.success, true);
 
     // Verify new password works
@@ -753,8 +774,7 @@ await t.test("POST /api/auth/update-password", async (t) => {
     });
 
     t.equal(res.status, 401);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data = (await res.json()) as any;
+    const data = ErrorResponse.assert(await res.json());
     t.equal(data.error, "Current password is incorrect");
   });
 

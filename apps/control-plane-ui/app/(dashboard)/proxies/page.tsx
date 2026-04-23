@@ -199,7 +199,7 @@ export default function TenantsPage() {
                               proxyName: tenant.name,
                               orgSlug: currentOrg.slug,
                             });
-                            navigator.clipboard.writeText(url);
+                            void navigator.clipboard.writeText(url);
                             toast({
                               title: "Proxy URL copied to clipboard",
                               variant: "success",
@@ -229,7 +229,7 @@ export default function TenantsPage() {
                         tenantId={tenant.id}
                         tenantName={tenant.name}
                         backendUrl={tenant.backend_url}
-                        onUpdate={() => mutate()}
+                        onUpdate={() => void mutate()}
                         apiEndpoint={apiEndpoint}
                       />
                     </td>
@@ -239,7 +239,7 @@ export default function TenantsPage() {
                         tenantName={tenant.name}
                         authHeader={tenant.upstream_auth_header}
                         authValue={tenant.upstream_auth_value}
-                        onUpdate={() => mutate()}
+                        onUpdate={() => void mutate()}
                         apiEndpoint={apiEndpoint}
                       />
                     </td>
@@ -250,7 +250,7 @@ export default function TenantsPage() {
                         currentWalletId={tenant.wallet_id}
                         currentWalletName={tenant.wallet_name}
                         apiEndpoint={apiEndpoint}
-                        onUpdate={() => mutate()}
+                        onUpdate={() => void mutate()}
                       />
                     </td>
                     <td className="px-4 py-3">
@@ -258,7 +258,7 @@ export default function TenantsPage() {
                         tenantId={tenant.id}
                         tenantName={tenant.name}
                         isActive={tenant.is_active}
-                        onUpdate={() => mutate()}
+                        onUpdate={() => void mutate()}
                         apiEndpoint={apiEndpoint}
                         disabled={tenant.status === "registered"}
                         disabledTooltip="Go live to enable this setting"
@@ -290,7 +290,7 @@ export default function TenantsPage() {
       <CreateUserTenantDialog
         open={isDialogOpen}
         onOpenChange={setIsDialogOpen}
-        onSuccess={() => mutate()}
+        onSuccess={() => void mutate()}
         organizationId={currentOrg.id}
         organizationSlug={currentOrg.slug}
         isFirstProxy={isFirstProxy}

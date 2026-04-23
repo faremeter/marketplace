@@ -25,7 +25,7 @@ interface Transaction {
   request_path: string;
   client_ip: string | null;
   request_method: string | null;
-  metadata: unknown | null;
+  metadata: unknown;
   ngx_request_id: string;
   created_at: string;
 }
@@ -88,9 +88,10 @@ export function AdminTransactionsTable({
   const [selectedTx, setSelectedTx] = useState<Transaction | null>(null);
   const offset = page * pageSize;
 
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment -- SWR fetcher type inference limitation
   const { data, isLoading, error } = useSWR<TransactionsResponse>(
     `/api/admin/tenants/${tenantId}/transactions?limit=${pageSize}&offset=${offset}`,
-    api.get,
+    (url: string) => api.get<TransactionsResponse>(url),
     { refreshInterval: 30000 },
   );
 

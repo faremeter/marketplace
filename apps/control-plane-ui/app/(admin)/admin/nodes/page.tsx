@@ -154,7 +154,7 @@ function NodeCard({ node }: { node: Node }) {
                         tenantId={tenant.id}
                         tenantName={tenant.name}
                         isActive={tenant.is_active}
-                        onUpdate={() => mutate()}
+                        onUpdate={() => void mutate()}
                       />
                     </td>
                     <td className="py-2 align-middle">

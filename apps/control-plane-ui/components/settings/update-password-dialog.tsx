@@ -38,7 +38,9 @@ export function UpdatePasswordDialog({
     onOpenChange(newOpen);
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (
+    e: React.SyntheticEvent<HTMLFormElement, SubmitEvent>,
+  ) => {
     e.preventDefault();
     setError("");
 
@@ -79,7 +81,7 @@ export function UpdatePasswordDialog({
     } catch (err) {
       if (err instanceof ApiError && err.data) {
         const data = err.data as { error?: string };
-        setError(data.error || "Failed to update password");
+        setError(data.error ?? "Failed to update password");
       } else {
         setError(
           err instanceof Error ? err.message : "Failed to update password",
@@ -104,7 +106,7 @@ export function UpdatePasswordDialog({
             </Dialog.Close>
           </div>
 
-          <form onSubmit={handleSubmit} className="space-y-4">
+          <form onSubmit={(e) => void handleSubmit(e)} className="space-y-4">
             <div>
               <label className="mb-1.5 block text-sm text-gray-11">
                 Current Password <span className="text-red-400">*</span>

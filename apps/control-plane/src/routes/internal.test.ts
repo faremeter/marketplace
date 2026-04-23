@@ -5,14 +5,38 @@ import { Hono } from "hono";
 import { db, setupTestSchema, clearTestData } from "../db/instance.js";
 import { internalRoutes } from "./internal.js";
 
-const SyncConfigEntry = type({
-  name: "string",
-  org_slug: "string | null",
-  gateway_slug: "string",
+const ErrorResponse = type({
+  error: "string",
   "+": "delete",
 });
 
-const SyncResponse = type({
+const SyncConfigEntry = type({
+  name: "string",
+  proxy_name: "string",
+  org_slug: "string | null",
+  gateway_slug: "string",
+  domain: "string",
+  backend_url: "string",
+  "upstream_auth_header?": "string | null",
+  "upstream_auth_value?": "string | null",
+  "+": "delete",
+});
+
+const GatewayEntry = type({
+  spec: { "paths?": "Record<string, unknown>", "+": "delete" },
+  locationsConf: "string",
+  "+": "delete",
+});
+
+const SidecarSite = type({
+  tenantName: "string",
+  "+": "delete",
+});
+
+const SyncNodeResponse = type({
+  node_id: "number",
+  node_name: "string",
+  tenant_count: "number",
   config: "Record<string, unknown>",
   gateway: "Record<string, unknown>",
   sidecar: { sites: "Record<string, unknown>", "+": "delete" },
@@ -161,8 +185,7 @@ await t.test("POST /internal/transactions", async (t) => {
       }),
     });
     t.equal(res.status, 404);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data = (await res.json()) as any;
+    const data = ErrorResponse.assert(await res.json());
     t.equal(data.error, "Tenant not found");
   });
 
@@ -181,8 +204,7 @@ await t.test("POST /internal/transactions", async (t) => {
       }),
     });
     t.equal(res.status, 400);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data = (await res.json()) as any;
+    const data = ErrorResponse.assert(await res.json());
     t.ok(data.error.includes("tx_hash"));
   });
 
@@ -202,8 +224,7 @@ await t.test("POST /internal/transactions", async (t) => {
       }),
     });
     t.equal(res.status, 400);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data = (await res.json()) as any;
+    const data = ErrorResponse.assert(await res.json());
     t.ok(data.error.includes("network"));
   });
 
@@ -1293,8 +1314,7 @@ await t.test("GET /internal/nodes/:id/sync", async (t) => {
 
     const res = await app.request(`/internal/nodes/${node.id}/sync`);
     t.equal(res.status, 200);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data = (await res.json()) as any;
+    const data = SyncNodeResponse.assert(await res.json());
     t.equal(data.node_id, node.id);
     t.equal(data.node_name, "test-node");
     t.ok("config" in data);
@@ -1330,8 +1350,7 @@ await t.test("GET /internal/nodes/:id/sync", async (t) => {
 
       const res = await app.request(`/internal/nodes/${node.id}/sync`);
       t.equal(res.status, 200);
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const data = (await res.json()) as any;
+      const data = SyncNodeResponse.assert(await res.json());
       t.equal(data.tenant_count, 1);
       t.ok(data.config["my-tenant.team.api.example.test"]);
       t.ok(data.gateway["team--my-tenant"]);
@@ -1357,8 +1376,7 @@ await t.test("GET /internal/nodes/:id/sync", async (t) => {
 
     const res = await app.request(`/internal/nodes/${node.id}/sync`);
     t.equal(res.status, 200);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data = (await res.json()) as any;
+    const data = SyncNodeResponse.assert(await res.json());
     t.equal(data.tenant_count, 0);
   });
 
@@ -1380,8 +1398,7 @@ await t.test("GET /internal/nodes/:id/sync", async (t) => {
 
     const res = await app.request(`/internal/nodes/${node.id}/sync`);
     t.equal(res.status, 200);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data = (await res.json()) as any;
+    const data = SyncNodeResponse.assert(await res.json());
     t.equal(data.tenant_count, 0);
   });
 
@@ -1421,11 +1438,11 @@ await t.test("GET /internal/nodes/:id/sync", async (t) => {
 
     const res = await app.request(`/internal/nodes/${node.id}/sync`);
     t.equal(res.status, 200);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data = (await res.json()) as any;
-    const gw = data.gateway["team--my-tenant"];
+    const data = SyncNodeResponse.assert(await res.json());
+    const gw = GatewayEntry.assert(data.gateway["team--my-tenant"]);
     t.ok(gw, "gateway config exists");
     const paths = gw.spec.paths;
+    if (!paths) throw new Error("paths not found");
     t.ok(paths["/api/active"], "active endpoint in spec");
     t.notOk(paths["/api/inactive"], "inactive endpoint not in spec");
   });
@@ -1482,11 +1499,10 @@ await t.test("GET /internal/nodes/:id/sync", async (t) => {
 
     const res = await app.request(`/internal/nodes/${node.id}/sync`);
     t.equal(res.status, 200);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data = (await res.json()) as any;
+    const data = SyncNodeResponse.assert(await res.json());
 
     const domain = "configured-tenant.team.api.example.test";
-    const tenantConfig = data.config[domain];
+    const tenantConfig = SyncConfigEntry.assert(data.config[domain]);
     t.ok(tenantConfig, "tenant config exists");
     t.equal(tenantConfig.backend_url, "http://backend.example.com");
     t.equal(tenantConfig.upstream_auth_header, "Authorization");
@@ -1497,12 +1513,14 @@ await t.test("GET /internal/nodes/:id/sync", async (t) => {
     t.equal(tenantConfig.gateway_slug, "team--configured-tenant");
     t.equal(tenantConfig.domain, domain);
 
-    const gw = data.gateway["team--configured-tenant"];
+    const gw = GatewayEntry.assert(data.gateway["team--configured-tenant"]);
     t.ok(gw, "gateway config exists");
     t.ok(gw.spec, "spec present");
     t.ok(gw.locationsConf, "locationsConf present");
 
-    const site = data.sidecar.sites["team--configured-tenant"];
+    const site = SidecarSite.assert(
+      data.sidecar.sites["team--configured-tenant"],
+    );
     t.ok(site, "sidecar site exists");
     t.equal(site.tenantName, "configured-tenant");
   });
@@ -1551,9 +1569,10 @@ await t.test("GET /internal/nodes/:id/sync", async (t) => {
 
     const res = await app.request(`/internal/nodes/${node.id}/sync`);
     t.equal(res.status, 200);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data = (await res.json()) as any;
-    const paths = data.gateway["team--my-tenant"].spec.paths;
+    const data = SyncNodeResponse.assert(await res.json());
+    const gw = GatewayEntry.assert(data.gateway["team--my-tenant"]);
+    if (!gw.spec.paths) throw new Error("paths not found");
+    const paths = gw.spec.paths;
     t.ok(paths["/low-priority"], "/low-priority in spec");
     t.ok(paths["/high-priority"], "/high-priority in spec");
     t.ok(paths["/medium-priority"], "/medium-priority in spec");
@@ -1583,8 +1602,7 @@ await t.test("GET /internal/nodes/:id/sync", async (t) => {
 
       const res = await app.request(`/internal/nodes/${node.id}/sync`);
       t.equal(res.status, 200);
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const data = (await res.json()) as any;
+      const data = SyncNodeResponse.assert(await res.json());
       t.equal(data.tenant_count, 1);
       t.ok(data.config["my-api.acme.api.example.test"]);
       t.notOk(data.config["my-api.api.example.test"]);
@@ -1606,7 +1624,7 @@ await t.test("GET /internal/nodes/:id/sync", async (t) => {
 
     const res = await app.request(`/internal/nodes/${node.id}/sync`);
     t.equal(res.status, 200);
-    const data = SyncResponse.assert(await res.json());
+    const data = SyncNodeResponse.assert(await res.json());
     const domain = "no-slug-api.api.example.test";
     t.ok(data.config[domain], "tenant appears in config");
     const entry = SyncConfigEntry.assert(data.config[domain]);
@@ -1635,9 +1653,10 @@ await t.test("GET /internal/nodes/:id/sync", async (t) => {
 
       const res = await app.request(`/internal/nodes/${node.id}/sync`);
       t.equal(res.status, 200);
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const data = (await res.json()) as any;
-      const tenantConfig = data.config["org-api.acme.api.example.test"];
+      const data = SyncNodeResponse.assert(await res.json());
+      const tenantConfig = SyncConfigEntry.assert(
+        data.config["org-api.acme.api.example.test"],
+      );
       t.ok(tenantConfig, "tenant config exists");
       t.equal(tenantConfig.name, "org-api");
       t.equal(tenantConfig.proxy_name, "org-api");
@@ -1678,21 +1697,20 @@ await t.test("GET /internal/nodes/:id/sync", async (t) => {
 
       const res = await app.request(`/internal/nodes/${node.id}/sync`);
       t.equal(res.status, 200);
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const data = (await res.json()) as any;
+      const data = SyncNodeResponse.assert(await res.json());
       t.equal(data.tenant_count, 2);
 
       t.ok(data.config["svc-one.org-one.api.example.test"]);
-      t.equal(
-        data.config["svc-one.org-one.api.example.test"].org_slug,
-        "org-one",
+      const svc1 = SyncConfigEntry.assert(
+        data.config["svc-one.org-one.api.example.test"],
       );
+      t.equal(svc1.org_slug, "org-one");
 
       t.ok(data.config["svc-two.org-two.api.example.test"]);
-      t.equal(
-        data.config["svc-two.org-two.api.example.test"].org_slug,
-        "org-two",
+      const svc2 = SyncConfigEntry.assert(
+        data.config["svc-two.org-two.api.example.test"],
       );
+      t.equal(svc2.org_slug, "org-two");
     },
   );
 
@@ -1727,14 +1745,19 @@ await t.test("GET /internal/nodes/:id/sync", async (t) => {
 
       const res = await app.request(`/internal/nodes/${node.id}/sync`);
       t.equal(res.status, 200);
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const data = (await res.json()) as any;
+      const data = SyncNodeResponse.assert(await res.json());
       t.equal(data.tenant_count, 2);
 
       t.ok(data.config["api.org-one.api.example.test"]);
       t.ok(data.config["api.org-two.api.example.test"]);
-      t.equal(data.config["api.org-one.api.example.test"].org_slug, "org-one");
-      t.equal(data.config["api.org-two.api.example.test"].org_slug, "org-two");
+      const api1 = SyncConfigEntry.assert(
+        data.config["api.org-one.api.example.test"],
+      );
+      t.equal(api1.org_slug, "org-one");
+      const api2 = SyncConfigEntry.assert(
+        data.config["api.org-two.api.example.test"],
+      );
+      t.equal(api2.org_slug, "org-two");
     },
   );
 
