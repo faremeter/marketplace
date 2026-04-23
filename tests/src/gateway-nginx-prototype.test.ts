@@ -679,63 +679,50 @@ await t.test("gateway-nginx marketplace prototype", async (t) => {
     },
   );
 
-  // -- MPP two-phase: verify at access, settle at /response --
+  // -- MPP two-phase: settle and capture at access (no verify) --
 
-  await t.test(
-    "MPP charge: verify at access, settle and capture at log phase",
-    async (t) => {
-      cb.reset();
-      const res = await mppFetch(`${NGINX_BASE}/v1/chat/completions`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ model: "gpt-3.5", messages: [] }),
-      });
-      t.equal(res.status, 200);
-      t.equal(
-        cb.mppSettleCount,
-        0,
-        "MPP settle must not fire before log phase",
-      );
-      t.equal(
-        cb.x402VerifyCount,
-        0,
-        "x402 verify must not fire for MPP payment",
-      );
-      t.equal(
-        cb.x402SettleCount,
-        0,
-        "x402 settle must not fire for MPP payment",
-      );
+  await t.test("MPP charge: settle and capture at access phase", async (t) => {
+    cb.reset();
+    const res = await mppFetch(`${NGINX_BASE}/v1/chat/completions`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ model: "gpt-3.5", messages: [] }),
+    });
+    t.equal(res.status, 200);
+    t.ok(
+      cb.mppSettleCount > 0,
+      "MPP settle must fire at access phase for two-phase pricing",
+    );
+    t.equal(cb.x402VerifyCount, 0, "x402 verify must not fire for MPP payment");
+    t.equal(cb.x402SettleCount, 0, "x402 settle must not fire for MPP payment");
 
-      const body = (await res.json()) as { object: string };
-      t.equal(body.object, "chat.completion");
+    const body = (await res.json()) as { object: string };
+    t.equal(body.object, "chat.completion");
 
-      await cb.awaitCapture("POST /v1/chat/completions");
-      t.ok(cb.mppSettleCount > 0, "MPP settle must fire at log phase");
-      const cap = requireCapture(cb, "POST /v1/chat/completions");
-      t.equal(cap.settled, true, "capture must show successful settlement");
-      t.equal(
-        cap.amount.usdc,
-        "500",
-        "capture amount must equal the endpoint price",
-      );
-      t.equal(
-        cap.request.method,
-        "POST",
-        "MPP capture must include request method",
-      );
-      t.equal(
-        cap.request.path,
-        "/v1/chat/completions",
-        "MPP capture must include request path",
-      );
-      t.ok(
-        cap.request.headers["x-request-id"],
-        "MPP capture must include nginx request ID",
-      );
-      t.end();
-    },
-  );
+    await cb.awaitCapture("POST /v1/chat/completions");
+    const cap = requireCapture(cb, "POST /v1/chat/completions");
+    t.equal(cap.settled, true, "capture must show successful settlement");
+    t.equal(
+      cap.amount.usdc,
+      "500",
+      "capture amount must equal the endpoint price",
+    );
+    t.equal(
+      cap.request.method,
+      "POST",
+      "MPP capture must include request method",
+    );
+    t.equal(
+      cap.request.path,
+      "/v1/chat/completions",
+      "MPP capture must include request path",
+    );
+    t.ok(
+      cap.request.headers["x-request-id"],
+      "MPP capture must include nginx request ID",
+    );
+    t.end();
+  });
 
   t.end();
 });
