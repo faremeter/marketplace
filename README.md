@@ -57,6 +57,155 @@ The `infra-toolbox` submodule (`github.com/faremeter/infra-toolbox`) provides sh
 
 If `make` fails with `./bin/check-env: No such file or directory`, the submodule was not initialized. Run `git submodule update --init` again and verify `ls infra-toolbox/` shows files.
 
+## Local Docker Compose
+
+For full local development, this repo now ships a real Docker Compose stack for:
+
+- PostgreSQL
+- control-plane API
+- discovery API
+- control-plane UI
+- two local OpenResty API nodes
+- local sidecar
+- real facilitator app from the sibling `../faremeter` repo
+- local publisher mock
+
+### Requirements
+
+- Docker Desktop or Docker Engine with Compose
+- The sibling `../faremeter` checkout present next to this repo
+- A Solana devnet keypair for the facilitator/service wallet
+- A funded Solana devnet keypair for the smoke-test client
+
+The local stack relies on the same linked `@faremeter/*` packages already
+present in this workspace, so Compose expects both directories to exist:
+
+```text
+../faremeter
+../marketplace
+```
+
+Before starting the stack, create or provide the local payment keypairs:
+
+```bash
+mkdir -p keypairs
+solana-keygen new --outfile keypairs/facilitator-devnet.json
+solana-keygen new --outfile keypairs/client-devnet.json
+```
+
+`LOCAL_SERVICE_SOLANA_ADDRESS` is optional. If unset, the seed script derives
+the receiver wallet address from `keypairs/facilitator-devnet.json`.
+
+### Start the stack
+
+```bash
+docker compose up --build -d
+```
+
+Or via make:
+
+```bash
+make local-up
+```
+
+Compose will:
+
+1. install workspace dependencies for both `faremeter` and `marketplace`
+2. start Postgres and the app services
+3. run the real facilitator with Solana devnet USDC support
+4. seed a local admin user, two local nodes, a demo tenant, and a demo endpoint
+5. sync the generated tenant config into both local API nodes
+
+### Local URLs
+
+- Control plane API: `http://localhost:11337`
+- Control plane UI: `http://localhost:11338`
+- Discovery: `http://localhost:11339`
+- API node proxy A: `http://localhost:18080`
+- API node proxy B: `http://localhost:18081`
+- Demo proxy host A: `http://demo-api.local.proxy.localhost:18080/v1/chat/completions`
+- Demo proxy host B: `http://demo-api.local.proxy.localhost:18081/v1/chat/completions`
+
+### Local Architecture
+
+```mermaid
+flowchart LR
+    browser["Browser / CLI"]
+    ui["control-plane-ui\nNext.js"]
+    cp["control-plane API\nHono"]
+    discovery["discovery API"]
+    postgres["Postgres"]
+    seed["seed-local-dev"]
+    smoke["local smoke test"]
+    nodeA["api-node-a\nOpenResty"]
+    nodeB["api-node-b\nOpenResty"]
+    sidecar["api-node-sidecar\nFaremeter sidecar wrapper"]
+    facilitator["facilitator\n../faremeter"]
+    publisher["publisher-mock"]
+    solana["Solana devnet"]
+
+    browser --> ui
+    browser --> cp
+    ui --> cp
+    cp --> postgres
+    discovery --> postgres
+    seed --> cp
+    seed --> postgres
+    seed --> nodeA
+    seed --> nodeB
+    smoke --> cp
+    smoke --> discovery
+    smoke --> ui
+    smoke --> nodeA
+    smoke --> nodeB
+    cp -- "tenant config sync" --> nodeA
+    cp -- "tenant config sync" --> nodeB
+    nodeA -- "payment checks / capture" --> sidecar
+    nodeB -- "payment checks / capture" --> sidecar
+    sidecar --> facilitator
+    facilitator --> solana
+    nodeA -- "paid upstream request" --> publisher
+    nodeB -- "paid upstream request" --> publisher
+    sidecar -- "transaction recording" --> cp
+```
+
+These host ports are configurable if they collide with an existing local stack:
+
+```bash
+MARKETPLACE_CONTROL_PLANE_PORT=1337 \
+MARKETPLACE_UI_PORT=1338 \
+MARKETPLACE_DISCOVERY_PORT=1339 \
+MARKETPLACE_PROXY_PORT=8080 \
+MARKETPLACE_PROXY_PORT_B=8081 \
+MARKETPLACE_POSTGRES_PORT=5433 \
+docker compose up --build -d
+```
+
+### Local credentials
+
+- Email: `admin@local.faremeter.test`
+- Password: `localdev123`
+
+### Useful commands
+
+```bash
+make local-down
+make local-logs
+make local-seed
+make local-check
+make local-smoke
+```
+
+`make local-check` prints the current Solana devnet SOL/USDC balances for the
+facilitator and client wallets and fails early with the exact wallet addresses
+if local payment funding is still missing.
+
+`make local-smoke` exercises the seeded paid proxy flow through the real
+facilitator, against both local proxy nodes, and verifies that transactions are
+recorded back in the control-plane API. It now runs a funding preflight first,
+so unfunded wallets fail with a clear error instead of surfacing later as a
+proxy `502`.
+
 ## Generate Secrets
 
 Before deploying, generate all the secrets you will need.

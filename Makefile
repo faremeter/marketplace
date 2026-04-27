@@ -37,5 +37,34 @@ clean:
 
 include .env-checked
 
-.PHONY: all lint test
+.PHONY: all lint test local-up local-down local-logs local-seed local-check local-smoke local-reinstall local-restart local-ps local
+local-up:
+	docker compose up --build -d
+
+local-down:
+	docker compose down --volumes --remove-orphans
+
+local-logs:
+	docker compose logs -f
+
+local-seed:
+	docker compose run --rm seed-local-dev
+
+local-check:
+	docker compose run --rm --no-deps smoke bash -lc 'pnpm local:check'
+
+local-smoke:
+	docker compose run --rm smoke
+
+local-reinstall:
+	docker compose run --rm workspace-init
+
+local-restart:
+	docker compose up --build --force-recreate -d
+
+local-ps:
+	docker compose ps
+
+local:
+	@printf '%s\n' 'Use one of: make local-up, make local-down, make local-logs, make local-seed, make local-check, make local-smoke'
 FORCE:

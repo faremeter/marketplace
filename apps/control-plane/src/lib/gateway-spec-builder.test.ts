@@ -172,9 +172,11 @@ await t.test("builds spec with correct structure", async (t) => {
   t.same((spec.info as Record<string, unknown>).title, "my-api");
 
   const assets = spec["x-faremeter-assets"] as Record<string, unknown>;
-  t.ok(assets["solana-mainnet-beta-USDC"]);
-  const asset = assets["solana-mainnet-beta-USDC"] as Record<string, unknown>;
-  t.equal(asset.chain, "solana-mainnet-beta");
+  t.ok(assets["solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp-USDC"]);
+  const asset = assets[
+    "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp-USDC"
+  ] as Record<string, unknown>;
+  t.equal(asset.chain, "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp");
   t.equal(asset.token, "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v");
   t.equal(asset.decimals, 6);
   t.equal(asset.recipient, "SoLwALLeTaDdReSs123");

@@ -29,6 +29,20 @@ const BALANCE_AUDIT_QUEUE = "balance-audit";
 const TRANSACTION_RECORDING_QUEUE = "transaction-recording";
 const EMAIL_QUEUE = "email-send";
 
+async function syncTenantsUsingWallet(walletId: number): Promise<void> {
+  const tenantNodes = await db
+    .selectFrom("tenants")
+    .innerJoin("tenant_nodes", "tenant_nodes.tenant_id", "tenants.id")
+    .select(["tenant_nodes.node_id"])
+    .where("tenants.wallet_id", "=", walletId)
+    .execute();
+
+  const nodeIds = [...new Set(tenantNodes.map((tn) => tn.node_id))];
+  for (const nodeId of nodeIds) {
+    syncToNode(nodeId).catch((err: unknown) => logger.error(String(err)));
+  }
+}
+
 interface CertProvisioningJob {
   nodeIds: number[];
   tenantName: string;
@@ -570,6 +584,7 @@ export async function startQueue(config: {
             for (const tenant of tenants) {
               await checkAndUpdateTenantStatus(tenant.id);
             }
+            await syncTenantsUsingWallet(walletId);
 
             logger.info(`Wallet ${walletId} marked as funded`);
           } else {
@@ -975,6 +990,7 @@ export async function enqueueBalanceCheck(
     for (const tenant of tenants) {
       await checkAndUpdateTenantStatus(tenant.id);
     }
+    await syncTenantsUsingWallet(walletId);
 
     logger.info(`Wallet ${walletId} marked as funded (EVM-only)`);
     return;

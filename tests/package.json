@@ -4,6 +4,9 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "local:check": "pnpm tsx src/local-payment-preflight.ts",
+    "local:publisher": "pnpm tsx src/local-publisher.ts",
+    "local:smoke": "pnpm tsx src/local-compose-smoke.ts",
     "test": "tap 'src/**/*.test.ts'",
     "test:prototype": "pnpm tsx src/gateway-nginx-prototype.test.ts"
   },
@@ -20,10 +23,14 @@
     "@faremeter/info": "link:../../faremeter/packages/info",
     "@faremeter/logs": "link:../../faremeter/packages/logs",
     "@faremeter/middleware-openapi": "link:../../faremeter/packages/middleware-openapi",
+    "@faremeter/payment-solana": "link:../../faremeter/packages/payment-solana",
     "@faremeter/sidecar": "link:../../faremeter/apps/sidecar",
     "@faremeter/test-harness": "link:../../faremeter/packages/test-harness",
     "@faremeter/types": "link:../../faremeter/packages/types",
+    "@faremeter/wallet-solana": "link:../../faremeter/packages/wallet-solana",
     "@hono/node-server": "catalog:",
+    "@solana/spl-token": "^0.4.14",
+    "@solana/web3.js": "^1.98.4",
     "hono": "catalog:",
     "zx": "catalog:"
   },

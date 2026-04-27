@@ -45,10 +45,72 @@ await t.test(
       string,
       { recipient: string }
     >;
-    t.equal(assets["solana-mainnet-beta-USDC"]?.recipient, "SolAddress123");
+    t.equal(
+      assets["solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp-USDC"]?.recipient,
+      "SolAddress123",
+    );
     t.equal(
       result.warnings.filter((w) => w.includes("No wallet address")).length,
       0,
+    );
+  },
+);
+
+await t.test(
+  "resolves solana-devnet from mainnet-beta wallet_config fallback",
+  async (t) => {
+    const walletConfig = {
+      solana: { "mainnet-beta": { address: "SolAddress123" } },
+    };
+    const result = buildTenantGatewaySpecFromData({
+      tenantId: 9,
+      tenantName: "test",
+      walletConfig,
+      endpoints: [minimalEndpoint(9)],
+      tokenPrices: [minimalTokenPrice("solana-devnet")],
+    });
+    t.not(result, null);
+    if (!result) return;
+    const assets = result.spec["x-faremeter-assets"] as Record<
+      string,
+      { recipient: string }
+    >;
+    t.equal(
+      assets["solana:EtWTRABZaYq6iMfeYKouRu166VU2xqa1-USDC"]?.recipient,
+      "SolAddress123",
+    );
+    t.equal(
+      result.warnings.filter((w) => w.includes("No wallet address")).length,
+      0,
+    );
+  },
+);
+
+await t.test(
+  "prefers explicit solana-devnet wallet_config over fallback",
+  async (t) => {
+    const walletConfig = {
+      solana: {
+        "mainnet-beta": { address: "MainnetAddress123" },
+        devnet: { address: "DevnetAddress123" },
+      },
+    };
+    const result = buildTenantGatewaySpecFromData({
+      tenantId: 10,
+      tenantName: "test",
+      walletConfig,
+      endpoints: [minimalEndpoint(10)],
+      tokenPrices: [minimalTokenPrice("solana-devnet")],
+    });
+    t.not(result, null);
+    if (!result) return;
+    const assets = result.spec["x-faremeter-assets"] as Record<
+      string,
+      { recipient: string }
+    >;
+    t.equal(
+      assets["solana:EtWTRABZaYq6iMfeYKouRu166VU2xqa1-USDC"]?.recipient,
+      "DevnetAddress123",
     );
   },
 );

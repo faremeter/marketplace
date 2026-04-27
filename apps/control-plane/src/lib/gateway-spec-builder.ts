@@ -1,4 +1,5 @@
 import { type } from "arktype";
+import { normalizeNetworkId as normalizeSolanaNetworkId } from "@faremeter/info/solana";
 import { db } from "../db/instance.js";
 import { logger } from "../logger.js";
 import { endpointPathToOpenApiPath } from "./openapi-sync.js";
@@ -6,7 +7,7 @@ import { endpointPathToOpenApiPath } from "./openapi-sync.js";
 const WalletEntry = type({ "address?": "string" });
 
 const GatewayWalletConfig = type({
-  "solana?": { "mainnet-beta?": WalletEntry },
+  "solana?": { "mainnet-beta?": WalletEntry, "devnet?": WalletEntry },
   "evm?": {
     "base?": WalletEntry,
     "polygon?": WalletEntry,
@@ -20,6 +21,7 @@ type GatewayWalletConfig = typeof GatewayWalletConfig.infer;
 // Must stay in sync with CreateTokenPriceSchema's allowed network values.
 const NETWORK_PATH: Record<string, [keyof GatewayWalletConfig, string]> = {
   "solana-mainnet-beta": ["solana", "mainnet-beta"],
+  "solana-devnet": ["solana", "devnet"],
   base: ["evm", "base"],
   polygon: ["evm", "polygon"],
   "eip155:137": ["evm", "polygon"],
@@ -42,7 +44,20 @@ function resolveWalletAddress(
   const entry = (chainObj as Record<string, { address?: string } | undefined>)[
     sub
   ];
-  return entry?.address;
+  if (entry?.address) return entry.address;
+
+  // Solana public keys are cluster-agnostic. Older UI-created wallets only
+  // stored mainnet-beta, but local/devnet token prices still need to settle to
+  // that configured address.
+  if (chain === "solana" && sub === "devnet") {
+    return walletConfig.solana?.["mainnet-beta"]?.address;
+  }
+
+  return undefined;
+}
+
+function toX402NetworkId(network: string): string {
+  return normalizeSolanaNetworkId(network);
 }
 
 export type GatewaySpecResult = {
@@ -99,7 +114,8 @@ export function buildTenantGatewaySpecFromData(
 
   const assets: Record<string, unknown> = {};
   for (const tp of tenantLevelPrices) {
-    const alias = `${tp.network}-${tp.token_symbol}`;
+    const x402Network = toX402NetworkId(tp.network);
+    const alias = `${x402Network}-${tp.token_symbol}`;
     const recipient = resolveWalletAddress(walletConfig, tp.network);
 
     if (!recipient) {
@@ -110,7 +126,7 @@ export function buildTenantGatewaySpecFromData(
     }
 
     assets[alias] = {
-      chain: tp.network,
+      chain: x402Network,
       token: tp.mint_address,
       decimals: tp.decimals,
       recipient,
@@ -305,7 +321,8 @@ function buildPricingRules(
   if (endpointPrices.length > 0) {
     // Endpoint-specific token prices take precedence
     for (const tp of endpointPrices) {
-      const alias = `${tp.network}-${tp.token_symbol}`;
+      const x402Network = toX402NetworkId(tp.network);
+      const alias = `${x402Network}-${tp.token_symbol}`;
       if (!existingAssets[alias]) {
         // The caller merges additionalAssets into existingAssets after each
         // call, so assets validated by earlier endpoints are already present
@@ -319,7 +336,7 @@ function buildPricingRules(
           continue;
         }
         result.additionalAssets[alias] = {
-          chain: tp.network,
+          chain: x402Network,
           token: tp.mint_address,
           decimals: tp.decimals,
           recipient,
@@ -328,7 +345,7 @@ function buildPricingRules(
       result.rules.push({ match: "true", capture: tp.amount });
     }
   } else if (tenantPrices.length > 0) {
-    // Fall back to tenant-level token prices combined with endpoint.price
+    // Fall back to tenant-level token prices combined with endpoint.price.
     if (endpoint.price === null) {
       result.warnings.push(
         `Endpoint ${endpoint.id}: no price multiplier configured — defaulting to 1x against tenant-level prices`,
@@ -343,19 +360,21 @@ function buildPricingRules(
     }
 
     for (const tp of tenantPrices) {
-      const alias = `${tp.network}-${tp.token_symbol}`;
+      const alias = `${toX402NetworkId(tp.network)}-${tp.token_symbol}`;
       if (!existingAssets[alias]) {
         // Already warned when building assets
         continue;
       }
-      // Scale the tenant-level token price amount by the endpoint multiplier
       const scaledAmount = Math.round(Number(tp.amount) * endpointMultiplier);
       if (scaledAmount === 0 && endpointMultiplier !== 0) {
         result.warnings.push(
           `Endpoint ${endpoint.id}: scaled amount for asset "${alias}" rounds to 0 (amount=${tp.amount}, multiplier=${endpointMultiplier})`,
         );
       }
-      result.rules.push({ match: "true", capture: String(scaledAmount) });
+      result.rules.push({
+        match: "true",
+        capture: String(scaledAmount),
+      });
     }
   }
 

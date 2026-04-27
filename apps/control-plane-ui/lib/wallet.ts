@@ -8,6 +8,10 @@ export interface WalletConfig {
       address: string;
       key?: string;
     };
+    devnet?: {
+      address: string;
+      key?: string;
+    };
   };
   evm?: {
     base: { key?: string; address: string };
@@ -158,7 +162,11 @@ export function buildAddressOnlyConfig(addresses: {
 }): WalletConfig {
   const result: WalletConfig = {};
   if (addresses.solana) {
-    result.solana = { "mainnet-beta": { address: addresses.solana.trim() } };
+    const entry = { address: addresses.solana.trim() };
+    result.solana = {
+      "mainnet-beta": entry,
+      devnet: entry,
+    };
   }
   if (addresses.evm) {
     const entry = { address: addresses.evm.trim() };
