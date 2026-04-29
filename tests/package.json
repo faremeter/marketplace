@@ -4,6 +4,8 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "local:check": "pnpm tsx src/local-stack-check.ts",
+    "local:publisher": "pnpm tsx src/local-publisher.ts",
     "test": "tap 'src/**/*.test.ts'",
     "test:prototype": "pnpm tsx src/gateway-nginx-prototype.test.ts"
   },
