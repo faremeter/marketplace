@@ -13,6 +13,8 @@ const envType = type({
 const env = envType.assert(process.env);
 const FACILITATOR_URL = env.FACILITATOR_URL;
 const SIDECAR_URL = env.SIDECAR_URL ?? "http://127.0.0.1:4002";
+const PROXY_BASE_PROTOCOL = process.env.PROXY_BASE_PROTOCOL ?? "https";
+const PROXY_BASE_PORT = process.env.PROXY_BASE_PORT;
 
 function sanitizeSlugPart(raw: string): string {
   return raw
@@ -31,6 +33,11 @@ function deriveGatewaySlug(tenant: {
     return `${tenant.org_slug}--${name}`;
   }
   return name;
+}
+
+function buildExternalProxyBaseUrl(domain: string): string {
+  const port = PROXY_BASE_PORT ? `:${PROXY_BASE_PORT}` : "";
+  return `${PROXY_BASE_PROTOCOL}://${domain}${port}`;
 }
 
 export async function buildNodeConfig(nodeId: number) {
@@ -175,7 +182,7 @@ export async function buildNodeConfig(nodeId: number) {
       );
     }
 
-    const baseURL = `https://${domain}`;
+    const baseURL = buildExternalProxyBaseUrl(domain);
 
     config[domain] = {
       name: tenant.name,
@@ -234,9 +241,22 @@ export async function buildNodeConfig(nodeId: number) {
 
 const skipSync =
   process.env.NODE_ENV === "development" || process.env.NODE_ENV === "test";
+const forceDevSync = process.env.DEV_SYNC_ENABLED === "true";
+
+function buildNodeSyncUrl(internalIp: string): string {
+  if (internalIp.startsWith("http://") || internalIp.startsWith("https://")) {
+    return `${internalIp.replace(/\/$/, "")}/internal/config`;
+  }
+
+  if (internalIp.includes(":")) {
+    return `http://${internalIp}/internal/config`;
+  }
+
+  return `http://${internalIp}:80/internal/config`;
+}
 
 export async function syncToNode(nodeId: number) {
-  if (skipSync) {
+  if (skipSync && !forceDevSync) {
     logger.info(`[DEV] syncToNode: Would sync to node ${nodeId} (skipped)`);
     return;
   }
@@ -261,14 +281,11 @@ export async function syncToNode(nodeId: number) {
   if (!config) return;
 
   try {
-    const response = await fetch(
-      `http://${node.internal_ip}:80/internal/config`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(config),
-      },
-    );
+    const response = await fetch(buildNodeSyncUrl(node.internal_ip), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(config),
+    });
 
     if (!response.ok) {
       logger.error(

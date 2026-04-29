@@ -67,13 +67,17 @@ startQueue(dbConfig).catch((err: unknown) => {
   logger.error(`Failed to start queue: ${err}`);
 });
 
-exec("sudo systemctl start wg-peers", (err) => {
-  if (err) {
-    logger.warn(`Failed to sync WireGuard peers: ${err.message}`);
-  } else {
-    logger.info("WireGuard peers synced from database");
-  }
-});
+if (process.env.SKIP_WG_SYNC === "true") {
+  logger.info("Skipping WireGuard peer sync");
+} else {
+  exec("sudo systemctl start wg-peers", (err) => {
+    if (err) {
+      logger.warn(`Failed to sync WireGuard peers: ${err.message}`);
+    } else {
+      logger.info("WireGuard peers synced from database");
+    }
+  });
+}
 
 process.on("SIGTERM", () => {
   void (async () => {
