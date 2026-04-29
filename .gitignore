@@ -10,6 +10,7 @@ tsconfig.tsbuildinfo
 .tap
 keypairs
 .env
+.env.local
 .env-checked
 .eslintcache
 .build-finished

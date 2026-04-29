@@ -57,6 +57,104 @@ The `infra-toolbox` submodule (`github.com/faremeter/infra-toolbox`) provides sh
 
 If `make` fails with `./bin/check-env: No such file or directory`, the submodule was not initialized. Run `git submodule update --init` again and verify `ls infra-toolbox/` shows files.
 
+## Local Docker Compose
+
+For full local development, this repo now ships a real Docker Compose stack for:
+
+- PostgreSQL
+- control-plane API
+- discovery API
+- control-plane UI
+- two local OpenResty API nodes
+- local sidecar
+- real facilitator app from the sibling `../faremeter` repo
+- local publisher mock
+
+### Requirements
+
+- Docker Desktop or Docker Engine with Compose
+- The sibling `../faremeter` checkout present next to this repo
+- A Solana keypair or explicit Solana address for the facilitator/service wallet
+
+The local stack relies on the same linked `@faremeter/*` packages already
+present in this workspace, so Compose expects both directories to exist:
+
+```text
+../faremeter
+../marketplace
+```
+
+Before starting the stack, create or provide the local payment keypair:
+
+```bash
+mkdir -p keypairs
+solana-keygen new --outfile keypairs/facilitator.json
+```
+
+`LOCAL_SERVICE_SOLANA_ADDRESS` is optional. If unset, the seed script derives
+the receiver wallet address from `keypairs/facilitator.json`.
+
+### Start the stack
+
+```bash
+docker compose up --build -d
+```
+
+Or via make:
+
+```bash
+make local-up
+```
+
+Compose will:
+
+1. install workspace dependencies for both `faremeter` and `marketplace`
+2. start Postgres and the app services
+3. run the real facilitator with the currently supported Solana configuration
+4. seed a local admin user, two local nodes, a demo tenant, and a demo endpoint
+5. sync the generated tenant config into both local API nodes
+
+### Local URLs
+
+- Control plane API: `http://localhost:11337`
+- Control plane UI: `http://localhost:11338`
+- Discovery: `http://localhost:11339`
+- API node proxy A: `http://localhost:18080`
+- API node proxy B: `http://localhost:18081`
+- Demo proxy host A: `http://demo-api.local.proxy.localhost:18080/v1/chat/completions`
+- Demo proxy host B: `http://demo-api.local.proxy.localhost:18081/v1/chat/completions`
+
+These host ports are configurable if they collide with an existing local stack:
+
+```bash
+MARKETPLACE_CONTROL_PLANE_PORT=1337 \
+MARKETPLACE_UI_PORT=1338 \
+MARKETPLACE_DISCOVERY_PORT=1339 \
+MARKETPLACE_PROXY_PORT=8080 \
+MARKETPLACE_PROXY_PORT_B=8081 \
+MARKETPLACE_POSTGRES_PORT=5433 \
+docker compose up --build -d
+```
+
+### Local credentials
+
+- Email: `admin@local.faremeter.test`
+- Password: `localdev123`
+
+### Useful commands
+
+```bash
+make local-down
+make local-logs
+make local-seed
+make local-check
+```
+
+`make local-check` verifies the seeded paid proxy route returns `402` through
+both local proxy nodes, creates a free endpoint through the control plane,
+routes that endpoint through both nodes, and verifies control-plane transaction
+and analytics records.
+
 ## Generate Secrets
 
 Before deploying, generate all the secrets you will need.

@@ -1,4 +1,4 @@
-import { readFileSync } from "fs";
+import { readFileSync, watchFile } from "fs";
 import { serve } from "@hono/node-server";
 import { createMultiSiteApp } from "@faremeter/sidecar/app";
 import type { CreateAppOpts, MultiSiteConfig } from "@faremeter/sidecar/app";
@@ -10,9 +10,13 @@ import type {
 } from "@faremeter/middleware-openapi";
 import type { HandlerCapabilities } from "@faremeter/types/pricing";
 
-const CONFIG_PATH = "/etc/faremeter-sidecar/config.json";
-const CONTROL_PLANE_ADDRS_PATH = "/etc/nginx/control-plane-addrs.conf";
-const PORT = 4002;
+const CONFIG_PATH =
+  process.env.SIDECAR_CONFIG_PATH ?? "/etc/faremeter-sidecar/config.json";
+const CONTROL_PLANE_ADDRS_PATH =
+  process.env.CONTROL_PLANE_ADDRS_PATH ?? "/etc/nginx/control-plane-addrs.conf";
+const CONTROL_PLANE_ADDRS = process.env.CONTROL_PLANE_ADDRS;
+const WATCH_CONFIG = process.env.SIDECAR_WATCH_CONFIG === "true";
+const PORT = parseInt(process.env.PORT ?? "4002", 10);
 
 type SiteConfig = {
   spec: Record<string, unknown>;
@@ -33,6 +37,12 @@ function log(level: "info" | "warn" | "error", message: string): void {
 }
 
 function readControlPlaneAddrs(): string[] {
+  if (CONTROL_PLANE_ADDRS) {
+    return CONTROL_PLANE_ADDRS.split(",")
+      .map((line) => line.trim())
+      .filter((line) => line.length > 0 && !line.startsWith("#"));
+  }
+
   const raw = readFileSync(CONTROL_PLANE_ADDRS_PATH, "utf-8");
   return raw
     .split("\n")
@@ -214,8 +224,8 @@ const initialSites = buildSites(initialConfig);
 
 let current = createMultiSiteApp(initialSites);
 
-process.on("SIGHUP", () => {
-  log("info", "Received SIGHUP, reloading config...");
+function reloadConfig(reason: string): void {
+  log("info", `Reloading config (${reason})...`);
   try {
     const newConfig = loadConfig();
     const newSites = buildSites(newConfig);
@@ -224,7 +234,15 @@ process.on("SIGHUP", () => {
   } catch (err) {
     log("error", `Failed to reload config, keeping previous: ${String(err)}`);
   }
-});
+}
+
+process.on("SIGHUP", () => reloadConfig("SIGHUP"));
+
+if (WATCH_CONFIG) {
+  watchFile(CONFIG_PATH, { interval: 1000 }, () => {
+    reloadConfig("config file change");
+  });
+}
 
 log("info", `Sidecar starting on port ${PORT}`);
 
