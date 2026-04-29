@@ -96,8 +96,15 @@ keypairs/facilitator.json
 ```
 
 The local check does not submit paid Solana transactions. It verifies that paid
-routes return `402`, then exercises free proxy routing through both local API
-nodes.
+routes return `402` with Solana devnet USDC requirements, then exercises free
+proxy routing through both local API nodes.
+
+The stack defaults to Solana devnet:
+
+```text
+SOLANA_NETWORK=devnet
+SOLANA_RPC_URL=https://api.devnet.solana.com
+```
 
 ## Start The Stack
 
@@ -115,7 +122,8 @@ docker compose up --build -d
 
 The first run installs dependencies in both sibling workspaces, builds the
 `faremeter` workspace, migrates the control-plane database, and starts the
-services.
+services. The facilitator, control-plane, seed script, and local check all use
+Solana devnet by default.
 
 ## Seed Local Data
 
@@ -164,7 +172,7 @@ The local check:
 - logs in as the local admin
 - finds the seeded demo tenant
 - creates a new free endpoint through the control plane
-- verifies unpaid requests return `402`
+- verifies unpaid requests return `402` with devnet USDC payment requirements
 - routes the free endpoint through both API nodes
 - verifies control-plane transaction and analytics records
 

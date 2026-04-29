@@ -876,7 +876,7 @@ adminRoutes.post(
         const config = wallet.wallet_config as WalletConfig;
         const accessToken = Math.random().toString(36).substring(2, 7);
         const addresses = {
-          solana: config.solana?.["mainnet-beta"]?.address,
+          solana: getSolanaAddress(config) ?? undefined,
           base: config.evm?.base?.address,
           polygon: config.evm?.polygon?.address,
           monad: config.evm?.monad?.address,
@@ -1150,7 +1150,7 @@ adminRoutes.put(
 
     if (newWalletConfig) {
       const addresses = {
-        solana: newWalletConfig.solana?.["mainnet-beta"]?.address,
+        solana: getSolanaAddress(newWalletConfig) ?? undefined,
         base: newWalletConfig.evm?.base?.address,
         polygon: newWalletConfig.evm?.polygon?.address,
         monad: newWalletConfig.evm?.monad?.address,
@@ -1296,7 +1296,7 @@ adminRoutes.post("/tenants/:id/activate", async (c) => {
   if (walletConfig) {
     const accessToken = Math.random().toString(36).substring(2, 7);
     const addresses = {
-      solana: walletConfig.solana?.["mainnet-beta"]?.address,
+      solana: getSolanaAddress(walletConfig) ?? undefined,
       base: walletConfig.evm?.base?.address,
       polygon: walletConfig.evm?.polygon?.address,
       monad: walletConfig.evm?.monad?.address,
@@ -2053,12 +2053,24 @@ interface WalletConfig {
       address: string;
       key: string;
     };
+    devnet?: {
+      address: string;
+      key: string;
+    };
   };
   evm?: {
     base?: { address: string; key: string };
     polygon?: { address: string; key: string };
     monad?: { address: string; key: string };
   };
+}
+
+function getSolanaAddress(walletConfig: WalletConfig | null): string | null {
+  return (
+    walletConfig?.solana?.devnet?.address ??
+    walletConfig?.solana?.["mainnet-beta"]?.address ??
+    null
+  );
 }
 
 function extractAddresses(walletConfig: WalletConfig | null): {
@@ -2069,7 +2081,7 @@ function extractAddresses(walletConfig: WalletConfig | null): {
     return { solana: null, evm: null };
   }
   return {
-    solana: walletConfig.solana?.["mainnet-beta"]?.address ?? null,
+    solana: getSolanaAddress(walletConfig),
     evm: walletConfig.evm?.base?.address ?? null,
   };
 }

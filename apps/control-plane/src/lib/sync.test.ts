@@ -227,6 +227,11 @@ await t.test(
     t.ok(site.spec);
     t.equal(site.tenantName, "my-api");
     t.equal(site.orgSlug, "team");
+    t.same(site.capabilities, {
+      schemes: ["exact"],
+      networks: ["solana-mainnet-beta"],
+      assets: ["EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"],
+    });
 
     // Facilitator URL from env
     t.equal(result.sidecar.facilitatorURL, "http://facilitator.example.test");

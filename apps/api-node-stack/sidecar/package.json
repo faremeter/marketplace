@@ -11,6 +11,7 @@
     "@faremeter/sidecar": "catalog:",
     "@faremeter/middleware": "catalog:",
     "@faremeter/middleware-openapi": "catalog:",
+    "@faremeter/info": "catalog:",
     "@faremeter/types": "catalog:",
     "@hono/node-server": "catalog:"
   },

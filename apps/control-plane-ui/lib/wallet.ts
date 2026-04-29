@@ -7,7 +7,11 @@ import bs58 from "bs58";
 
 export interface WalletConfig {
   solana?: {
-    "mainnet-beta": {
+    "mainnet-beta"?: {
+      address: string;
+      key?: string;
+    };
+    devnet?: {
       address: string;
       key?: string;
     };
@@ -19,9 +23,29 @@ export interface WalletConfig {
   };
 }
 
+function getSolanaWallet(config: WalletConfig) {
+  return config.solana?.devnet ?? config.solana?.["mainnet-beta"] ?? null;
+}
+
 export interface EcosystemConfig {
   solana: { mode: "generate" | "import" | "skip"; key?: string };
   evm: { mode: "generate" | "import" | "skip"; key?: string };
+}
+
+const SOLANA_WALLET_CLUSTER =
+  process.env.NEXT_PUBLIC_SOLANA_NETWORK === "devnet"
+    ? "devnet"
+    : "mainnet-beta";
+
+function buildSolanaWalletConfig(wallet: {
+  address: string;
+  key?: string;
+}): WalletConfig["solana"] {
+  if (SOLANA_WALLET_CLUSTER === "devnet") {
+    return { devnet: wallet };
+  }
+
+  return { "mainnet-beta": wallet };
 }
 
 export async function generateSolanaWallet(): Promise<{
@@ -124,11 +148,11 @@ export async function buildWalletConfig(
   // Handle Solana
   if (config.solana.mode === "generate") {
     const wallet = await generateSolanaWallet();
-    result.solana = { "mainnet-beta": wallet };
+    result.solana = buildSolanaWalletConfig(wallet);
   } else if (config.solana.mode === "import" && config.solana.key) {
     const wallet = await deriveSolanaAddress(config.solana.key);
     if (wallet) {
-      result.solana = { "mainnet-beta": wallet };
+      result.solana = buildSolanaWalletConfig(wallet);
     }
   }
 
@@ -148,7 +172,7 @@ export async function buildWalletConfig(
 
 export function getWalletAddresses(config: WalletConfig) {
   return {
-    solana: config.solana?.["mainnet-beta"]?.address ?? null,
+    solana: getSolanaWallet(config)?.address ?? null,
     base: config.evm?.base?.address ?? null,
     polygon: config.evm?.polygon?.address ?? null,
     monad: config.evm?.monad?.address ?? null,
@@ -171,7 +195,9 @@ export function buildAddressOnlyConfig(addresses: {
 }): WalletConfig {
   const result: WalletConfig = {};
   if (addresses.solana) {
-    result.solana = { "mainnet-beta": { address: addresses.solana.trim() } };
+    result.solana = buildSolanaWalletConfig({
+      address: addresses.solana.trim(),
+    });
   }
   if (addresses.evm) {
     const entry = { address: addresses.evm.trim() };
@@ -181,7 +207,7 @@ export function buildAddressOnlyConfig(addresses: {
 }
 
 export function hasSolanaAddress(config: WalletConfig): boolean {
-  return !!config?.solana?.["mainnet-beta"]?.address;
+  return !!getSolanaWallet(config)?.address;
 }
 
 export function isWalletUsable(

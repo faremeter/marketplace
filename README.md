@@ -94,6 +94,16 @@ solana-keygen new --outfile keypairs/facilitator.json
 `LOCAL_SERVICE_SOLANA_ADDRESS` is optional. If unset, the seed script derives
 the receiver wallet address from `keypairs/facilitator.json`.
 
+The local stack defaults to Solana devnet:
+
+```text
+SOLANA_NETWORK=devnet
+SOLANA_RPC_URL=https://api.devnet.solana.com
+```
+
+The seed script uses the devnet USDC mint and `solana-devnet` x402 network ID
+when those defaults are active.
+
 ### Start the stack
 
 ```bash
@@ -110,7 +120,7 @@ Compose will:
 
 1. install workspace dependencies for both `faremeter` and `marketplace`
 2. start Postgres and the app services
-3. run the real facilitator with the currently supported Solana configuration
+3. run the real facilitator against Solana devnet by default
 4. seed a local admin user, two local nodes, a demo tenant, and a demo endpoint
 5. sync the generated tenant config into both local API nodes
 
@@ -150,10 +160,10 @@ make local-seed
 make local-check
 ```
 
-`make local-check` verifies the seeded paid proxy route returns `402` through
-both local proxy nodes, creates a free endpoint through the control plane,
-routes that endpoint through both nodes, and verifies control-plane transaction
-and analytics records.
+`make local-check` verifies the seeded paid proxy route returns `402` with
+devnet USDC payment requirements through both local proxy nodes, creates a free
+endpoint through the control plane, routes that endpoint through both nodes, and
+verifies control-plane transaction and analytics records.
 
 ## Generate Secrets
 

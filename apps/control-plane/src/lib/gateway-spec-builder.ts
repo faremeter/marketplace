@@ -6,7 +6,7 @@ import { endpointPathToOpenApiPath } from "./openapi-sync.js";
 const WalletEntry = type({ "address?": "string" });
 
 const GatewayWalletConfig = type({
-  "solana?": { "mainnet-beta?": WalletEntry },
+  "solana?": { "mainnet-beta?": WalletEntry, "devnet?": WalletEntry },
   "evm?": {
     "base?": WalletEntry,
     "polygon?": WalletEntry,
@@ -20,6 +20,7 @@ type GatewayWalletConfig = typeof GatewayWalletConfig.infer;
 // Must stay in sync with CreateTokenPriceSchema's allowed network values.
 const NETWORK_PATH: Record<string, [keyof GatewayWalletConfig, string]> = {
   "solana-mainnet-beta": ["solana", "mainnet-beta"],
+  "solana-devnet": ["solana", "devnet"],
   base: ["evm", "base"],
   polygon: ["evm", "polygon"],
   "eip155:137": ["evm", "polygon"],
