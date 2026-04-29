@@ -1,0 +1,385 @@
+services:
+  workspace-init:
+    build:
+      context: .
+      dockerfile: docker/node-dev.Dockerfile
+    image: marketplace-node-dev
+    working_dir: /workspace/marketplace
+    volumes:
+      - ..:/workspace
+      - marketplace-node-modules:/workspace/marketplace/node_modules
+      - faremeter-node-modules:/workspace/faremeter/node_modules
+      - pnpm-store:/pnpm/store
+    command: >
+      bash -lc '
+        set -e
+        export CI=true
+        if [ ! -d /workspace/faremeter ]; then
+          echo "Expected a sibling ../faremeter checkout mounted at /workspace/faremeter." >&2
+          exit 1
+        fi
+        cd /workspace/faremeter && pnpm install --frozen-lockfile --prefer-offline
+        touch /workspace/faremeter/.env-checked
+        if [ ! -f /workspace/faremeter/.build-finished ]; then
+          make -C /workspace/faremeter build
+        fi
+        cd /workspace/marketplace && pnpm install --frozen-lockfile --prefer-offline
+        pnpm rebuild bcrypt better-sqlite3 bigint-buffer bufferutil esbuild utf-8-validate
+        for dir in /workspace/marketplace/node_modules/.pnpm/bcrypt@*/node_modules/bcrypt; do
+          if [ -d "$$dir" ]; then
+            (cd "$$dir" && ./node_modules/.bin/node-pre-gyp install --fallback-to-build)
+          fi
+        done
+      '
+    restart: "no"
+
+  postgres:
+    image: postgres:16-bookworm
+    environment:
+      POSTGRES_DB: control_plane
+      POSTGRES_USER: control_plane_1
+      POSTGRES_PASSWORD: corbits
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U control_plane_1 -d control_plane"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    ports:
+      - "${MARKETPLACE_POSTGRES_PORT:-15433}:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+
+  control-plane-migrate:
+    image: marketplace-node-dev
+    depends_on:
+      workspace-init:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+    working_dir: /workspace/marketplace/apps/control-plane
+    volumes:
+      - ..:/workspace
+      - marketplace-node-modules:/workspace/marketplace/node_modules
+      - faremeter-node-modules:/workspace/faremeter/node_modules
+      - pnpm-store:/pnpm/store
+    environment: &control-plane-env
+      DATABASE_HOST: postgres
+      DATABASE_PORT: "5432"
+      DATABASE_NAME: control_plane
+      DATABASE_USER: control_plane_1
+      DATABASE_PASSWORD: corbits
+      DATABASE_SSL: "false"
+      HTTP_PORT: "1337"
+      WALLET_ENCRYPTION_KEY: 57b098bc63acd41cf27c4d91a0876f5f84f0ae66bc0861c3b7054c5edb2bacd9
+      NODE_ENV: development
+      JWT_SECRET: local-dev-jwt-secret-that-is-long-enough
+      PROXY_BASE_DOMAIN: proxy.localhost
+      PROXY_BASE_PROTOCOL: http
+      PROXY_BASE_PORT: "${MARKETPLACE_PROXY_PORT:-18080}"
+      FRONTEND_URL: http://localhost:${MARKETPLACE_UI_PORT:-11338}
+      FACILITATOR_URL: http://facilitator:4021
+      SIDECAR_URL: http://api-node-sidecar:4002
+      SKIP_WG_SYNC: "true"
+      DEV_SYNC_ENABLED: "true"
+      LOCAL_ADMIN_EMAIL: admin@local.faremeter.test
+      LOCAL_ADMIN_PASSWORD: localdev123
+      LOCAL_PUBLISHER_URL: http://publisher-mock:3001
+      LOCAL_CONTROL_PLANE_BASE_URL: http://control-plane:1337
+      LOCAL_FACILITATOR_SOLANA_KEYPAIR_PATH: /workspace/marketplace/keypairs/facilitator.json
+      LOCAL_SERVICE_SOLANA_ADDRESS: "${LOCAL_SERVICE_SOLANA_ADDRESS:-}"
+      SOLANA_NETWORK: mainnet-beta
+      SOLANA_RPC_URL: https://api.mainnet-beta.solana.com
+      LOCAL_DEMO_PRICE: "${LOCAL_DEMO_PRICE:-1000}"
+      LOCAL_SECONDARY_PROXY_PORT: "${MARKETPLACE_PROXY_PORT_B:-18081}"
+    command: bash -lc 'pnpm exec tsx src/db/migrate.ts'
+    restart: "no"
+
+  facilitator:
+    image: marketplace-node-dev
+    depends_on:
+      workspace-init:
+        condition: service_completed_successfully
+    working_dir: /workspace/faremeter/apps/facilitator
+    volumes:
+      - ..:/workspace
+      - marketplace-node-modules:/workspace/marketplace/node_modules
+      - faremeter-node-modules:/workspace/faremeter/node_modules
+      - pnpm-store:/pnpm/store
+    environment:
+      PORT: "4021"
+      SOLANA_NETWORK: mainnet-beta
+      ADMIN_KEYPAIR_PATH: /workspace/marketplace/keypairs/facilitator.json
+    command: bash -lc 'pnpm exec tsx src/index.ts'
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:4021/health > /dev/null"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  publisher-mock:
+    image: marketplace-node-dev
+    depends_on:
+      workspace-init:
+        condition: service_completed_successfully
+    working_dir: /workspace/marketplace/tests
+    volumes:
+      - ..:/workspace
+      - marketplace-node-modules:/workspace/marketplace/node_modules
+      - faremeter-node-modules:/workspace/faremeter/node_modules
+      - pnpm-store:/pnpm/store
+    environment:
+      PORT: "3001"
+    command: bash -lc 'pnpm local:publisher'
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:3001/health > /dev/null"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    ports:
+      - "${MARKETPLACE_PUBLISHER_PORT:-13001}:3001"
+
+  api-node-sidecar:
+    image: marketplace-node-dev
+    depends_on:
+      workspace-init:
+        condition: service_completed_successfully
+      control-plane:
+        condition: service_started
+    working_dir: /workspace/marketplace/apps/api-node-stack/sidecar
+    volumes:
+      - ..:/workspace
+      - marketplace-node-modules:/workspace/marketplace/node_modules
+      - faremeter-node-modules:/workspace/faremeter/node_modules
+      - pnpm-store:/pnpm/store
+      - api-node-state:/var/local/api-node
+    environment:
+      NODE_ENV: development
+      PORT: "4002"
+      CONTROL_PLANE_ADDRS: control-plane:1337
+      SIDECAR_CONFIG_PATH: /var/local/api-node/sidecar/config.json
+      SIDECAR_WATCH_CONFIG: "true"
+    command: >
+      bash -lc '
+        mkdir -p /var/local/api-node/sidecar
+        test -f /var/local/api-node/sidecar/config.json || printf "%s\n" "{\"sites\":{}}" > /var/local/api-node/sidecar/config.json
+        pnpm exec tsx watch --clear-screen=false src/main.ts
+      '
+
+  api-node-a:
+    build:
+      context: .
+      dockerfile: docker/api-node-openresty/Dockerfile
+    depends_on:
+      control-plane:
+        condition: service_healthy
+      api-node-sidecar:
+        condition: service_started
+    environment:
+      CONTROL_PLANE_ADDRS: control-plane:1337
+    volumes:
+      - api-node-state:/var/local/api-node
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1/health > /dev/null"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    ports:
+      - "127.0.0.1:${MARKETPLACE_PROXY_PORT:-18080}:80"
+
+  api-node-b:
+    build:
+      context: .
+      dockerfile: docker/api-node-openresty/Dockerfile
+    depends_on:
+      control-plane:
+        condition: service_healthy
+      api-node-sidecar:
+        condition: service_started
+    environment:
+      CONTROL_PLANE_ADDRS: control-plane:1337
+    volumes:
+      - api-node-state:/var/local/api-node
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1/health > /dev/null"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    ports:
+      - "127.0.0.1:${MARKETPLACE_PROXY_PORT_B:-18081}:80"
+
+  control-plane:
+    image: marketplace-node-dev
+    depends_on:
+      workspace-init:
+        condition: service_completed_successfully
+      control-plane-migrate:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+      facilitator:
+        condition: service_healthy
+    working_dir: /workspace/marketplace/apps/control-plane
+    volumes:
+      - ..:/workspace
+      - marketplace-node-modules:/workspace/marketplace/node_modules
+      - faremeter-node-modules:/workspace/faremeter/node_modules
+      - pnpm-store:/pnpm/store
+    environment: *control-plane-env
+    command: bash -lc 'pnpm exec tsx watch --clear-screen=false src/server.ts'
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:1337/health > /dev/null"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    ports:
+      - "${MARKETPLACE_CONTROL_PLANE_PORT:-11337}:1337"
+
+  discovery:
+    image: marketplace-node-dev
+    depends_on:
+      workspace-init:
+        condition: service_completed_successfully
+      control-plane-migrate:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+    working_dir: /workspace/marketplace/apps/discovery
+    volumes:
+      - ..:/workspace
+      - marketplace-node-modules:/workspace/marketplace/node_modules
+      - faremeter-node-modules:/workspace/faremeter/node_modules
+      - pnpm-store:/pnpm/store
+    environment:
+      DATABASE_HOST: postgres
+      DATABASE_PORT: "5432"
+      DATABASE_NAME: control_plane
+      DATABASE_USER: control_plane_1
+      DATABASE_PASSWORD: corbits
+      DATABASE_SSL: "false"
+      HTTP_PORT: "1339"
+      NODE_ENV: development
+      PROXY_BASE_DOMAIN: proxy.localhost
+    command: bash -lc 'pnpm exec tsx watch --clear-screen=false src/server.ts'
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:1339/health > /dev/null"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    ports:
+      - "${MARKETPLACE_DISCOVERY_PORT:-11339}:1339"
+
+  control-plane-ui:
+    image: marketplace-node-dev
+    depends_on:
+      workspace-init:
+        condition: service_completed_successfully
+      control-plane:
+        condition: service_healthy
+    working_dir: /workspace/marketplace/apps/control-plane-ui
+    volumes:
+      - ..:/workspace
+      - marketplace-node-modules:/workspace/marketplace/node_modules
+      - faremeter-node-modules:/workspace/faremeter/node_modules
+      - pnpm-store:/pnpm/store
+    environment:
+      NODE_ENV: production
+      PORT: "1338"
+      CONTROL_PLANE_API_URL: http://control-plane:1337
+      NEXT_PUBLIC_CONTROL_PLANE_API_URL: http://localhost:${MARKETPLACE_CONTROL_PLANE_PORT:-11337}
+      NEXT_PUBLIC_PROXY_BASE_DOMAIN: proxy.localhost
+      NEXT_PUBLIC_PROXY_BASE_PROTOCOL: http
+      NEXT_PUBLIC_PROXY_BASE_PORT: "${MARKETPLACE_PROXY_PORT:-18080}"
+      NEXT_PUBLIC_SITE_NAME: Faremeter Marketplace
+      NEXT_PUBLIC_DOCS_URL: https://docs.faremeter.xyz
+      NEXT_PUBLIC_SALES_EMAIL: sales@faremeter.xyz
+      NEXT_PUBLIC_SUPPORT_URL: ""
+      NEXT_TELEMETRY_DISABLED: "1"
+    command: >
+      bash -lc '
+        printf "%s\n" \
+          "NEXT_PUBLIC_CONTROL_PLANE_API_URL=$${NEXT_PUBLIC_CONTROL_PLANE_API_URL}" \
+          "NEXT_PUBLIC_PROXY_BASE_DOMAIN=$${NEXT_PUBLIC_PROXY_BASE_DOMAIN}" \
+          "NEXT_PUBLIC_PROXY_BASE_PROTOCOL=$${NEXT_PUBLIC_PROXY_BASE_PROTOCOL}" \
+          "NEXT_PUBLIC_PROXY_BASE_PORT=$${NEXT_PUBLIC_PROXY_BASE_PORT}" \
+          "NEXT_PUBLIC_SITE_NAME=$${NEXT_PUBLIC_SITE_NAME}" \
+          "NEXT_PUBLIC_DOCS_URL=$${NEXT_PUBLIC_DOCS_URL}" \
+          "NEXT_PUBLIC_SALES_EMAIL=$${NEXT_PUBLIC_SALES_EMAIL}" \
+          "NEXT_PUBLIC_SUPPORT_URL=$${NEXT_PUBLIC_SUPPORT_URL}" \
+          "PORT=$${PORT}" \
+          > .env.local
+        pnpm exec next build
+        pnpm exec next start -H 0.0.0.0 -p 1338
+      '
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "curl --max-time 25 -fsS http://127.0.0.1:1338 > /dev/null",
+        ]
+      start_period: 120s
+      interval: 10s
+      timeout: 30s
+      retries: 30
+    ports:
+      - "${MARKETPLACE_UI_PORT:-11338}:1338"
+
+  seed-local-dev:
+    image: marketplace-node-dev
+    depends_on:
+      workspace-init:
+        condition: service_completed_successfully
+      control-plane:
+        condition: service_healthy
+      discovery:
+        condition: service_healthy
+      facilitator:
+        condition: service_healthy
+      publisher-mock:
+        condition: service_healthy
+      api-node-a:
+        condition: service_healthy
+      api-node-b:
+        condition: service_healthy
+    working_dir: /workspace/marketplace/apps/control-plane
+    volumes:
+      - ..:/workspace
+      - marketplace-node-modules:/workspace/marketplace/node_modules
+      - faremeter-node-modules:/workspace/faremeter/node_modules
+      - pnpm-store:/pnpm/store
+    environment: *control-plane-env
+    command: bash -lc 'pnpm exec tsx src/scripts/seed-local-dev.ts'
+    restart: "no"
+
+  local-check:
+    image: marketplace-node-dev
+    profiles: ["tools"]
+    working_dir: /workspace/marketplace/tests
+    volumes:
+      - ..:/workspace
+      - marketplace-node-modules:/workspace/marketplace/node_modules
+      - faremeter-node-modules:/workspace/faremeter/node_modules
+      - pnpm-store:/pnpm/store
+    environment:
+      LOCAL_CONTROL_PLANE_BASE_URL: http://control-plane:1337
+      LOCAL_DISCOVERY_BASE_URL: http://discovery:1339
+      LOCAL_UI_URL: http://control-plane-ui:1338
+      LOCAL_PROXY_HOST: demo-api.local.proxy.localhost
+      LOCAL_PROXY_URL_A: http://api-node-a/v1/chat/completions
+      LOCAL_PROXY_HEALTH_URL_A: http://api-node-a/health
+      LOCAL_PROXY_URL_B: http://api-node-b/v1/chat/completions
+      LOCAL_PROXY_HEALTH_URL_B: http://api-node-b/health
+      LOCAL_ADMIN_EMAIL: admin@local.faremeter.test
+      LOCAL_ADMIN_PASSWORD: localdev123
+      LOCAL_FACILITATOR_SOLANA_KEYPAIR_PATH: /workspace/marketplace/keypairs/facilitator.json
+      LOCAL_SERVICE_SOLANA_ADDRESS: "${LOCAL_SERVICE_SOLANA_ADDRESS:-}"
+      SOLANA_NETWORK: mainnet-beta
+      SOLANA_RPC_URL: https://api.mainnet-beta.solana.com
+    command: bash -lc 'pnpm local:check'
+    restart: "no"
+
+volumes:
+  api-node-state:
+  faremeter-node-modules:
+  marketplace-node-modules:
+  pnpm-store:
+  postgres-data:
