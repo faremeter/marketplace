@@ -75,6 +75,7 @@ type EndpointRow = {
 export type GatewaySpecInput = {
   tenantId: number;
   tenantName: string;
+  defaultScheme?: string | null;
   walletConfig: unknown;
   endpoints: EndpointRow[];
   tokenPrices: TokenPriceRow[];
@@ -93,6 +94,7 @@ export function buildTenantGatewaySpecFromData(
 
   const walletConfig: GatewayWalletConfig = walletConfigParsed;
   const { endpoints, tokenPrices } = input;
+  const defaultScheme = input.defaultScheme ?? "exact";
   const warnings: string[] = [];
 
   // Build x-faremeter-assets from tenant-level token prices (endpoint_id IS NULL)
@@ -134,7 +136,11 @@ export function buildTenantGatewaySpecFromData(
   const operationKeyToEndpointId: Record<string, number> = {};
 
   for (const endpoint of endpoints) {
-    const scheme = endpoint.scheme;
+    const effectiveEndpoint = {
+      ...endpoint,
+      scheme: endpoint.scheme ?? defaultScheme,
+    };
+    const scheme = effectiveEndpoint.scheme;
 
     // Free endpoints are excluded — handled by the catch-all
     if (scheme === "free") continue;
@@ -161,7 +167,7 @@ export function buildTenantGatewaySpecFromData(
     // Determine pricing rules for this endpoint
     const epPrices = endpointPriceMap.get(endpoint.id) ?? [];
     const pricingResult = buildPricingRules(
-      endpoint,
+      effectiveEndpoint,
       epPrices,
       tenantLevelPrices,
       assets,
@@ -240,7 +246,12 @@ export async function buildTenantGatewaySpec(
   const tenantRow = await db
     .selectFrom("tenants")
     .innerJoin("wallets", "wallets.id", "tenants.wallet_id")
-    .select(["tenants.id", "tenants.name", "wallets.wallet_config"])
+    .select([
+      "tenants.id",
+      "tenants.name",
+      "tenants.default_scheme",
+      "wallets.wallet_config",
+    ])
     .where("tenants.id", "=", tenantId)
     .executeTakeFirst();
 
@@ -267,6 +278,7 @@ export async function buildTenantGatewaySpec(
   return buildTenantGatewaySpecFromData({
     tenantId,
     tenantName: tenantRow.name,
+    defaultScheme: tenantRow.default_scheme,
     walletConfig: tenantRow.wallet_config,
     endpoints,
     tokenPrices: tokenPrices.map((tp) => ({

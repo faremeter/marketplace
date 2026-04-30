@@ -140,7 +140,7 @@ function buildOnCapture(
       amount: toFiniteAmount(amountStr),
       tx_hash: extractTxHash(result.payment),
       network: asset.chain,
-      token_symbol: assetKey.split("-").at(-1) ?? assetKey,
+      token_symbol: assetKey.slice(asset.chain.length + 1),
       mint_address: asset.token,
       request_path: reqInfo.path,
       client_ip: clientIp.trim(),
@@ -223,7 +223,8 @@ function buildSites(config: SidecarConfig): MultiSiteConfig {
   }
 
   for (const [slug, site] of Object.entries(config.sites)) {
-    const faremeterSpec = normalizeRuntimeSpec(extractSpec(site.spec));
+    const rawFaremeterSpec = extractSpec(site.spec);
+    const faremeterSpec = normalizeRuntimeSpec(rawFaremeterSpec);
     const capabilities = normalizeRuntimeCapabilities(site.capabilities);
     const x402Handlers = [
       createHTTPFacilitatorHandler(config.facilitatorURL, {
@@ -235,7 +236,7 @@ function buildSites(config: SidecarConfig): MultiSiteConfig {
       spec: faremeterSpec,
       baseURL: site.baseURL,
       x402Handlers,
-      onCapture: buildOnCapture(site, faremeterSpec),
+      onCapture: buildOnCapture(site, rawFaremeterSpec),
     };
 
     sites[slug] = opts;

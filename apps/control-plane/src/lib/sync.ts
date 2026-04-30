@@ -61,6 +61,7 @@ export async function buildNodeConfig(nodeId: number) {
       "tenants.name",
       "tenants.backend_url",
       "tenants.wallet_id",
+      "tenants.default_scheme",
       "tenants.upstream_auth_header",
       "tenants.upstream_auth_value",
       "tenants.org_slug",
@@ -109,6 +110,7 @@ export async function buildNodeConfig(nodeId: number) {
     const specResult = buildTenantGatewaySpecFromData({
       tenantId: tenant.id,
       tenantName: tenant.name,
+      defaultScheme: tenant.default_scheme,
       walletConfig: tenant.wallet_config,
       endpoints: endpoints.map((e) => ({
         id: e.id,
