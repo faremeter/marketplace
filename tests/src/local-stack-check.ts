@@ -1,3 +1,5 @@
+import { request as httpRequest } from "node:http";
+
 const CONTROL_PLANE_BASE_URL =
   process.env.LOCAL_CONTROL_PLANE_BASE_URL ?? "http://127.0.0.1:11337";
 const DISCOVERY_BASE_URL =
@@ -61,6 +63,11 @@ type EarningsAnalytics = {
 type AdminTransactionsResponse = {
   transactions: TransactionRecord[];
   total: number;
+};
+
+type ProxyResponse = {
+  status: number;
+  body: string;
 };
 
 function controlPlaneHealthUrl(): string {
@@ -248,34 +255,67 @@ async function waitForTransactionCount(
   );
 }
 
-function buildProxyRequest(): RequestInit {
-  return {
-    method: "POST",
-    headers: {
-      Host: PROXY_HOST,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      model: "local-demo",
-      messages: [{ role: "user", content: "hello" }],
-    }),
-  };
+async function proxyRequest(url: string): Promise<ProxyResponse> {
+  const parsed = new URL(url);
+  if (parsed.protocol !== "http:") {
+    throw new Error(`Local proxy checks only support http URLs: ${url}`);
+  }
+
+  const body = JSON.stringify({
+    model: "local-demo",
+    messages: [{ role: "user", content: "hello" }],
+  });
+
+  return await new Promise<ProxyResponse>((resolve, reject) => {
+    const request = httpRequest({
+      host: parsed.hostname,
+      port: parsed.port ? Number(parsed.port) : 80,
+      path: `${parsed.pathname}${parsed.search}`,
+      method: "POST",
+      headers: {
+        Host: PROXY_HOST,
+        "Content-Type": "application/json",
+        "Content-Length": Buffer.byteLength(body),
+      },
+    });
+
+    let responseBody = "";
+
+    request.setTimeout(5_000, () => {
+      request.destroy(new Error(`Proxy request timed out for ${url}`));
+    });
+
+    request.on("response", (response) => {
+      response.setEncoding("utf8");
+      response.on("data", (chunk: string) => {
+        responseBody += chunk;
+      });
+      response.on("end", () => {
+        resolve({
+          status: response.statusCode ?? 0,
+          body: responseBody,
+        });
+      });
+    });
+    request.on("error", reject);
+    request.write(body);
+    request.end();
+  });
 }
 
 async function assertSuccessfulProxyCall(url: string): Promise<unknown> {
-  const response = await fetch(url, buildProxyRequest());
-  if (!response.ok) {
-    const text = await response.text();
+  const response = await proxyRequest(url);
+  if (response.status < 200 || response.status >= 300) {
     throw new Error(
-      `Expected proxy call to succeed for ${url}, got ${response.status}: ${text}`,
+      `Expected proxy call to succeed for ${url}, got ${response.status}: ${response.body}`,
     );
   }
 
-  return await response.json();
+  return JSON.parse(response.body) as unknown;
 }
 
 async function assertUnpaid(url: string): Promise<void> {
-  const response = await fetch(url, buildProxyRequest());
+  const response = await proxyRequest(url);
   if (response.status !== 402) {
     throw new Error(
       `Expected unpaid proxy call to return 402 for ${url}, got ${response.status}`,
