@@ -1,3 +1,9 @@
+x-marketplace-volume: &marketplace-volume .:/workspace/marketplace
+x-faremeter-volume: &faremeter-volume ${FAREMETER_REPO_PATH:-../faremeter}:/workspace/faremeter
+x-marketplace-node-modules-volume: &marketplace-node-modules-volume marketplace-node-modules:/workspace/marketplace/node_modules
+x-faremeter-node-modules-volume: &faremeter-node-modules-volume faremeter-node-modules:/workspace/faremeter/node_modules
+x-pnpm-store-volume: &pnpm-store-volume pnpm-store:/pnpm/store
+
 services:
   workspace-init:
     build:
@@ -6,16 +12,21 @@ services:
     image: marketplace-node-dev
     working_dir: /workspace/marketplace
     volumes:
-      - ..:/workspace
-      - marketplace-node-modules:/workspace/marketplace/node_modules
-      - faremeter-node-modules:/workspace/faremeter/node_modules
-      - pnpm-store:/pnpm/store
+      - *marketplace-volume
+      - *faremeter-volume
+      - *marketplace-node-modules-volume
+      - *faremeter-node-modules-volume
+      - *pnpm-store-volume
     command: >
       bash -lc '
         set -e
         export CI=true
-        if [ ! -d /workspace/faremeter ]; then
-          echo "Expected a sibling ../faremeter checkout mounted at /workspace/faremeter." >&2
+        if [ ! -f /workspace/marketplace/package.json ]; then
+          echo "Expected marketplace checkout mounted at /workspace/marketplace." >&2
+          exit 1
+        fi
+        if [ ! -d /workspace/faremeter/apps/facilitator ]; then
+          echo "Expected faremeter checkout at FAREMETER_REPO_PATH or ../faremeter mounted at /workspace/faremeter." >&2
           exit 1
         fi
         cd /workspace/faremeter && pnpm install --frozen-lockfile --prefer-offline
@@ -58,10 +69,11 @@ services:
         condition: service_healthy
     working_dir: /workspace/marketplace/apps/control-plane
     volumes:
-      - ..:/workspace
-      - marketplace-node-modules:/workspace/marketplace/node_modules
-      - faremeter-node-modules:/workspace/faremeter/node_modules
-      - pnpm-store:/pnpm/store
+      - *marketplace-volume
+      - *faremeter-volume
+      - *marketplace-node-modules-volume
+      - *faremeter-node-modules-volume
+      - *pnpm-store-volume
     environment: &control-plane-env
       DATABASE_HOST: postgres
       DATABASE_PORT: "5432"
@@ -101,10 +113,11 @@ services:
         condition: service_completed_successfully
     working_dir: /workspace/faremeter/apps/facilitator
     volumes:
-      - ..:/workspace
-      - marketplace-node-modules:/workspace/marketplace/node_modules
-      - faremeter-node-modules:/workspace/faremeter/node_modules
-      - pnpm-store:/pnpm/store
+      - *marketplace-volume
+      - *faremeter-volume
+      - *marketplace-node-modules-volume
+      - *faremeter-node-modules-volume
+      - *pnpm-store-volume
     environment:
       PORT: "4021"
       SOLANA_NETWORK: "${SOLANA_NETWORK:-devnet}"
@@ -123,10 +136,11 @@ services:
         condition: service_completed_successfully
     working_dir: /workspace/marketplace/tests
     volumes:
-      - ..:/workspace
-      - marketplace-node-modules:/workspace/marketplace/node_modules
-      - faremeter-node-modules:/workspace/faremeter/node_modules
-      - pnpm-store:/pnpm/store
+      - *marketplace-volume
+      - *faremeter-volume
+      - *marketplace-node-modules-volume
+      - *faremeter-node-modules-volume
+      - *pnpm-store-volume
     environment:
       PORT: "3001"
     command: bash -lc 'pnpm local:publisher'
@@ -147,10 +161,11 @@ services:
         condition: service_started
     working_dir: /workspace/marketplace/apps/api-node-stack/sidecar
     volumes:
-      - ..:/workspace
-      - marketplace-node-modules:/workspace/marketplace/node_modules
-      - faremeter-node-modules:/workspace/faremeter/node_modules
-      - pnpm-store:/pnpm/store
+      - *marketplace-volume
+      - *faremeter-volume
+      - *marketplace-node-modules-volume
+      - *faremeter-node-modules-volume
+      - *pnpm-store-volume
       - api-node-state:/var/local/api-node
     environment:
       NODE_ENV: development
@@ -176,6 +191,7 @@ services:
         condition: service_started
     environment:
       CONTROL_PLANE_ADDRS: control-plane:1337
+      CONFIG_ALLOW_CIDR: 0.0.0.0/0
     volumes:
       - api-node-state:/var/local/api-node
     healthcheck:
@@ -197,6 +213,7 @@ services:
         condition: service_started
     environment:
       CONTROL_PLANE_ADDRS: control-plane:1337
+      CONFIG_ALLOW_CIDR: 0.0.0.0/0
     volumes:
       - api-node-state:/var/local/api-node
     healthcheck:
@@ -220,10 +237,11 @@ services:
         condition: service_healthy
     working_dir: /workspace/marketplace/apps/control-plane
     volumes:
-      - ..:/workspace
-      - marketplace-node-modules:/workspace/marketplace/node_modules
-      - faremeter-node-modules:/workspace/faremeter/node_modules
-      - pnpm-store:/pnpm/store
+      - *marketplace-volume
+      - *faremeter-volume
+      - *marketplace-node-modules-volume
+      - *faremeter-node-modules-volume
+      - *pnpm-store-volume
     environment: *control-plane-env
     command: bash -lc 'pnpm exec tsx watch --clear-screen=false src/server.ts'
     healthcheck:
@@ -245,10 +263,11 @@ services:
         condition: service_healthy
     working_dir: /workspace/marketplace/apps/discovery
     volumes:
-      - ..:/workspace
-      - marketplace-node-modules:/workspace/marketplace/node_modules
-      - faremeter-node-modules:/workspace/faremeter/node_modules
-      - pnpm-store:/pnpm/store
+      - *marketplace-volume
+      - *faremeter-volume
+      - *marketplace-node-modules-volume
+      - *faremeter-node-modules-volume
+      - *pnpm-store-volume
     environment:
       DATABASE_HOST: postgres
       DATABASE_PORT: "5432"
@@ -277,10 +296,11 @@ services:
         condition: service_healthy
     working_dir: /workspace/marketplace/apps/control-plane-ui
     volumes:
-      - ..:/workspace
-      - marketplace-node-modules:/workspace/marketplace/node_modules
-      - faremeter-node-modules:/workspace/faremeter/node_modules
-      - pnpm-store:/pnpm/store
+      - *marketplace-volume
+      - *faremeter-volume
+      - *marketplace-node-modules-volume
+      - *faremeter-node-modules-volume
+      - *pnpm-store-volume
     environment:
       NODE_ENV: production
       PORT: "1338"
@@ -344,10 +364,11 @@ services:
         condition: service_healthy
     working_dir: /workspace/marketplace/apps/control-plane
     volumes:
-      - ..:/workspace
-      - marketplace-node-modules:/workspace/marketplace/node_modules
-      - faremeter-node-modules:/workspace/faremeter/node_modules
-      - pnpm-store:/pnpm/store
+      - *marketplace-volume
+      - *faremeter-volume
+      - *marketplace-node-modules-volume
+      - *faremeter-node-modules-volume
+      - *pnpm-store-volume
     environment: *control-plane-env
     command: bash -lc 'pnpm exec tsx src/scripts/seed-local-dev.ts'
     restart: "no"
@@ -355,12 +376,26 @@ services:
   local-check:
     image: marketplace-node-dev
     profiles: ["tools"]
+    depends_on:
+      control-plane:
+        condition: service_healthy
+      discovery:
+        condition: service_healthy
+      control-plane-ui:
+        condition: service_healthy
+      api-node-a:
+        condition: service_healthy
+      api-node-b:
+        condition: service_healthy
+      seed-local-dev:
+        condition: service_completed_successfully
     working_dir: /workspace/marketplace/tests
     volumes:
-      - ..:/workspace
-      - marketplace-node-modules:/workspace/marketplace/node_modules
-      - faremeter-node-modules:/workspace/faremeter/node_modules
-      - pnpm-store:/pnpm/store
+      - *marketplace-volume
+      - *faremeter-volume
+      - *marketplace-node-modules-volume
+      - *faremeter-node-modules-volume
+      - *pnpm-store-volume
     environment:
       LOCAL_CONTROL_PLANE_BASE_URL: http://control-plane:1337
       LOCAL_DISCOVERY_BASE_URL: http://discovery:1339

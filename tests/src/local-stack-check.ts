@@ -97,6 +97,11 @@ type PaymentRequirement = {
   maxAmountRequired?: unknown;
 };
 
+type ProxyResponse = {
+  status: number;
+  body: string;
+};
+
 function controlPlaneHealthUrl(): string {
   return `${CONTROL_PLANE_BASE_URL}/health`;
 }
@@ -282,13 +287,6 @@ async function waitForTransactionCount(
   );
 }
 
-type ProxyResponse = {
-  status: number;
-  ok: boolean;
-  text: () => Promise<string>;
-  json: () => Promise<unknown>;
-};
-
 function buildProxyBody(): string {
   return JSON.stringify({
     model: "local-demo",
@@ -319,12 +317,9 @@ async function proxyRequest(urlString: string): Promise<ProxyResponse> {
         });
         res.on("end", () => {
           const raw = Buffer.concat(chunks).toString("utf8");
-          const status = res.statusCode ?? 0;
           resolve({
-            status,
-            ok: status >= 200 && status < 300,
-            text: async () => raw,
-            json: async () => JSON.parse(raw) as unknown,
+            status: res.statusCode ?? 0,
+            body: raw,
           });
         });
       },
@@ -340,14 +335,13 @@ async function proxyRequest(urlString: string): Promise<ProxyResponse> {
 
 async function assertSuccessfulProxyCall(url: string): Promise<unknown> {
   const response = await proxyRequest(url);
-  if (!response.ok) {
-    const text = await response.text();
+  if (response.status < 200 || response.status >= 300) {
     throw new Error(
-      `Expected proxy call to succeed for ${url}, got ${response.status}: ${text}`,
+      `Expected proxy call to succeed for ${url}, got ${response.status}: ${response.body}`,
     );
   }
 
-  return await response.json();
+  return JSON.parse(response.body) as unknown;
 }
 
 function getAccepts(body: unknown): PaymentRequirement[] {
@@ -374,7 +368,7 @@ async function assertUnpaid(url: string): Promise<void> {
     );
   }
 
-  const body = await response.json();
+  const body = JSON.parse(response.body) as unknown;
   const accepts = getAccepts(body);
   const matching = accepts.find(
     (requirement) =>

@@ -612,6 +612,12 @@ async function useOnlyLocalSolanaUsdc(tenantId: number) {
 }
 
 async function main() {
+  if (process.env.NODE_ENV !== "development") {
+    throw new Error(
+      "seed-local-dev.ts refuses to run outside NODE_ENV=development",
+    );
+  }
+
   logger.info("Seeding local developer stack with production-like flow...");
 
   const serviceWalletAddress = getServiceWalletAddress();
