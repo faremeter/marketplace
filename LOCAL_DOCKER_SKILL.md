@@ -117,15 +117,35 @@ keypairs/facilitator.json
 ```
 
 The local check does not submit paid Solana transactions. It verifies that paid
-routes return `402` with Solana devnet USDC requirements, then exercises free
-proxy routing through both local API nodes.
+routes return `402` with USDC requirements for the selected Solana network,
+then exercises free proxy routing through both local API nodes.
 
-The stack defaults to Solana devnet:
+## Solana Network Selection
 
-```text
+The stack supports both Solana devnet and mainnet-beta. Devnet is the default
+when `SOLANA_NETWORK` is unset:
+
+```bash
 SOLANA_NETWORK=devnet
 SOLANA_RPC_URL=https://api.devnet.solana.com
 ```
+
+Run the stack against mainnet-beta by setting both the network and RPC URL:
+
+```bash
+SOLANA_NETWORK=mainnet-beta \
+SOLANA_RPC_URL=https://api.mainnet-beta.solana.com \
+make local-up
+```
+
+Use `mainnet-beta`, not `mainnet`, because that is the cluster name accepted by
+the Faremeter Solana packages. The local seed script and local check use the
+selected network to look up the correct USDC mint and x402 network IDs.
+
+Mainnet-beta mode is useful for local smoke testing against mainnet token
+metadata and payment requirements. Do not treat this Compose stack as a
+production settlement environment without reviewing the Faremeter facilitator
+timing configuration.
 
 ## Run The Stack
 
@@ -144,7 +164,7 @@ docker compose up --build -d
 The first run installs dependencies in the mounted Marketplace and Faremeter
 workspaces, builds the Faremeter workspace, migrates the control-plane
 database, and starts the services. The facilitator, control-plane, seed script,
-and local check all use Solana devnet by default.
+and local check all use the selected Solana network.
 
 `make local-up` also seeds local data through the `seed-local-dev` service.
 
@@ -163,7 +183,8 @@ The local check:
 - logs in as the local admin
 - finds the seeded demo tenant
 - creates a new free endpoint through the control plane
-- verifies unpaid requests return `402` with devnet USDC payment requirements
+- verifies unpaid requests return `402` with USDC payment requirements for the
+  selected Solana network
 - routes the free endpoint through both API nodes
 - verifies control-plane transaction and analytics records
 
