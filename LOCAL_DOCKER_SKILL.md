@@ -28,25 +28,20 @@ solana-keygen new --outfile keypairs/facilitator.json
 `LOCAL_SERVICE_SOLANA_ADDRESS` is optional. If unset, the seed script derives
 the receiver wallet address from `keypairs/facilitator.json`.
 
-## Required Folder Layout
+## Required Repository Paths
 
 The Compose file mounts this checkout directly as `/workspace/marketplace`, so
 the local marketplace directory can have any name. It also mounts the Faremeter
 checkout as `/workspace/faremeter`.
 
-By default, Compose looks for Faremeter at `../faremeter`:
+By default, Compose looks for Faremeter one directory above this checkout:
 
 ```text
-fare/
-  faremeter/
-    apps/
-      facilitator/
-      sidecar/
-  faremeter-marketplace/
-    compose.yml
+${PWD}/../faremeter
 ```
 
-If Faremeter lives somewhere else, pass an explicit path:
+If a user's machine keeps the Faremeter repo somewhere else, pass an explicit
+host path:
 
 ```bash
 FAREMETER_REPO_PATH=/absolute/path/to/faremeter make local-up
@@ -74,10 +69,11 @@ https://github.com/faremeter/faremeter.git
 
 ## What Runs From Where
 
-The facilitator service runs the real app from the sibling repo:
+The facilitator service runs the real app from the Faremeter checkout selected
+by `FAREMETER_REPO_PATH` or `../faremeter`:
 
 ```text
-../faremeter/apps/facilitator
+${FAREMETER_REPO_PATH:-../faremeter}/apps/facilitator
 ```
 
 Inside Compose, it runs at:
@@ -96,7 +92,7 @@ That wrapper imports the reusable sidecar implementation from the sibling
 `faremeter` repo through `@faremeter/sidecar`.
 
 ```text
-../faremeter/apps/sidecar
+${FAREMETER_REPO_PATH:-../faremeter}/apps/sidecar
 ```
 
 Inside Compose, OpenResty talks to the sidecar at:
@@ -133,7 +129,7 @@ SOLANA_RPC_URL=https://api.devnet.solana.com
 
 ## Run The Stack
 
-From `marketplace`:
+From this checkout:
 
 ```bash
 make local-up
@@ -145,10 +141,10 @@ Equivalent raw Compose command:
 docker compose up --build -d
 ```
 
-The first run installs dependencies in both sibling workspaces, builds the
-`faremeter` workspace, migrates the control-plane database, and starts the
-services. The facilitator, control-plane, seed script, and local check all use
-Solana devnet by default.
+The first run installs dependencies in the mounted Marketplace and Faremeter
+workspaces, builds the Faremeter workspace, migrates the control-plane
+database, and starts the services. The facilitator, control-plane, seed script,
+and local check all use Solana devnet by default.
 
 `make local-up` also seeds local data through the `seed-local-dev` service.
 
