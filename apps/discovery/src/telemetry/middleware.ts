@@ -14,11 +14,15 @@ export async function telemetryMiddleware(
   const ua = c.req.header("user-agent");
   if (isBot(ua)) return;
 
-  // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- empty string from trimmed header must fall through to x-real-ip
-  const ip =
-    c.req.header("x-forwarded-for")?.split(",")[0]?.trim() ||
-    c.req.header("x-real-ip") ||
-    "unknown";
+  const forwardedIp = c.req.header("x-forwarded-for")?.split(",")[0]?.trim();
+  const realIp = c.req.header("x-real-ip");
+  let ip = "unknown";
+  if (realIp) {
+    ip = realIp;
+  }
+  if (forwardedIp) {
+    ip = forwardedIp;
+  }
 
   const path = c.req.path;
 

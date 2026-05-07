@@ -689,7 +689,7 @@ organizationsRoutes.put(
 
       if (newWalletConfig) {
         const addresses = {
-          solana: newWalletConfig.solana?.["mainnet-beta"]?.address,
+          solana: extractAddresses(newWalletConfig).solana ?? undefined,
           base: newWalletConfig.evm?.base?.address,
           polygon: newWalletConfig.evm?.polygon?.address,
           monad: newWalletConfig.evm?.monad?.address,
@@ -866,7 +866,7 @@ organizationsRoutes.post(
     if (walletConfig) {
       const accessToken = Math.random().toString(36).substring(2, 7);
       const addresses = {
-        solana: walletConfig.solana?.["mainnet-beta"]?.address,
+        solana: extractAddresses(walletConfig).solana ?? undefined,
         base: walletConfig.evm?.base?.address,
         polygon: walletConfig.evm?.polygon?.address,
         monad: walletConfig.evm?.monad?.address,
@@ -1306,7 +1306,7 @@ organizationsRoutes.post(
       if (walletConfig) {
         const accessToken = Math.random().toString(36).substring(2, 7);
         const addresses = {
-          solana: walletConfig.solana?.["mainnet-beta"]?.address,
+          solana: extractAddresses(walletConfig).solana ?? undefined,
           base: walletConfig.evm?.base?.address,
           polygon: walletConfig.evm?.polygon?.address,
           monad: walletConfig.evm?.monad?.address,

@@ -28,25 +28,20 @@ solana-keygen new --outfile keypairs/facilitator.json
 `LOCAL_SERVICE_SOLANA_ADDRESS` is optional. If unset, the seed script derives
 the receiver wallet address from `keypairs/facilitator.json`.
 
-## Required Folder Layout
+## Required Repository Paths
 
 The Compose file mounts this checkout directly as `/workspace/marketplace`, so
 the local marketplace directory can have any name. It also mounts the Faremeter
 checkout as `/workspace/faremeter`.
 
-By default, Compose looks for Faremeter at `../faremeter`:
+By default, Compose looks for Faremeter one directory above this checkout:
 
 ```text
-fare/
-  faremeter/
-    apps/
-      facilitator/
-      sidecar/
-  faremeter-marketplace/
-    compose.yml
+${PWD}/../faremeter
 ```
 
-If Faremeter lives somewhere else, pass an explicit path:
+If a user's machine keeps the Faremeter repo somewhere else, pass an explicit
+host path:
 
 ```bash
 FAREMETER_REPO_PATH=/absolute/path/to/faremeter make local-up
@@ -72,9 +67,89 @@ The expected upstream for the sibling repo is:
 https://github.com/faremeter/faremeter.git
 ```
 
+## What Runs From Where
+
+The facilitator service runs the real app from the Faremeter checkout selected
+by `FAREMETER_REPO_PATH` or `../faremeter`:
+
+```text
+${FAREMETER_REPO_PATH:-../faremeter}/apps/facilitator
+```
+
+Inside Compose, it runs at:
+
+```text
+http://facilitator:4021
+```
+
+The sidecar service entrypoint is the Marketplace wrapper:
+
+```text
+apps/api-node-stack/sidecar/src/main.ts
+```
+
+That wrapper imports the reusable sidecar implementation from the sibling
+`faremeter` repo through `@faremeter/sidecar`.
+
+```text
+${FAREMETER_REPO_PATH:-../faremeter}/apps/sidecar
+```
+
+Inside Compose, OpenResty talks to the sidecar at:
+
+```text
+http://api-node-sidecar:4002
+```
+
+## Required Local Keypair
+
+Create a local Solana keypair before starting the stack:
+
+```bash
+mkdir -p keypairs
+solana-keygen new --outfile keypairs/facilitator.json
+```
+
+The facilitator keypair is used by the facilitator service:
+
+```text
+keypairs/facilitator.json
+```
+
+The local check does not submit paid Solana transactions. It verifies that paid
+routes return `402` with USDC requirements for the selected Solana network,
+then exercises free proxy routing through both local API nodes.
+
+## Solana Network Selection
+
+The stack supports both Solana devnet and mainnet-beta. Devnet is the default
+when `SOLANA_NETWORK` is unset:
+
+```bash
+SOLANA_NETWORK=devnet
+SOLANA_RPC_URL=https://api.devnet.solana.com
+```
+
+Run the stack against mainnet-beta by setting both the network and RPC URL:
+
+```bash
+SOLANA_NETWORK=mainnet-beta \
+SOLANA_RPC_URL=https://api.mainnet-beta.solana.com \
+make local-up
+```
+
+Use `mainnet-beta`, not `mainnet`, because that is the cluster name accepted by
+the Faremeter Solana packages. The local seed script and local check use the
+selected network to look up the correct USDC mint and x402 network IDs.
+
+Mainnet-beta mode is useful for local smoke testing against mainnet token
+metadata and payment requirements. Do not treat this Compose stack as a
+production settlement environment without reviewing the Faremeter facilitator
+timing configuration.
+
 ## Run The Stack
 
-From `marketplace`:
+From this checkout:
 
 ```bash
 make local-up
@@ -86,8 +161,12 @@ Equivalent raw Compose command:
 docker compose up --build -d
 ```
 
-`make local-up` starts the Compose graph and seeds local data through the
-`seed-local-dev` service.
+The first run installs dependencies in the mounted Marketplace and Faremeter
+workspaces, builds the Faremeter workspace, migrates the control-plane
+database, and starts the services. The facilitator, control-plane, seed script,
+and local check all use the selected Solana network.
+
+`make local-up` also seeds local data through the `seed-local-dev` service.
 
 Use `make local-seed` only when reseeding an already-running stack during
 debugging.
@@ -104,9 +183,104 @@ The local check:
 - logs in as the local admin
 - finds the seeded demo tenant
 - creates a new free endpoint through the control plane
-- verifies unpaid requests return `402`
+- verifies unpaid requests return `402` with USDC payment requirements for the
+  selected Solana network
 - routes the free endpoint through both API nodes
 - verifies control-plane transaction and analytics records
+
+Local admin credentials:
+
+```text
+admin@local.faremeter.test
+localdev123
+```
+
+## Useful URLs
+
+```text
+Control plane API: http://localhost:11337
+Control plane UI:  http://localhost:11338
+Discovery API:     http://localhost:11339
+API node A:        http://localhost:18080
+API node B:        http://localhost:18081
+```
+
+Seeded demo proxy URLs:
+
+```text
+http://demo-api.local.proxy.localhost:18080/v1/chat/completions
+http://demo-api.local.proxy.localhost:18081/v1/chat/completions
+```
+
+## Logs And Lifecycle
+
+Follow logs:
+
+```bash
+make local-logs
+```
+
+Show service status:
+
+```bash
+make local-ps
+```
+
+Rebuild and recreate services:
+
+```bash
+make local-restart
+```
+
+Stop and remove local volumes:
+
+```bash
+make local-down
+```
+
+Reinstall workspace dependencies in the Docker volumes:
+
+```bash
+make local-reinstall
+```
+
+## Port Overrides
+
+If default ports collide with another local stack:
+
+```bash
+MARKETPLACE_CONTROL_PLANE_PORT=1337 \
+MARKETPLACE_UI_PORT=1338 \
+MARKETPLACE_DISCOVERY_PORT=1339 \
+MARKETPLACE_PROXY_PORT=8080 \
+MARKETPLACE_PROXY_PORT_B=8081 \
+MARKETPLACE_POSTGRES_PORT=5433 \
+docker compose up --build -d
+```
+
+Proxy port overrides affect browser-facing URLs and the advertised proxy
+resource URLs. The local check runs inside Compose and reaches API nodes by
+service name while sending the seeded proxy host in the `Host` header.
+
+## Troubleshooting
+
+If `workspace-init` fails with a missing Faremeter checkout error, clone or
+place the `faremeter` repo at `../faremeter`, or set `FAREMETER_REPO_PATH` to
+the checkout path.
+
+If the UI build does not pick up changed public env vars, recreate the UI
+service:
+
+```bash
+docker compose up --build --force-recreate control-plane-ui
+```
+
+If API nodes do not pick up tenant config, reseed and inspect node logs:
+
+```bash
+make local-seed
+docker compose logs api-node-a api-node-b api-node-sidecar
+```
 
 ## Agent Checklist
 

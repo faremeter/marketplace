@@ -512,24 +512,50 @@ await t.test("GET /api/wallets/:id/balances", async (t) => {
   await t.test(
     "updates funding_status to funded when balance meets minimum",
     async (t) => {
-      const mockBalances = {
-        solana: { native: "1.0", usdc: "10.0" },
-        base: { native: "0", usdc: "0" },
-        polygon: { native: "0", usdc: "0" },
-        monad: { native: "0", usdc: "0" },
-      };
+      const originalFetch = globalThis.fetch;
+      globalThis.fetch = async (_input, init) => {
+        const parsed: unknown =
+          typeof init?.body === "string" ? JSON.parse(init.body) : null;
+        const body =
+          typeof parsed === "object" && parsed !== null
+            ? (parsed as Record<string, unknown>)
+            : {};
+        const id =
+          typeof body.id === "number" || typeof body.id === "string"
+            ? body.id
+            : 1;
+        const method = typeof body.method === "string" ? body.method : "";
 
-      const { walletsRoutes: mockedRoutes } = await t.mockImport<
-        typeof import("./wallets.js")
-      >("./wallets.js", {
-        "../lib/balances.js": {
-          ...(await import("../lib/balances.js")),
-          fetchWalletBalances: async () => mockBalances,
-        },
+        const result: unknown =
+          method === "getBalance"
+            ? { value: 1_000_000_000 }
+            : {
+                value: [
+                  {
+                    account: {
+                      data: {
+                        parsed: {
+                          info: {
+                            mint: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+                            tokenAmount: { uiAmount: 10 },
+                          },
+                        },
+                      },
+                    },
+                  },
+                ],
+              };
+
+        return new Response(JSON.stringify({ jsonrpc: "2.0", id, result }), {
+          headers: { "Content-Type": "application/json" },
+        });
+      };
+      t.teardown(() => {
+        globalThis.fetch = originalFetch;
       });
 
       const testApp = new Hono();
-      testApp.route("/api/wallets", mockedRoutes);
+      testApp.route("/api/wallets", walletsRoutes);
 
       const user = await createUser("member@example.com");
       const org = await createOrg("Team", "team");

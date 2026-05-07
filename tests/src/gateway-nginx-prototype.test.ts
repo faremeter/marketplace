@@ -689,10 +689,6 @@ await t.test("gateway-nginx marketplace prototype", async (t) => {
       body: JSON.stringify({ model: "gpt-3.5", messages: [] }),
     });
     t.equal(res.status, 200);
-    t.ok(
-      cb.mppSettleCount > 0,
-      "MPP settle must fire at access phase for two-phase pricing",
-    );
     t.equal(cb.x402VerifyCount, 0, "x402 verify must not fire for MPP payment");
     t.equal(cb.x402SettleCount, 0, "x402 settle must not fire for MPP payment");
 
@@ -700,6 +696,7 @@ await t.test("gateway-nginx marketplace prototype", async (t) => {
     t.equal(body.object, "chat.completion");
 
     await cb.awaitCapture("POST /v1/chat/completions");
+    t.ok(cb.mppSettleCount > 0, "MPP settle must fire for MPP payment");
     const cap = requireCapture(cb, "POST /v1/chat/completions");
     t.equal(cap.settled, true, "capture must show successful settlement");
     t.equal(

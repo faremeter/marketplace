@@ -99,8 +99,8 @@ services:
       LOCAL_CONTROL_PLANE_BASE_URL: http://control-plane:1337
       LOCAL_FACILITATOR_SOLANA_KEYPAIR_PATH: /workspace/marketplace/keypairs/facilitator.json
       LOCAL_SERVICE_SOLANA_ADDRESS: "${LOCAL_SERVICE_SOLANA_ADDRESS:-}"
-      SOLANA_NETWORK: mainnet-beta
-      SOLANA_RPC_URL: https://api.mainnet-beta.solana.com
+      SOLANA_NETWORK: "${SOLANA_NETWORK:-devnet}"
+      SOLANA_RPC_URL: "${SOLANA_RPC_URL:-https://api.devnet.solana.com}"
       LOCAL_DEMO_PRICE: "${LOCAL_DEMO_PRICE:-1000}"
       LOCAL_SECONDARY_PROXY_PORT: "${MARKETPLACE_PROXY_PORT_B:-18081}"
     command: bash -lc 'pnpm exec tsx src/db/migrate.ts'
@@ -120,7 +120,7 @@ services:
       - *pnpm-store-volume
     environment:
       PORT: "4021"
-      SOLANA_NETWORK: mainnet-beta
+      SOLANA_NETWORK: "${SOLANA_NETWORK:-devnet}"
       ADMIN_KEYPAIR_PATH: /workspace/marketplace/keypairs/facilitator.json
     command: bash -lc 'pnpm exec tsx src/index.ts'
     healthcheck:
@@ -309,6 +309,7 @@ services:
       NEXT_PUBLIC_PROXY_BASE_DOMAIN: proxy.localhost
       NEXT_PUBLIC_PROXY_BASE_PROTOCOL: http
       NEXT_PUBLIC_PROXY_BASE_PORT: "${MARKETPLACE_PROXY_PORT:-18080}"
+      NEXT_PUBLIC_SOLANA_NETWORK: "${SOLANA_NETWORK:-devnet}"
       NEXT_PUBLIC_SITE_NAME: Faremeter Marketplace
       NEXT_PUBLIC_DOCS_URL: https://docs.faremeter.xyz
       NEXT_PUBLIC_SALES_EMAIL: sales@faremeter.xyz
@@ -321,6 +322,7 @@ services:
           "NEXT_PUBLIC_PROXY_BASE_DOMAIN=$${NEXT_PUBLIC_PROXY_BASE_DOMAIN}" \
           "NEXT_PUBLIC_PROXY_BASE_PROTOCOL=$${NEXT_PUBLIC_PROXY_BASE_PROTOCOL}" \
           "NEXT_PUBLIC_PROXY_BASE_PORT=$${NEXT_PUBLIC_PROXY_BASE_PORT}" \
+          "NEXT_PUBLIC_SOLANA_NETWORK=$${NEXT_PUBLIC_SOLANA_NETWORK}" \
           "NEXT_PUBLIC_SITE_NAME=$${NEXT_PUBLIC_SITE_NAME}" \
           "NEXT_PUBLIC_DOCS_URL=$${NEXT_PUBLIC_DOCS_URL}" \
           "NEXT_PUBLIC_SALES_EMAIL=$${NEXT_PUBLIC_SALES_EMAIL}" \
@@ -407,8 +409,9 @@ services:
       LOCAL_ADMIN_PASSWORD: localdev123
       LOCAL_FACILITATOR_SOLANA_KEYPAIR_PATH: /workspace/marketplace/keypairs/facilitator.json
       LOCAL_SERVICE_SOLANA_ADDRESS: "${LOCAL_SERVICE_SOLANA_ADDRESS:-}"
-      SOLANA_NETWORK: mainnet-beta
-      SOLANA_RPC_URL: https://api.mainnet-beta.solana.com
+      SOLANA_NETWORK: "${SOLANA_NETWORK:-devnet}"
+      SOLANA_RPC_URL: "${SOLANA_RPC_URL:-https://api.devnet.solana.com}"
+      LOCAL_DEMO_PRICE: "${LOCAL_DEMO_PRICE:-1000}"
     command: bash -lc 'pnpm local:check'
     restart: "no"
 

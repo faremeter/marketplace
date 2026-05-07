@@ -8,6 +8,8 @@ import { tokenPricesRoutes } from "./token-prices.js";
 
 const TokenPriceResponse = type({
   token_symbol: "string",
+  "mint_address?": "string",
+  "network?": "string",
   "endpoint_id?": "number | null",
   "amount?": "number",
   "decimals?": "number",
@@ -300,6 +302,32 @@ await t.test("POST / (create)", async (t) => {
     const data = TokenPriceResponse.assert(await res.json());
     t.equal(data.token_symbol, "USDT");
     t.equal(data.endpoint_id, null);
+  });
+
+  await t.test("creates solana devnet token price", async (t) => {
+    const user = await createUser("member@example.com");
+    const org = await createOrg("Team", "team");
+    await addMember(user.id, org.id);
+    const tenant = await createTenant(org.id, "my-proxy");
+
+    const res = await app.request(`/api/tenants/${tenant.id}/token-prices`, {
+      method: "POST",
+      headers: {
+        Cookie: `auth_token=${user.token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        token_symbol: "USDC",
+        mint_address: "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU",
+        network: "solana-devnet",
+        amount: 1000,
+      }),
+    });
+    t.equal(res.status, 201);
+    const data = TokenPriceResponse.assert(await res.json());
+    t.equal(data.token_symbol, "USDC");
+    t.equal(data.network, "solana-devnet");
+    t.equal(data.mint_address, "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU");
   });
 
   await t.test("creates endpoint-level token price", async (t) => {

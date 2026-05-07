@@ -195,6 +195,39 @@ await t.test("builds spec with correct structure", async (t) => {
   t.equal(rule0.capture, "5000000");
 });
 
+await t.test(
+  "endpoint with null scheme inherits tenant default exact pricing",
+  async (t) => {
+    const org = await createOrg("Team", "team");
+    const walletConfig = {
+      solana: { "mainnet-beta": { address: "SoLwALLeTaDdReSs123" } },
+    };
+    const wallet = await createWallet(org.id, walletConfig);
+    const tenant = await createTenant(org.id, "default-priced-api", wallet.id);
+
+    await createEndpoint(tenant.id, "/v1/chat/completions", {
+      scheme: null,
+    });
+    await createTokenPrice(tenant.id, null, {
+      amount: 90000,
+    });
+
+    const result = await buildTenantGatewaySpec(tenant.id);
+    t.not(result, null);
+    if (!result) return;
+
+    const paths = result.spec.paths as Record<string, Record<string, unknown>>;
+    const route = paths["/v1/chat/completions"];
+    t.ok(route);
+
+    const post = route?.post as Record<string, unknown>;
+    const pricing = post["x-faremeter-pricing"] as Record<string, unknown>;
+    const rules = pricing.rules as Record<string, unknown>[];
+
+    t.matchOnly(rules, [{ match: "true", capture: "90000" }]);
+  },
+);
+
 await t.test("skips free endpoints", async (t) => {
   const org = await createOrg("Team", "team");
   const walletConfig = {

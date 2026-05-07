@@ -42,13 +42,27 @@ export async function withRetry<T>(
   throw lastError!;
 }
 
-const SOLANA_USDC = solana.lookupKnownSPLToken("mainnet-beta", "USDC");
+const rawSolanaCluster = process.env.SOLANA_NETWORK ?? "mainnet-beta";
+if (!solana.isKnownCluster(rawSolanaCluster)) {
+  throw new Error(`Unsupported SOLANA_NETWORK: ${rawSolanaCluster}`);
+}
+
+const SOLANA_CLUSTER = rawSolanaCluster;
+const SOLANA_WALLET_CLUSTER =
+  SOLANA_CLUSTER === "devnet" ? "devnet" : "mainnet-beta";
+const SOLANA_USDC = solana.lookupKnownSPLToken(SOLANA_CLUSTER, "USDC");
 const BASE_USDC = evm.lookupKnownAsset("base", "USDC");
 const POLYGON_USDC = evm.lookupKnownAsset("eip155:137", "USDC");
 const MONAD_USDC = evm.lookupKnownAsset("eip155:143", "USDC");
 
+const DEFAULT_SOLANA_RPC_URLS = {
+  "mainnet-beta": "https://api.mainnet-beta.solana.com",
+  devnet: "https://api.devnet.solana.com",
+  testnet: "https://api.testnet.solana.com",
+};
+
 const SOLANA_RPC_URL =
-  process.env.SOLANA_RPC_URL ?? "https://api.mainnet-beta.solana.com";
+  process.env.SOLANA_RPC_URL ?? DEFAULT_SOLANA_RPC_URLS[SOLANA_CLUSTER];
 
 const solanaRpc = createSolanaRpc(SOLANA_RPC_URL);
 
@@ -99,7 +113,7 @@ const SOLANA_STABLECOIN_SYMBOLS = [
 ] as const;
 
 for (const symbol of SOLANA_STABLECOIN_SYMBOLS) {
-  const info = solana.lookupKnownSPLToken("mainnet-beta", symbol);
+  const info = solana.lookupKnownSPLToken(SOLANA_CLUSTER, symbol);
   if (info) KNOWN_SOLANA_MINTS.set(info.address, symbol);
 }
 
@@ -286,7 +300,10 @@ export async function fetchWalletBalances(addresses: {
 export const BALANCE_CACHE_TTL_MS = 60 * 1000; // 1 minute
 
 export interface WalletConfig {
-  solana?: { "mainnet-beta"?: { address?: string; key?: string } };
+  solana?: {
+    "mainnet-beta"?: { address?: string; key?: string };
+    devnet?: { address?: string; key?: string };
+  };
   evm?: {
     base?: { address?: string; key?: string };
     polygon?: { address?: string; key?: string };
@@ -300,7 +317,11 @@ export function extractAddresses(config: WalletConfig | null): {
 } {
   if (!config) return { solana: null, evm: null };
   return {
-    solana: config.solana?.["mainnet-beta"]?.address ?? null,
+    solana:
+      config.solana?.[SOLANA_WALLET_CLUSTER]?.address ??
+      config.solana?.["mainnet-beta"]?.address ??
+      config.solana?.devnet?.address ??
+      null,
     evm: config.evm?.base?.address ?? null,
   };
 }

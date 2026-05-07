@@ -3,6 +3,7 @@ import { request as httpRequest } from "node:http";
 import fs from "node:fs";
 import bcrypt from "bcrypt";
 import bs58 from "bs58";
+import { solana } from "@faremeter/info";
 import { db } from "../db/instance.js";
 import { toDomainInfo } from "../lib/domain.js";
 import { triggerCertProvisioning } from "../lib/cert.js";
@@ -22,11 +23,37 @@ const DEMO_TENANT_NAME = "demo-api";
 const DEMO_BACKEND_URL =
   process.env.LOCAL_PUBLISHER_URL ?? "http://publisher-mock:3001";
 const DEMO_PRICE = parseInt(process.env.LOCAL_DEMO_PRICE ?? "1000", 10);
+const DEMO_ENDPOINT_MULTIPLIER = 1;
 const DEMO_PROXY_DOMAIN = `${DEMO_TENANT_NAME}.${ORG_SLUG}.${process.env.PROXY_BASE_DOMAIN ?? "proxy.localhost"}`;
-const SOLANA_MAINNET_USDC = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
-const SOLANA_MAINNET_NETWORK = "solana-mainnet-beta";
 const PRIMARY_PROXY_PORT = process.env.PROXY_BASE_PORT ?? "18080";
 const SECONDARY_PROXY_PORT = process.env.LOCAL_SECONDARY_PROXY_PORT ?? "18081";
+
+const rawSolanaCluster = process.env.SOLANA_NETWORK ?? "devnet";
+if (!solana.isKnownCluster(rawSolanaCluster)) {
+  throw new Error(
+    `Unsupported SOLANA_NETWORK for local dev: ${rawSolanaCluster}`,
+  );
+}
+
+function getSolanaUsdc(cluster: solana.KnownCluster) {
+  const token = solana.lookupKnownSPLToken(cluster, "USDC");
+  if (!token) {
+    throw new Error(`Couldn't look up USDC on Solana ${cluster}`);
+  }
+  return token;
+}
+
+function getSolanaNetworkId(cluster: solana.KnownCluster): string {
+  const network = solana.getV1NetworkIds(cluster)[0];
+  if (!network) {
+    throw new Error(`Couldn't derive an x402 network ID for ${cluster}`);
+  }
+  return network;
+}
+
+const SOLANA_CLUSTER = rawSolanaCluster;
+const SOLANA_USDC = getSolanaUsdc(SOLANA_CLUSTER);
+const SOLANA_NETWORK = getSolanaNetworkId(SOLANA_CLUSTER);
 
 const NODE_CONFIGS = [
   {
@@ -363,14 +390,14 @@ async function ensureSupportedToken() {
     .insertInto("supported_tokens")
     .values({
       symbol: "USDC",
-      mint_address: SOLANA_MAINNET_USDC,
-      network: SOLANA_MAINNET_NETWORK,
+      mint_address: SOLANA_USDC.address,
+      network: SOLANA_NETWORK,
       is_usd_pegged: true,
       decimals: 6,
     })
     .onConflict((oc) =>
       oc.columns(["symbol", "network"]).doUpdateSet({
-        mint_address: SOLANA_MAINNET_USDC,
+        mint_address: SOLANA_USDC.address,
         is_usd_pegged: true,
         decimals: 6,
       }),
@@ -518,7 +545,7 @@ async function createWallet(
         name: WALLET_NAME,
         wallet_config: {
           solana: {
-            "mainnet-beta": {
+            [SOLANA_CLUSTER]: {
               address,
             },
           },
@@ -555,7 +582,7 @@ async function createEndpoint(tenantId: number, authCookie: string) {
     cookie: authCookie,
     body: JSON.stringify({
       path: "/v1/chat/completions",
-      price: DEMO_PRICE,
+      price: DEMO_ENDPOINT_MULTIPLIER,
       scheme: "exact",
       http_method: "POST",
       description: "Paid demo route",
@@ -564,7 +591,7 @@ async function createEndpoint(tenantId: number, authCookie: string) {
   });
 }
 
-async function useOnlyLocalMainnetUsdc(tenantId: number) {
+async function useOnlyLocalSolanaUsdc(tenantId: number) {
   await db
     .deleteFrom("token_prices")
     .where("tenant_id", "=", tenantId)
@@ -576,8 +603,8 @@ async function useOnlyLocalMainnetUsdc(tenantId: number) {
       tenant_id: tenantId,
       endpoint_id: null,
       token_symbol: "USDC",
-      mint_address: SOLANA_MAINNET_USDC,
-      network: SOLANA_MAINNET_NETWORK,
+      mint_address: SOLANA_USDC.address,
+      network: SOLANA_NETWORK,
       amount: DEMO_PRICE,
       decimals: 6,
     })
@@ -625,7 +652,7 @@ async function main() {
   await waitForWalletFunded(wallet.id);
 
   const tenant = await createTenant(organization.id, authCookie, wallet.id);
-  await useOnlyLocalMainnetUsdc(tenant.id);
+  await useOnlyLocalSolanaUsdc(tenant.id);
   await createEndpoint(tenant.id, authCookie);
 
   // Keep local bootstrap deterministic even if the queue is still starting.

@@ -19,6 +19,9 @@ interface WalletConfig {
     "mainnet-beta"?: {
       address: string;
     };
+    devnet?: {
+      address: string;
+    };
   };
   evm?: {
     base?: { address: string };
@@ -61,7 +64,10 @@ function extractAddresses(config: WalletConfig | null): {
 } {
   if (!config) return { solana: null, evm: null };
   return {
-    solana: config.solana?.["mainnet-beta"]?.address ?? null,
+    solana:
+      config.solana?.devnet?.address ??
+      config.solana?.["mainnet-beta"]?.address ??
+      null,
     evm: config.evm?.base?.address ?? null,
   };
 }
