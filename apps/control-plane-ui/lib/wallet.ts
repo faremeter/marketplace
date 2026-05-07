@@ -23,10 +23,6 @@ export interface WalletConfig {
   };
 }
 
-function getSolanaWallet(config: WalletConfig) {
-  return config.solana?.devnet ?? config.solana?.["mainnet-beta"] ?? null;
-}
-
 export interface EcosystemConfig {
   solana: { mode: "generate" | "import" | "skip"; key?: string };
   evm: { mode: "generate" | "import" | "skip"; key?: string };
@@ -36,6 +32,15 @@ const SOLANA_WALLET_CLUSTER =
   process.env.NEXT_PUBLIC_SOLANA_NETWORK === "devnet"
     ? "devnet"
     : "mainnet-beta";
+
+function getSolanaWallet(config: WalletConfig) {
+  return (
+    config.solana?.[SOLANA_WALLET_CLUSTER] ??
+    config.solana?.["mainnet-beta"] ??
+    config.solana?.devnet ??
+    null
+  );
+}
 
 function buildSolanaWalletConfig(wallet: {
   address: string;
