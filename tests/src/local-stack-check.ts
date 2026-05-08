@@ -1,4 +1,6 @@
+import { solana } from "@faremeter/info";
 import { request as httpRequest } from "node:http";
+import { request as httpsRequest } from "node:https";
 
 const CONTROL_PLANE_BASE_URL =
   process.env.LOCAL_CONTROL_PLANE_BASE_URL ?? "http://127.0.0.1:11337";
@@ -22,7 +24,31 @@ const PROXY_HOST =
 const ADMIN_EMAIL =
   process.env.LOCAL_ADMIN_EMAIL ?? "admin@local.faremeter.test";
 const ADMIN_PASSWORD = process.env.LOCAL_ADMIN_PASSWORD ?? "localdev123";
+const EXPECTED_DEMO_PRICE = process.env.LOCAL_DEMO_PRICE ?? "1000";
 const CHECK_ENDPOINT_PATH = `/v1/local-check/created-${Date.now()}`;
+
+const rawSolanaCluster = process.env.SOLANA_NETWORK ?? "devnet";
+if (!solana.isKnownCluster(rawSolanaCluster)) {
+  throw new Error(
+    `Unsupported SOLANA_NETWORK for local check: ${rawSolanaCluster}`,
+  );
+}
+
+function getSolanaUsdc(cluster: solana.KnownCluster) {
+  const token = solana.lookupKnownSPLToken(cluster, "USDC");
+  if (!token) {
+    throw new Error(`Couldn't look up USDC on Solana ${cluster}`);
+  }
+  return token;
+}
+
+const SOLANA_CLUSTER = rawSolanaCluster;
+const SOLANA_USDC = getSolanaUsdc(SOLANA_CLUSTER);
+const SOLANA_NETWORK_IDS = solana.getV1NetworkIds(SOLANA_CLUSTER);
+const EXPECTED_SOLANA_NETWORKS = new Set([
+  ...SOLANA_NETWORK_IDS,
+  solana.normalizeNetworkId(SOLANA_CLUSTER),
+]);
 
 type LoginResponse = {
   user: {
@@ -65,9 +91,10 @@ type AdminTransactionsResponse = {
   total: number;
 };
 
-type ProxyResponse = {
-  status: number;
-  body: string;
+type PaymentRequirement = {
+  network?: unknown;
+  asset?: unknown;
+  maxAmountRequired?: unknown;
 };
 
 function controlPlaneHealthUrl(): string {
@@ -255,63 +282,88 @@ async function waitForTransactionCount(
   );
 }
 
-async function proxyRequest(url: string): Promise<ProxyResponse> {
-  const parsed = new URL(url);
-  if (parsed.protocol !== "http:") {
-    throw new Error(`Local proxy checks only support http URLs: ${url}`);
-  }
+type ProxyResponse = {
+  status: number;
+  ok: boolean;
+  text: () => Promise<string>;
+  json: () => Promise<unknown>;
+};
 
-  const body = JSON.stringify({
+function buildProxyBody(): string {
+  return JSON.stringify({
     model: "local-demo",
     messages: [{ role: "user", content: "hello" }],
   });
+}
+
+async function proxyRequest(urlString: string): Promise<ProxyResponse> {
+  const url = new URL(urlString);
+  const body = buildProxyBody();
+  const request = url.protocol === "https:" ? httpsRequest : httpRequest;
 
   return await new Promise<ProxyResponse>((resolve, reject) => {
-    const request = httpRequest({
-      host: parsed.hostname,
-      port: parsed.port ? Number(parsed.port) : 80,
-      path: `${parsed.pathname}${parsed.search}`,
-      method: "POST",
-      headers: {
-        Host: PROXY_HOST,
-        "Content-Type": "application/json",
-        "Content-Length": Buffer.byteLength(body),
+    const req = request(
+      url,
+      {
+        method: "POST",
+        headers: {
+          Host: PROXY_HOST,
+          "Content-Type": "application/json",
+          "Content-Length": Buffer.byteLength(body).toString(),
+        },
       },
-    });
-
-    let responseBody = "";
-
-    request.setTimeout(5_000, () => {
-      request.destroy(new Error(`Proxy request timed out for ${url}`));
-    });
-
-    request.on("response", (response) => {
-      response.setEncoding("utf8");
-      response.on("data", (chunk: string) => {
-        responseBody += chunk;
-      });
-      response.on("end", () => {
-        resolve({
-          status: response.statusCode ?? 0,
-          body: responseBody,
+      (res) => {
+        const chunks: Buffer[] = [];
+        res.on("data", (chunk: Buffer | string) => {
+          chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
         });
-      });
+        res.on("end", () => {
+          const raw = Buffer.concat(chunks).toString("utf8");
+          const status = res.statusCode ?? 0;
+          resolve({
+            status,
+            ok: status >= 200 && status < 300,
+            text: async () => raw,
+            json: async () => JSON.parse(raw) as unknown,
+          });
+        });
+      },
+    );
+
+    req.on("error", reject);
+    req.setTimeout(15_000, () => {
+      req.destroy(new Error(`Proxy request timed out for ${urlString}`));
     });
-    request.on("error", reject);
-    request.write(body);
-    request.end();
+    req.end(body);
   });
 }
 
 async function assertSuccessfulProxyCall(url: string): Promise<unknown> {
   const response = await proxyRequest(url);
-  if (response.status < 200 || response.status >= 300) {
+  if (!response.ok) {
+    const text = await response.text();
     throw new Error(
-      `Expected proxy call to succeed for ${url}, got ${response.status}: ${response.body}`,
+      `Expected proxy call to succeed for ${url}, got ${response.status}: ${text}`,
     );
   }
 
-  return JSON.parse(response.body) as unknown;
+  return await response.json();
+}
+
+function getAccepts(body: unknown): PaymentRequirement[] {
+  if (typeof body !== "object" || body === null || !("accepts" in body)) {
+    return [];
+  }
+
+  const accepts = body.accepts;
+  if (!Array.isArray(accepts)) {
+    return [];
+  }
+
+  return accepts.filter(
+    (item): item is PaymentRequirement =>
+      typeof item === "object" && item !== null,
+  );
 }
 
 async function assertUnpaid(url: string): Promise<void> {
@@ -319,6 +371,27 @@ async function assertUnpaid(url: string): Promise<void> {
   if (response.status !== 402) {
     throw new Error(
       `Expected unpaid proxy call to return 402 for ${url}, got ${response.status}`,
+    );
+  }
+
+  const body = await response.json();
+  const accepts = getAccepts(body);
+  const matching = accepts.find(
+    (requirement) =>
+      typeof requirement.network === "string" &&
+      EXPECTED_SOLANA_NETWORKS.has(requirement.network) &&
+      requirement.asset === SOLANA_USDC.address,
+  );
+
+  if (!matching) {
+    throw new Error(
+      `Expected 402 accepts to include ${SOLANA_CLUSTER} USDC ${SOLANA_USDC.address}`,
+    );
+  }
+
+  if (matching.maxAmountRequired !== EXPECTED_DEMO_PRICE) {
+    throw new Error(
+      `Expected unpaid proxy to require ${EXPECTED_DEMO_PRICE} atomic USDC, got ${matching.maxAmountRequired}`,
     );
   }
 }
