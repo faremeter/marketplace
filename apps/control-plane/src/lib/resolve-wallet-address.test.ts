@@ -53,6 +53,31 @@ await t.test(
   },
 );
 
+await t.test("resolves solana-devnet from nested wallet_config", async (t) => {
+  const walletConfig = {
+    solana: { devnet: { address: "DevnetSolAddress123" } },
+  };
+  const result = buildTenantGatewaySpecFromData({
+    tenantId: 11,
+    tenantName: "test",
+    walletConfig,
+    endpoints: [minimalEndpoint(11)],
+    tokenPrices: [minimalTokenPrice("solana-devnet")],
+  });
+  t.not(result, null);
+  if (!result) return;
+  const assets = result.spec["x-faremeter-assets"] as Record<
+    string,
+    { recipient: string; token: string; chain: string }
+  >;
+  t.equal(assets["solana-devnet-USDC"]?.recipient, "DevnetSolAddress123");
+  t.equal(assets["solana-devnet-USDC"]?.chain, "solana-devnet");
+  t.equal(
+    result.warnings.filter((w) => w.includes("No wallet address")).length,
+    0,
+  );
+});
+
 await t.test("resolves base from nested evm.base wallet_config", async (t) => {
   const walletConfig = {
     evm: { base: { address: "BaseAddress123" } },
