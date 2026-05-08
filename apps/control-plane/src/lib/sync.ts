@@ -61,6 +61,7 @@ export async function buildNodeConfig(nodeId: number) {
       "tenants.name",
       "tenants.backend_url",
       "tenants.wallet_id",
+      "tenants.default_scheme",
       "tenants.upstream_auth_header",
       "tenants.upstream_auth_value",
       "tenants.org_slug",
@@ -109,6 +110,7 @@ export async function buildNodeConfig(nodeId: number) {
     const specResult = buildTenantGatewaySpecFromData({
       tenantId: tenant.id,
       tenantName: tenant.name,
+      defaultScheme: tenant.default_scheme,
       walletConfig: tenant.wallet_config,
       endpoints: endpoints.map((e) => ({
         id: e.id,
@@ -145,8 +147,10 @@ export async function buildNodeConfig(nodeId: number) {
     const networks = [
       ...new Set(Object.values(faremeterSpec.assets).map((a) => a.chain)),
     ];
-    const assetKeys = [...new Set(Object.keys(faremeterSpec.assets))];
-    const capabilities = { networks, assets: assetKeys };
+    const assets = [
+      ...new Set(Object.values(faremeterSpec.assets).map((a) => a.token)),
+    ];
+    const capabilities = { schemes: ["exact"], networks, assets };
 
     const extraDirectives: string[] = [];
     if (tenant.upstream_auth_header && tenant.upstream_auth_value) {
