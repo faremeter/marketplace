@@ -9,6 +9,7 @@ import type {
   FaremeterSpec,
 } from "@faremeter/middleware-openapi";
 import type { HandlerCapabilities } from "@faremeter/types/pricing";
+import { normalizeNetworkId } from "@faremeter/info";
 
 const CONFIG_PATH =
   process.env.SIDECAR_CONFIG_PATH ?? "/etc/faremeter-sidecar/config.json";
@@ -163,6 +164,29 @@ function buildOnCapture(
   };
 }
 
+function normalizeRuntimeSpec(spec: FaremeterSpec): FaremeterSpec {
+  return {
+    ...spec,
+    assets: Object.fromEntries(
+      Object.entries(spec.assets).map(([key, asset]) => [
+        key,
+        { ...asset, chain: normalizeNetworkId(asset.chain) },
+      ]),
+    ),
+  };
+}
+
+function normalizeRuntimeCapabilities(
+  capabilities: HandlerCapabilities,
+): HandlerCapabilities {
+  return {
+    ...capabilities,
+    networks: capabilities.networks.map((network) =>
+      normalizeNetworkId(network),
+    ),
+  };
+}
+
 function parseSidecarConfig(raw: string): SidecarConfig {
   const parsed: unknown = JSON.parse(raw);
   // The config file is written by a trusted internal process (config-receiver.lua).
@@ -199,10 +223,12 @@ function buildSites(config: SidecarConfig): MultiSiteConfig {
   }
 
   for (const [slug, site] of Object.entries(config.sites)) {
-    const faremeterSpec = extractSpec(site.spec);
+    const rawFaremeterSpec = extractSpec(site.spec);
+    const faremeterSpec = normalizeRuntimeSpec(rawFaremeterSpec);
+    const capabilities = normalizeRuntimeCapabilities(site.capabilities);
     const x402Handlers = [
       createHTTPFacilitatorHandler(config.facilitatorURL, {
-        capabilities: site.capabilities,
+        capabilities,
       }),
     ];
 
@@ -210,7 +236,7 @@ function buildSites(config: SidecarConfig): MultiSiteConfig {
       spec: faremeterSpec,
       baseURL: site.baseURL,
       x402Handlers,
-      onCapture: buildOnCapture(site, faremeterSpec),
+      onCapture: buildOnCapture(site, rawFaremeterSpec),
     };
 
     sites[slug] = opts;

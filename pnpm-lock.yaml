@@ -176,6 +176,9 @@ importers:
 
   apps/api-node-stack/sidecar:
     dependencies:
+      '@faremeter/info':
+        specifier: 'catalog:'
+        version: 0.21.0
       '@faremeter/middleware':
         specifier: 'catalog:'
         version: 0.21.0(@logtape/logtape@1.0.4)
