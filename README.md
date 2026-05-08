@@ -66,22 +66,32 @@ For full local development, this repo now ships a real Docker Compose stack for:
 - discovery API
 - control-plane UI
 - two local OpenResty API nodes
-- local sidecar
-- real facilitator app from the sibling `../faremeter` repo
+- marketplace sidecar wrapper
+- real Faremeter sidecar package
+- real facilitator app from the selected Faremeter checkout
 - local publisher mock
 
 ### Requirements
 
 - Docker Desktop or Docker Engine with Compose
-- The sibling `../faremeter` checkout present next to this repo
+- The Faremeter checkout available at `../faremeter`, or an explicit
+  `FAREMETER_REPO_PATH`
 - A Solana keypair or explicit Solana address for the facilitator/service wallet
 
-The local stack relies on the same linked `@faremeter/*` packages already
-present in this workspace, so Compose expects both directories to exist:
+The Compose file mounts this checkout as `/workspace/marketplace`, so the local
+marketplace directory can have any name. It also mounts the selected Faremeter
+checkout as `/workspace/faremeter`.
+
+By default, Compose looks for Faremeter one directory above this checkout:
 
 ```text
-../faremeter
-../marketplace
+${PWD}/../faremeter
+```
+
+If Faremeter lives somewhere else, pass an explicit host path:
+
+```bash
+FAREMETER_REPO_PATH=/absolute/path/to/faremeter make local-up
 ```
 
 Before starting the stack, create or provide the local payment keypair:
@@ -93,6 +103,26 @@ solana-keygen new --outfile keypairs/facilitator.json
 
 `LOCAL_SERVICE_SOLANA_ADDRESS` is optional. If unset, the seed script derives
 the receiver wallet address from `keypairs/facilitator.json`.
+
+The local stack supports both Solana devnet and mainnet-beta. Devnet is the
+default when `SOLANA_NETWORK` is unset:
+
+```text
+SOLANA_NETWORK=devnet
+SOLANA_RPC_URL=https://api.devnet.solana.com
+```
+
+Run against mainnet-beta by setting both the network and RPC URL:
+
+```bash
+SOLANA_NETWORK=mainnet-beta \
+SOLANA_RPC_URL=https://api.mainnet-beta.solana.com \
+make local-up
+```
+
+Use `mainnet-beta`, not `mainnet`, because that is the cluster name accepted by
+the Faremeter Solana packages. The seed script and local check use the selected
+network to look up the correct USDC mint and x402 network IDs.
 
 ### Start the stack
 
@@ -110,7 +140,7 @@ Compose will:
 
 1. install workspace dependencies for both `faremeter` and `marketplace`
 2. start Postgres and the app services
-3. run the real facilitator with the currently supported Solana configuration
+3. run the real facilitator against the selected Solana network
 4. seed a local admin user, two local nodes, a demo tenant, and a demo endpoint
 5. sync the generated tenant config into both local API nodes
 
@@ -150,10 +180,11 @@ make local-seed
 make local-check
 ```
 
-`make local-check` verifies the seeded paid proxy route returns `402` through
-both local proxy nodes, creates a free endpoint through the control plane,
-routes that endpoint through both nodes, and verifies control-plane transaction
-and analytics records.
+`make local-check` verifies the seeded paid proxy route returns `402` with USDC
+payment requirements for the selected Solana network through both local proxy
+nodes, creates a free endpoint through the control plane, routes that endpoint
+through both nodes, and verifies control-plane transaction and analytics
+records.
 
 ## Generate Secrets
 
