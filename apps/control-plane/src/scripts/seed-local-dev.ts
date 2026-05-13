@@ -545,9 +545,6 @@ async function createWallet(
         name: WALLET_NAME,
         wallet_config: {
           solana: {
-            "mainnet-beta": {
-              address,
-            },
             [SOLANA_CLUSTER]: {
               address,
             },
