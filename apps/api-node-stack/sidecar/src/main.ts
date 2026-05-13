@@ -236,6 +236,8 @@ function buildSites(config: SidecarConfig): MultiSiteConfig {
       spec: faremeterSpec,
       baseURL: site.baseURL,
       x402Handlers,
+      // onCapture needs the raw spec so recorded transactions keep the control-plane
+      // network name and token-symbol parsing from the original asset key.
       onCapture: buildOnCapture(site, rawFaremeterSpec),
     };
 
