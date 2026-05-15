@@ -1,7 +1,10 @@
 import "../tests/setup/env.js";
 import t from "tap";
 import { db, setupTestSchema, clearTestData } from "../db/instance.js";
-import { buildTenantGatewaySpec } from "./gateway-spec-builder.js";
+import {
+  buildTenantGatewaySpec,
+  buildTenantGatewaySpecFromData,
+} from "./gateway-spec-builder.js";
 
 await setupTestSchema();
 
@@ -88,7 +91,7 @@ async function createTokenPrice(
     symbol?: string;
     mint?: string;
     network?: string;
-    amount?: number;
+    amount?: number | string;
     decimals?: number;
   } = {},
 ) {
@@ -249,6 +252,35 @@ await t.test("skips free endpoints", async (t) => {
   t.ok(paths["/paid-endpoint"]);
 });
 
+await t.test("skips zero-price flex endpoints", async (t) => {
+  const org = await createOrg("Team", "team");
+  const walletConfig = {
+    solana: { "mainnet-beta": { address: "addr1" } },
+  };
+  const wallet = await createWallet(org.id, walletConfig);
+  const tenant = await createTenant(org.id, "zero-flex-test", wallet.id);
+
+  await createEndpoint(tenant.id, "/free-flex-endpoint", {
+    scheme: "flex",
+    price: 0,
+  });
+  await createEndpoint(tenant.id, "/paid-flex-endpoint", {
+    scheme: "flex",
+    price: 2,
+  });
+  await createTokenPrice(tenant.id, null);
+
+  const result = await buildTenantGatewaySpec(tenant.id);
+  t.not(result, null);
+  if (!result) return;
+
+  const paths = result.spec.paths as Record<string, unknown>;
+  t.notOk(paths["/free-flex-endpoint"]);
+  t.ok(paths["/paid-flex-endpoint"]);
+  t.notOk(result.operationKeyToScheme["GET /free-flex-endpoint"]);
+  t.equal(result.operationKeyToScheme["GET /paid-flex-endpoint"], "flex");
+});
+
 await t.test("uses openapi_source_paths when present", async (t) => {
   const org = await createOrg("Team", "team");
   const walletConfig = {
@@ -272,6 +304,168 @@ await t.test("uses openapi_source_paths when present", async (t) => {
   t.ok(paths["/v2/data"]);
   t.notOk(paths["/api/data"]);
 });
+
+await t.test(
+  "preserves imported OpenAPI flex authorize and response capture rules",
+  async (t) => {
+    const org = await createOrg("Team", "team");
+    const walletConfig = {
+      solana: { devnet: { address: "merchant-wallet" } },
+    };
+    const wallet = await createWallet(org.id, walletConfig);
+    const tenant = await createTenant(org.id, "dynamic-flex", wallet.id);
+
+    const importedSpec = {
+      openapi: "3.0.3",
+      info: { title: "Dynamic Flex API", version: "1.0.0" },
+      "x-faremeter-assets": {
+        "solana-devnet-USDC": {
+          chain: "solana-devnet",
+          token: "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU",
+          decimals: 6,
+          recipient: "merchant-token-account",
+        },
+      },
+      "x-faremeter-pricing": {
+        rates: { "solana-devnet-USDC": 1 },
+      },
+      paths: {
+        "/v1/chat/completions": {
+          post: {
+            summary: "Chat completions",
+            responses: { "200": { description: "OK" } },
+            "x-faremeter-pricing": {
+              rules: [
+                {
+                  match: '$[?@.request.body.model == "gpt-4o"]',
+                  authorize: "coalesce($.request.body.max_tokens, 1024) * 40",
+                  capture:
+                    "$.response.body.usage.prompt_tokens * 10 + $.response.body.usage.completion_tokens * 30",
+                },
+                {
+                  match: "$",
+                  authorize: "100000",
+                  capture: "$.response.body.usage.total_tokens * 10",
+                },
+              ],
+            },
+          },
+        },
+      },
+    };
+
+    await db
+      .updateTable("tenants")
+      .set({ openapi_spec: JSON.stringify(importedSpec) })
+      .where("id", "=", tenant.id)
+      .execute();
+
+    const endpoint = await createEndpoint(tenant.id, "/v1/chat/completions", {
+      scheme: "flex",
+      http_method: "POST",
+      openapi_source_paths: ["/v1/chat/completions"],
+    });
+
+    const result = await buildTenantGatewaySpec(tenant.id);
+    t.not(result, null);
+    if (!result) return;
+
+    const assets = result.spec["x-faremeter-assets"] as Record<string, unknown>;
+    t.ok(assets["solana-devnet-USDC"], "must preserve OpenAPI asset");
+
+    const pricing = result.spec["x-faremeter-pricing"] as Record<
+      string,
+      unknown
+    >;
+    t.same(pricing.rates, { "solana-devnet-USDC": 1 });
+
+    const paths = result.spec.paths as Record<string, Record<string, unknown>>;
+    const operation = paths["/v1/chat/completions"]?.post as Record<
+      string,
+      unknown
+    >;
+    t.ok(operation, "must preserve linked POST operation");
+    t.equal(operation.summary, "Chat completions");
+
+    const operationPricing = operation["x-faremeter-pricing"] as Record<
+      string,
+      unknown
+    >;
+    const rules = operationPricing.rules as Record<string, unknown>[];
+    t.equal(rules.length, 2);
+    t.equal(
+      rules[0]?.authorize,
+      "coalesce($.request.body.max_tokens, 1024) * 40",
+    );
+    t.equal(
+      rules[0]?.capture,
+      "$.response.body.usage.prompt_tokens * 10 + $.response.body.usage.completion_tokens * 30",
+    );
+    t.equal(rules[1]?.authorize, "100000");
+    t.equal(
+      result.operationKeyToEndpointId["POST /v1/chat/completions"],
+      endpoint.id,
+    );
+    t.equal(result.operationKeyToScheme["POST /v1/chat/completions"], "flex");
+  },
+);
+
+await t.test(
+  "OpenAPI path-level empty pricing rules opt out of fixed fallback",
+  async (t) => {
+    const org = await createOrg("Team", "team");
+    const walletConfig = {
+      solana: { "mainnet-beta": { address: "addr1" } },
+    };
+    const wallet = await createWallet(org.id, walletConfig);
+    const tenant = await createTenant(org.id, "openapi-free-optout", wallet.id);
+
+    await db
+      .updateTable("tenants")
+      .set({
+        openapi_spec: JSON.stringify({
+          openapi: "3.0.3",
+          info: { title: "Opt out", version: "1.0.0" },
+          paths: {
+            "/free-from-spec": {
+              "x-faremeter-pricing": { rules: [] },
+              get: {
+                responses: { "200": { description: "OK" } },
+              },
+            },
+          },
+        }),
+      })
+      .where("id", "=", tenant.id)
+      .execute();
+
+    await createEndpoint(tenant.id, "/free-from-spec", {
+      scheme: "flex",
+      price: 2,
+      http_method: "GET",
+      openapi_source_paths: ["/free-from-spec"],
+    });
+    await createTokenPrice(tenant.id, null);
+
+    const result = await buildTenantGatewaySpec(tenant.id);
+    t.not(result, null);
+    if (!result) return;
+
+    const paths = result.spec.paths as Record<string, Record<string, unknown>>;
+    const path = paths["/free-from-spec"];
+    t.ok(path);
+    const operation = path?.get as Record<string, unknown>;
+    t.notOk(
+      operation["x-faremeter-pricing"],
+      "must not add fixed fallback when OpenAPI explicitly opts out",
+    );
+    const pathPricing = path?.["x-faremeter-pricing"] as Record<
+      string,
+      unknown
+    >;
+    t.same(pathPricing.rules, []);
+  },
+);
 
 await t.test(
   "warns and skips endpoint with unconvertible path pattern",
@@ -326,6 +520,11 @@ await t.test("ANY endpoint expands to all standard methods", async (t) => {
       result.operationKeyToEndpointId[`${method} /items/{itemId}`],
       endpoint.id,
       `${method} should map to endpoint`,
+    );
+    t.equal(
+      result.operationKeyToScheme[`${method} /items/{itemId}`],
+      "exact",
+      `${method} should map to exact scheme`,
     );
   }
 
@@ -429,6 +628,118 @@ await t.test(
   },
 );
 
+await t.test(
+  "tenant-level price scaling preserves large atomic integer precision",
+  async (t) => {
+    const result = buildTenantGatewaySpecFromData({
+      tenantId: 1,
+      tenantName: "large-atomic-scaled",
+      defaultScheme: "exact",
+      walletConfig: {
+        solana: { "mainnet-beta": { address: "addr1" } },
+      },
+      endpoints: [
+        {
+          id: 1,
+          path: "/large",
+          path_pattern: "/large",
+          openapi_source_paths: null,
+          price: 2,
+          scheme: "exact",
+          description: null,
+          http_method: "GET",
+        },
+      ],
+      tokenPrices: [
+        {
+          token_symbol: "USDC",
+          mint_address: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+          network: "solana-mainnet-beta",
+          amount: "9007199254740993",
+          decimals: 6,
+          endpoint_id: null,
+        },
+      ],
+    });
+    t.not(result, null);
+    if (!result) return;
+
+    const paths = result.spec.paths as Record<string, unknown>;
+    const pathEntry = paths["/large"] as Record<string, unknown>;
+    const getOp = pathEntry.get as Record<string, unknown>;
+    const pricing = getOp["x-faremeter-pricing"] as Record<string, unknown>;
+    const rules = pricing.rules as Record<string, unknown>[];
+
+    t.equal(rules[0]?.capture, "18014398509481986");
+  },
+);
+
+await t.test(
+  "tenant-level price scaling rounds fractional multipliers like Math.round",
+  async (t) => {
+    const org = await createOrg("Team", "team");
+    const walletConfig = {
+      solana: { "mainnet-beta": { address: "addr1" } },
+    };
+    const wallet = await createWallet(org.id, walletConfig);
+    const tenant = await createTenant(org.id, "fractional-scaled", wallet.id);
+
+    await createEndpoint(tenant.id, "/fractional", {
+      scheme: "exact",
+      price: 1.235,
+    });
+
+    await createTokenPrice(tenant.id, null, { amount: 1000 });
+
+    const result = await buildTenantGatewaySpec(tenant.id);
+    t.not(result, null);
+    if (!result) return;
+
+    const paths = result.spec.paths as Record<string, unknown>;
+    const pathEntry = paths["/fractional"] as Record<string, unknown>;
+    const getOp = pathEntry.get as Record<string, unknown>;
+    const pricing = getOp["x-faremeter-pricing"] as Record<string, unknown>;
+    const rules = pricing.rules as Record<string, unknown>[];
+
+    t.equal(rules[0]?.capture, "1235");
+  },
+);
+
+await t.test(
+  "tenant-level price scaling warns when fractional multiplier rounds to zero",
+  async (t) => {
+    const org = await createOrg("Team", "team");
+    const walletConfig = {
+      solana: { "mainnet-beta": { address: "addr1" } },
+    };
+    const wallet = await createWallet(org.id, walletConfig);
+    const tenant = await createTenant(org.id, "rounds-zero", wallet.id);
+
+    await createEndpoint(tenant.id, "/rounds-zero", {
+      scheme: "exact",
+      price: 0.49,
+    });
+
+    await createTokenPrice(tenant.id, null, { amount: 1 });
+
+    const result = await buildTenantGatewaySpec(tenant.id);
+    t.not(result, null);
+    if (!result) return;
+
+    const paths = result.spec.paths as Record<string, unknown>;
+    const pathEntry = paths["/rounds-zero"] as Record<string, unknown>;
+    const getOp = pathEntry.get as Record<string, unknown>;
+    const pricing = getOp["x-faremeter-pricing"] as Record<string, unknown>;
+    const rules = pricing.rules as Record<string, unknown>[];
+
+    t.equal(rules[0]?.capture, "0");
+    t.ok(
+      result.warnings.some((w) => w.includes("rounds to 0")),
+      "must keep the existing warning for nonzero multipliers that round down",
+    );
+  },
+);
+
 await t.test("null endpoint price defaults multiplier to 1", async (t) => {
   const org = await createOrg("Team", "team");
   const walletConfig = {
@@ -505,29 +816,36 @@ await t.test(
   },
 );
 
-await t.test("non-exact scheme produces no pricing rules", async (t) => {
-  const org = await createOrg("Team", "team");
-  const walletConfig = {
-    solana: { "mainnet-beta": { address: "addr1" } },
-  };
-  const wallet = await createWallet(org.id, walletConfig);
-  const tenant = await createTenant(org.id, "flex-test", wallet.id);
+await t.test(
+  "flex scheme produces pricing rules and scheme mapping",
+  async (t) => {
+    const org = await createOrg("Team", "team");
+    const walletConfig = {
+      solana: { "mainnet-beta": { address: "addr1" } },
+    };
+    const wallet = await createWallet(org.id, walletConfig);
+    const tenant = await createTenant(org.id, "flex-test", wallet.id);
 
-  await createEndpoint(tenant.id, "/flex-endpoint", {
-    scheme: "flex",
-    price: 5000,
-  });
-  await createTokenPrice(tenant.id, null);
+    const endpoint = await createEndpoint(tenant.id, "/flex-endpoint", {
+      scheme: "flex",
+      price: 2,
+    });
+    await createTokenPrice(tenant.id, null, { amount: 1000 });
 
-  const result = await buildTenantGatewaySpec(tenant.id);
-  t.not(result, null);
-  if (!result) return;
+    const result = await buildTenantGatewaySpec(tenant.id);
+    t.not(result, null);
+    if (!result) return;
 
-  const paths = result.spec.paths as Record<string, unknown>;
-  const pathEntry = paths["/flex-endpoint"] as Record<string, unknown>;
-  const getOp = pathEntry.get as Record<string, unknown>;
-  t.notOk(getOp["x-faremeter-pricing"]);
-});
+    const paths = result.spec.paths as Record<string, unknown>;
+    const pathEntry = paths["/flex-endpoint"] as Record<string, unknown>;
+    const getOp = pathEntry.get as Record<string, unknown>;
+    const pricing = getOp["x-faremeter-pricing"] as Record<string, unknown>;
+    const rules = pricing.rules as Record<string, unknown>[];
+    t.matchOnly(rules, [{ match: "true", authorize: "2000", capture: "2000" }]);
+    t.equal(result.operationKeyToEndpointId["GET /flex-endpoint"], endpoint.id);
+    t.equal(result.operationKeyToScheme["GET /flex-endpoint"], "flex");
+  },
+);
 
 await t.test(
   "endpoint-level price on unconfigured network produces no rules without fallback",

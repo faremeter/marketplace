@@ -1,3 +1,4 @@
+import type { PricingRule } from "@faremeter/middleware-openapi";
 import { type } from "arktype";
 import { db } from "../db/instance.js";
 import { logger } from "../logger.js";
@@ -50,13 +51,14 @@ export type GatewaySpecResult = {
   spec: Record<string, unknown>;
   warnings: string[];
   operationKeyToEndpointId: Record<string, number>;
+  operationKeyToScheme: Record<string, string>;
 };
 
 type TokenPriceRow = {
   token_symbol: string;
   mint_address: string;
   network: string;
-  amount: string;
+  amount: string | number;
   decimals: number;
   endpoint_id: number | null;
 };
@@ -76,10 +78,174 @@ export type GatewaySpecInput = {
   tenantId: number;
   tenantName: string;
   defaultScheme?: string | null;
+  openApiSpec?: unknown;
   walletConfig: unknown;
   endpoints: EndpointRow[];
   tokenPrices: TokenPriceRow[];
 };
+
+function resolveEndpointScheme(
+  endpoint: Pick<EndpointRow, "scheme">,
+  defaultScheme: string,
+): string {
+  return endpoint.scheme ?? defaultScheme;
+}
+
+function isPricedX402Scheme(scheme: string | null): scheme is "exact" | "flex" {
+  return scheme === "exact" || scheme === "flex";
+}
+
+function isFreeEndpoint(endpoint: Pick<EndpointRow, "price">): boolean {
+  return endpoint.price === 0;
+}
+
+function normalizeAtomicAmount(amount: string | number): string {
+  return typeof amount === "number" ? String(amount) : amount;
+}
+
+function parseAtomicAmount(amount: string | number): bigint {
+  const normalized = normalizeAtomicAmount(amount);
+  if (!/^\d+$/.test(normalized)) {
+    throw new Error(
+      `Atomic amount must be a non-negative integer: ${normalized}`,
+    );
+  }
+  return BigInt(normalized);
+}
+
+function decimalStringToRational(raw: string): {
+  numerator: bigint;
+  denominator: bigint;
+} {
+  const match = /^(\d+)(?:\.(\d+))?(?:e([+-]?\d+))?$/i.exec(raw);
+  if (!match) {
+    throw new Error(`Multiplier must be a non-negative finite number: ${raw}`);
+  }
+
+  const whole = match[1] ?? "0";
+  const fraction = match[2] ?? "";
+  const exponent = match[3] ? Number(match[3]) : 0;
+  const digits = `${whole}${fraction}`.replace(/^0+(?=\d)/, "");
+  const decimalPlaces = fraction.length - exponent;
+
+  if (decimalPlaces <= 0) {
+    return {
+      numerator: BigInt(digits) * 10n ** BigInt(-decimalPlaces),
+      denominator: 1n,
+    };
+  }
+
+  return {
+    numerator: BigInt(digits),
+    denominator: 10n ** BigInt(decimalPlaces),
+  };
+}
+
+function scaleAtomicAmount(
+  amount: string | number,
+  multiplier: number,
+): string {
+  if (!Number.isFinite(multiplier) || multiplier < 0) {
+    throw new Error(
+      `Multiplier must be a non-negative finite number: ${multiplier}`,
+    );
+  }
+
+  const atomicAmount = parseAtomicAmount(amount);
+  const { numerator, denominator } = decimalStringToRational(
+    multiplier.toString(),
+  );
+  const product = atomicAmount * numerator;
+  const quotient = product / denominator;
+  const remainder = product % denominator;
+  const rounded = remainder * 2n >= denominator ? quotient + 1n : quotient;
+  return rounded.toString();
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function parseOpenApiSpec(raw: unknown): Record<string, unknown> | null {
+  if (raw === null || raw === undefined) return null;
+  if (isRecord(raw)) return raw;
+  if (typeof raw !== "string") return null;
+
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    return isRecord(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+function getOpenApiPaths(
+  openApiSpec: Record<string, unknown> | null,
+): Record<string, unknown> {
+  return isRecord(openApiSpec?.paths) ? openApiSpec.paths : {};
+}
+
+function getOpenApiPathItem(
+  openApiSpec: Record<string, unknown> | null,
+  path: string,
+): Record<string, unknown> | null {
+  const item = getOpenApiPaths(openApiSpec)[path];
+  return isRecord(item) ? item : null;
+}
+
+function getOpenApiOperation(
+  openApiSpec: Record<string, unknown> | null,
+  path: string,
+  methodLower: string,
+): Record<string, unknown> | null {
+  const operation = getOpenApiPathItem(openApiSpec, path)?.[methodLower];
+  return isRecord(operation) ? operation : null;
+}
+
+function hasExplicitPricingRules(raw: unknown): boolean {
+  return isRecord(raw) && Array.isArray(raw.rules);
+}
+
+function hasOpenApiPricingRulesForOperation(
+  openApiSpec: Record<string, unknown> | null,
+  path: string,
+  methodLower: string,
+): boolean {
+  const pathItem = getOpenApiPathItem(openApiSpec, path);
+  const operation = getOpenApiOperation(openApiSpec, path, methodLower);
+  return (
+    hasExplicitPricingRules(operation?.["x-faremeter-pricing"]) ||
+    hasExplicitPricingRules(pathItem?.["x-faremeter-pricing"]) ||
+    hasExplicitPricingRules(openApiSpec?.["x-faremeter-pricing"])
+  );
+}
+
+function mergeRecordValues(
+  left: unknown,
+  right: Record<string, unknown>,
+): Record<string, unknown> {
+  return {
+    ...(isRecord(left) ? left : {}),
+    ...right,
+  };
+}
+
+function mergePricingExtension(
+  openApiSpec: Record<string, unknown> | null,
+  rates: Record<string, number>,
+): Record<string, unknown> {
+  return {
+    ...(isRecord(openApiSpec?.["x-faremeter-pricing"])
+      ? openApiSpec["x-faremeter-pricing"]
+      : {}),
+    rates: mergeRecordValues(
+      isRecord(openApiSpec?.["x-faremeter-pricing"])
+        ? openApiSpec["x-faremeter-pricing"].rates
+        : undefined,
+      rates,
+    ),
+  };
+}
 
 export function buildTenantGatewaySpecFromData(
   input: GatewaySpecInput,
@@ -95,6 +261,7 @@ export function buildTenantGatewaySpecFromData(
   const walletConfig: GatewayWalletConfig = walletConfigParsed;
   const { endpoints, tokenPrices } = input;
   const defaultScheme = input.defaultScheme ?? "exact";
+  const openApiSpec = parseOpenApiSpec(input.openApiSpec);
   const warnings: string[] = [];
 
   // Build x-faremeter-assets from tenant-level token prices (endpoint_id IS NULL)
@@ -134,16 +301,17 @@ export function buildTenantGatewaySpecFromData(
 
   const paths: Record<string, unknown> = {};
   const operationKeyToEndpointId: Record<string, number> = {};
+  const operationKeyToScheme: Record<string, string> = {};
 
   for (const endpoint of endpoints) {
     const effectiveEndpoint = {
       ...endpoint,
-      scheme: endpoint.scheme ?? defaultScheme,
+      scheme: resolveEndpointScheme(endpoint, defaultScheme),
     };
     const scheme = effectiveEndpoint.scheme;
 
     // Free endpoints are excluded — handled by the catch-all
-    if (scheme === "free") continue;
+    if (!isPricedX402Scheme(scheme) || isFreeEndpoint(endpoint)) continue;
 
     const sourcePaths = endpoint.openapi_source_paths;
     const resolvedPaths: string[] = [];
@@ -176,11 +344,6 @@ export function buildTenantGatewaySpecFromData(
     warnings.push(...pricingResult.warnings);
     Object.assign(assets, pricingResult.additionalAssets);
 
-    const pricingExtension =
-      pricingResult.rules.length > 0
-        ? { "x-faremeter-pricing": { rules: pricingResult.rules } }
-        : {};
-
     // ANY expands to standard content-bearing methods. HEAD is served by
     // nginx natively from the GET handler, and OPTIONS (CORS preflight)
     // should not require payment. Tenants can still price HEAD or OPTIONS
@@ -195,6 +358,20 @@ export function buildTenantGatewaySpecFromData(
 
       for (const openApiPath of resolvedPaths) {
         const operationKey = `${method} ${openApiPath}`;
+        const sourceOperation = getOpenApiOperation(
+          openApiSpec,
+          openApiPath,
+          methodLower,
+        );
+        const usesOpenApiPricing = hasOpenApiPricingRulesForOperation(
+          openApiSpec,
+          openApiPath,
+          methodLower,
+        );
+        const pricingExtension =
+          !usesOpenApiPricing && pricingResult.rules.length > 0
+            ? { "x-faremeter-pricing": { rules: pricingResult.rules } }
+            : {};
 
         // Endpoints are ordered by priority ASC (lower number = higher priority).
         // First endpoint to claim a method+path wins; duplicates are skipped.
@@ -205,15 +382,25 @@ export function buildTenantGatewaySpecFromData(
           continue;
         }
 
-        const existing = (paths[openApiPath] ?? {}) as Record<string, unknown>;
+        const existing = mergeRecordValues(
+          getOpenApiPathItem(openApiSpec, openApiPath),
+          paths[openApiPath] as Record<string, unknown>,
+        );
         existing[methodLower] = {
-          summary: endpoint.description ?? `Endpoint: ${openApiPath}`,
-          responses: { "200": { description: "Successful response" } },
+          ...(sourceOperation ?? {}),
+          summary:
+            endpoint.description ??
+            sourceOperation?.summary ??
+            `Endpoint: ${openApiPath}`,
+          responses: sourceOperation?.responses ?? {
+            "200": { description: "Successful response" },
+          },
           ...pricingExtension,
         };
         paths[openApiPath] = existing;
 
         operationKeyToEndpointId[operationKey] = endpoint.id;
+        operationKeyToScheme[operationKey] = scheme;
       }
     }
   }
@@ -232,12 +419,15 @@ export function buildTenantGatewaySpecFromData(
       title: input.tenantName,
       version: "1.0.0",
     },
-    "x-faremeter-assets": assets,
-    "x-faremeter-pricing": { rates },
+    "x-faremeter-assets": mergeRecordValues(
+      openApiSpec?.["x-faremeter-assets"],
+      assets,
+    ),
+    "x-faremeter-pricing": mergePricingExtension(openApiSpec, rates),
     paths,
   };
 
-  return { spec, warnings, operationKeyToEndpointId };
+  return { spec, warnings, operationKeyToEndpointId, operationKeyToScheme };
 }
 
 export async function buildTenantGatewaySpec(
@@ -250,6 +440,7 @@ export async function buildTenantGatewaySpec(
       "tenants.id",
       "tenants.name",
       "tenants.default_scheme",
+      "tenants.openapi_spec",
       "wallets.wallet_config",
     ])
     .where("tenants.id", "=", tenantId)
@@ -279,22 +470,43 @@ export async function buildTenantGatewaySpec(
     tenantId,
     tenantName: tenantRow.name,
     defaultScheme: tenantRow.default_scheme,
+    openApiSpec: tenantRow.openapi_spec,
     walletConfig: tenantRow.wallet_config,
     endpoints,
     tokenPrices: tokenPrices.map((tp) => ({
       ...tp,
       // SQLite returns integer columns as numbers; coerce to string to match
       // the production Postgres schema where amount is bigint (text).
-      amount: String(tp.amount), // eslint-disable-line @typescript-eslint/no-unnecessary-type-conversion -- runtime type differs from Kysely schema
+      amount: normalizeAtomicAmount(tp.amount),
     })),
   });
 }
 
 type PricingRulesResult = {
-  rules: Record<string, unknown>[];
+  rules: PricingRule[];
   warnings: string[];
   additionalAssets: Record<string, unknown>;
 };
+
+type FixedPricePolicy = {
+  kind: "fixed-price";
+  scheme: "exact" | "flex";
+  amount: string;
+};
+
+function buildPricingRuleFromFixedPricePolicy(
+  policy: FixedPricePolicy,
+): PricingRule {
+  if (policy.scheme === "flex") {
+    return {
+      match: "true",
+      authorize: policy.amount,
+      capture: policy.amount,
+    };
+  }
+
+  return { match: "true", capture: policy.amount };
+}
 
 function buildPricingRules(
   endpoint: EndpointRow,
@@ -310,8 +522,7 @@ function buildPricingRules(
   };
   const scheme = endpoint.scheme;
 
-  if (scheme !== "exact") {
-    // Only exact scheme produces one-phase pricing rules in this builder
+  if (!isPricedX402Scheme(scheme)) {
     return result;
   }
 
@@ -338,7 +549,13 @@ function buildPricingRules(
           recipient,
         };
       }
-      result.rules.push({ match: "true", capture: tp.amount });
+      result.rules.push(
+        buildPricingRuleFromFixedPricePolicy({
+          kind: "fixed-price",
+          scheme,
+          amount: normalizeAtomicAmount(tp.amount),
+        }),
+      );
     }
   } else if (tenantPrices.length > 0) {
     // Fall back to tenant-level token prices combined with endpoint.price
@@ -349,12 +566,6 @@ function buildPricingRules(
     }
     const endpointMultiplier = endpoint.price ?? 1;
 
-    if (endpointMultiplier === 0) {
-      result.warnings.push(
-        `Endpoint ${endpoint.id}: scheme is "exact" but price is 0 — endpoint will be routed through the payment flow but capture nothing; use scheme "free" to mark it as free`,
-      );
-    }
-
     for (const tp of tenantPrices) {
       const alias = `${tp.network}-${tp.token_symbol}`;
       if (!existingAssets[alias]) {
@@ -362,13 +573,20 @@ function buildPricingRules(
         continue;
       }
       // Scale the tenant-level token price amount by the endpoint multiplier
-      const scaledAmount = Math.round(Number(tp.amount) * endpointMultiplier);
-      if (scaledAmount === 0 && endpointMultiplier !== 0) {
+      const amount = normalizeAtomicAmount(tp.amount);
+      const scaledAmount = scaleAtomicAmount(amount, endpointMultiplier);
+      if (scaledAmount === "0" && endpointMultiplier !== 0) {
         result.warnings.push(
-          `Endpoint ${endpoint.id}: scaled amount for asset "${alias}" rounds to 0 (amount=${tp.amount}, multiplier=${endpointMultiplier})`,
+          `Endpoint ${endpoint.id}: scaled amount for asset "${alias}" rounds to 0 (amount=${amount}, multiplier=${endpointMultiplier})`,
         );
       }
-      result.rules.push({ match: "true", capture: String(scaledAmount) });
+      result.rules.push(
+        buildPricingRuleFromFixedPricePolicy({
+          kind: "fixed-price",
+          scheme,
+          amount: scaledAmount,
+        }),
+      );
     }
   }
 
