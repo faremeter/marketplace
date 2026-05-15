@@ -1,8 +1,10 @@
+import { AsyncLocalStorage } from "node:async_hooks";
 import { readFileSync, watchFile } from "fs";
 import { serve } from "@hono/node-server";
-import { createMultiSiteApp } from "@faremeter/sidecar/app";
-import type { CreateAppOpts, MultiSiteConfig } from "@faremeter/sidecar/app";
+import { createApp } from "@faremeter/sidecar/app";
+import type { CreateAppOpts } from "@faremeter/sidecar/app";
 import { createHTTPFacilitatorHandler } from "@faremeter/middleware";
+import type { FacilitatorHandler } from "@faremeter/types/facilitator";
 import { extractSpec } from "@faremeter/middleware-openapi";
 import type {
   CaptureResponse,
@@ -10,6 +12,7 @@ import type {
 } from "@faremeter/middleware-openapi";
 import type { HandlerCapabilities } from "@faremeter/types/pricing";
 import { normalizeNetworkId } from "@faremeter/info";
+import { Hono, type Context } from "hono";
 
 const CONFIG_PATH =
   process.env.SIDECAR_CONFIG_PATH ?? "/etc/faremeter-sidecar/config.json";
@@ -18,12 +21,14 @@ const CONTROL_PLANE_ADDRS_PATH =
 const CONTROL_PLANE_ADDRS = process.env.CONTROL_PLANE_ADDRS;
 const WATCH_CONFIG = process.env.SIDECAR_WATCH_CONFIG === "true";
 const PORT = parseInt(process.env.PORT ?? "4002", 10);
+const schemeContext = new AsyncLocalStorage<{ scheme?: string }>();
 
 type SiteConfig = {
   spec: Record<string, unknown>;
   baseURL: string;
   capabilities: HandlerCapabilities;
   operationKeyToEndpointId: Record<string, number>;
+  operationKeyToScheme?: Record<string, string>;
   tenantName: string;
   orgSlug: string | null;
 };
@@ -75,11 +80,50 @@ function toFiniteAmount(raw: string): number {
 
 function extractTxHash(
   payment: NonNullable<CaptureResponse["payment"]>,
-): string {
+  scheme: string | undefined,
+): string | null {
+  if (scheme === "flex") {
+    return null;
+  }
+
   if (payment.protocol === "mpp") {
     return payment.settlement.reference;
   }
   return payment.settlement.transaction;
+}
+
+function buildPaymentMetadata(
+  payment: NonNullable<CaptureResponse["payment"]>,
+  scheme: string | undefined,
+): Record<string, unknown> | null {
+  if (scheme === "flex") {
+    const authorizationId =
+      payment.protocol === "mpp"
+        ? payment.settlement.reference
+        : payment.settlement.transaction;
+
+    return {
+      scheme: "flex",
+      settlementStatus: "pending_finalization",
+      authorizationId,
+      note: "Flex settlement returned an authorization ID; the final Solana signature is emitted later by facilitator flush.",
+    };
+  }
+
+  if (payment.protocol === "mpp") {
+    return {
+      scheme: "mpp",
+      reference: payment.settlement.reference,
+    };
+  }
+
+  return null;
+}
+
+function normalizeClientIp(value: string | undefined): string | null {
+  const first = value?.split(",")[0]?.trim();
+  if (!first || first.toLowerCase() === "unknown") return null;
+  return first;
 }
 
 function buildOnCapture(
@@ -125,27 +169,25 @@ function buildOnCapture(
     }
 
     const addr = pickControlPlaneAddr(addrs);
+    const scheme = site.operationKeyToScheme?.[operationKey];
 
     const reqInfo = result.request;
     const forwardedFor =
-      reqInfo.headers["x-forwarded-for"] ??
-      reqInfo.headers["x-real-ip"] ??
-      "unknown";
-    const [clientIp = "unknown"] = forwardedFor.split(",");
+      reqInfo.headers["x-forwarded-for"] ?? reqInfo.headers["x-real-ip"];
     const body = {
       ngx_request_id: reqInfo.headers["x-request-id"] ?? crypto.randomUUID(),
       tenant_name: site.tenantName,
       org_slug: site.orgSlug,
       endpoint_id: endpointId,
       amount: toFiniteAmount(amountStr),
-      tx_hash: extractTxHash(result.payment),
+      tx_hash: extractTxHash(result.payment, scheme),
       network: asset.chain,
       token_symbol: assetKey.slice(asset.chain.length + 1),
       mint_address: asset.token,
       request_path: reqInfo.path,
-      client_ip: clientIp.trim(),
+      client_ip: normalizeClientIp(forwardedFor),
       request_method: reqInfo.method,
-      metadata: null,
+      metadata: buildPaymentMetadata(result.payment, scheme),
     };
 
     const response = await fetch(`http://${addr}/internal/transactions`, {
@@ -181,9 +223,36 @@ function normalizeRuntimeCapabilities(
 ): HandlerCapabilities {
   return {
     ...capabilities,
+    schemes: capabilities.schemes ?? [],
     networks: capabilities.networks.map((network) =>
       normalizeNetworkId(network),
     ),
+  };
+}
+
+function createSchemeFilteringHTTPHandler(
+  facilitatorURL: string,
+  capabilities: HandlerCapabilities,
+): FacilitatorHandler {
+  const delegate = createHTTPFacilitatorHandler(facilitatorURL, {
+    capabilities,
+  });
+
+  return {
+    ...delegate,
+    capabilities,
+    async getRequirements(args) {
+      const scheme = schemeContext.getStore()?.scheme;
+      const accepts = scheme
+        ? args.accepts.filter((accept) => accept.scheme === scheme)
+        : args.accepts;
+
+      if (scheme && accepts.length === 0) {
+        throw new Error(`No payment requirements matched scheme "${scheme}"`);
+      }
+
+      return delegate.getRequirements({ ...args, accepts });
+    },
   };
 }
 
@@ -212,8 +281,38 @@ function loadConfig(): SidecarConfig {
   return parseSidecarConfig(raw);
 }
 
-function buildSites(config: SidecarConfig): MultiSiteConfig {
-  const sites: MultiSiteConfig = {};
+type SiteRuntime = {
+  app: ReturnType<typeof createApp>["app"];
+  operationKeyToScheme?: Record<string, string>;
+};
+
+function createSiteApp(
+  config: SidecarConfig,
+  site: SiteConfig,
+  transactionRecordingSpec: FaremeterSpec,
+): ReturnType<typeof createApp>["app"] {
+  if (!config.facilitatorURL) {
+    throw new Error("facilitatorURL is required when sites are configured");
+  }
+
+  const runtimeSpec = normalizeRuntimeSpec(transactionRecordingSpec);
+  const capabilities = normalizeRuntimeCapabilities(site.capabilities);
+  const x402Handlers = [
+    createSchemeFilteringHTTPHandler(config.facilitatorURL, capabilities),
+  ];
+
+  const opts: CreateAppOpts = {
+    spec: runtimeSpec,
+    baseURL: site.baseURL,
+    x402Handlers,
+    onCapture: buildOnCapture(site, transactionRecordingSpec),
+  };
+
+  return createApp(opts).app;
+}
+
+function buildSites(config: SidecarConfig): Record<string, SiteRuntime> {
+  const sites: Record<string, SiteRuntime> = {};
 
   if (!config.facilitatorURL) {
     if (Object.keys(config.sites).length > 0) {
@@ -223,41 +322,85 @@ function buildSites(config: SidecarConfig): MultiSiteConfig {
   }
 
   for (const [slug, site] of Object.entries(config.sites)) {
-    const rawFaremeterSpec = extractSpec(site.spec);
-    const faremeterSpec = normalizeRuntimeSpec(rawFaremeterSpec);
-    const capabilities = normalizeRuntimeCapabilities(site.capabilities);
-    const x402Handlers = [
-      createHTTPFacilitatorHandler(config.facilitatorURL, {
-        capabilities,
+    const transactionRecordingSpec = extractSpec(site.spec);
+    sites[slug] = {
+      app: createSiteApp(config, site, transactionRecordingSpec),
+      ...(site.operationKeyToScheme !== undefined && {
+        operationKeyToScheme: site.operationKeyToScheme,
       }),
-    ];
-
-    const opts: CreateAppOpts = {
-      spec: faremeterSpec,
-      baseURL: site.baseURL,
-      x402Handlers,
-      // onCapture needs the raw spec so recorded transactions keep the control-plane
-      // network name and token-symbol parsing from the original asset key.
-      onCapture: buildOnCapture(site, rawFaremeterSpec),
     };
-
-    sites[slug] = opts;
   }
 
   return sites;
 }
 
+async function readOperationKey(req: Request): Promise<string | null> {
+  try {
+    const body: unknown = await req.clone().json();
+    if (typeof body !== "object" || body === null) return null;
+    const operationKey = (body as Record<string, unknown>).operationKey;
+    return typeof operationKey === "string" ? operationKey : null;
+  } catch {
+    return null;
+  }
+}
+
+function stripSitePrefix(req: Request, slug: string): Request {
+  const url = new URL(req.url);
+  const prefix = `/sites/${slug}`;
+  url.pathname = url.pathname.startsWith(prefix)
+    ? url.pathname.slice(prefix.length) || "/"
+    : url.pathname;
+  return new Request(url, req);
+}
+
+function sidecarRouteError(c: Context, error: string) {
+  if (c.req.path.endsWith("/response")) {
+    return c.json({ error }, 422);
+  }
+  return c.json({ status: 400, body: { error } });
+}
+
+function createOperationSchemeApp(sites: Record<string, SiteRuntime>) {
+  const app = new Hono();
+
+  for (const [slug, site] of Object.entries(sites)) {
+    app.all(`/sites/${slug}/*`, async (c) => {
+      const operationKey = await readOperationKey(c.req.raw);
+      const scheme = operationKey
+        ? site.operationKeyToScheme?.[operationKey]
+        : undefined;
+
+      if (!operationKey) {
+        return sidecarRouteError(c, "Missing operationKey");
+      }
+      if (site.operationKeyToScheme && !scheme) {
+        return sidecarRouteError(
+          c,
+          `No payment scheme mapped for operation "${operationKey}"`,
+        );
+      }
+
+      return schemeContext.run(scheme === undefined ? {} : { scheme }, () =>
+        site.app.fetch(stripSitePrefix(c.req.raw, slug), c.env),
+      );
+    });
+  }
+
+  return { app };
+}
+
 const initialConfig = loadConfig();
 const initialSites = buildSites(initialConfig);
 
-let current = createMultiSiteApp(initialSites);
+let current = createOperationSchemeApp(initialSites);
 
 function reloadConfig(reason: string): void {
   log("info", `Reloading config (${reason})...`);
   try {
     const newConfig = loadConfig();
     const newSites = buildSites(newConfig);
-    current = createMultiSiteApp(newSites);
+    current = createOperationSchemeApp(newSites);
     log("info", "Config reloaded successfully");
   } catch (err) {
     log("error", `Failed to reload config, keeping previous: ${String(err)}`);

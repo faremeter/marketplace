@@ -16,6 +16,18 @@ const SIDECAR_URL = env.SIDECAR_URL ?? "http://127.0.0.1:4002";
 const PROXY_BASE_PROTOCOL = process.env.PROXY_BASE_PROTOCOL ?? "https";
 const PROXY_BASE_PORT = process.env.PROXY_BASE_PORT;
 
+function deriveSchemes(
+  operationKeys: string[],
+  operationKeyToScheme: Record<string, string>,
+): string[] {
+  const schemes = new Set<string>();
+  for (const key of operationKeys) {
+    const scheme = operationKeyToScheme[key];
+    if (scheme) schemes.add(scheme);
+  }
+  return [...schemes];
+}
+
 function sanitizeSlugPart(raw: string): string {
   return raw
     .toLowerCase()
@@ -62,6 +74,7 @@ export async function buildNodeConfig(nodeId: number) {
       "tenants.backend_url",
       "tenants.wallet_id",
       "tenants.default_scheme",
+      "tenants.openapi_spec",
       "tenants.upstream_auth_header",
       "tenants.upstream_auth_value",
       "tenants.org_slug",
@@ -112,6 +125,7 @@ export async function buildNodeConfig(nodeId: number) {
       tenantName: tenant.name,
       defaultScheme: tenant.default_scheme,
       walletConfig: tenant.wallet_config,
+      openApiSpec: tenant.openapi_spec,
       endpoints: endpoints.map((e) => ({
         id: e.id,
         path: e.path,
@@ -140,17 +154,22 @@ export async function buildNodeConfig(nodeId: number) {
       continue;
     }
 
-    const { spec, operationKeyToEndpointId } = specResult;
+    const { spec, operationKeyToEndpointId, operationKeyToScheme } = specResult;
     const parsedSpec = extractGatewaySpec(spec);
     const faremeterSpec = extractSpec(spec);
 
+    const operationKeys = Object.keys(faremeterSpec.operations);
     const networks = [
       ...new Set(Object.values(faremeterSpec.assets).map((a) => a.chain)),
     ];
     const assets = [
       ...new Set(Object.values(faremeterSpec.assets).map((a) => a.token)),
     ];
-    const capabilities = { schemes: ["exact"], networks, assets };
+    const capabilities = {
+      schemes: deriveSchemes(operationKeys, operationKeyToScheme),
+      networks,
+      assets,
+    };
 
     const extraDirectives: string[] = [];
     if (tenant.upstream_auth_header && tenant.upstream_auth_value) {
@@ -207,6 +226,7 @@ export async function buildNodeConfig(nodeId: number) {
       sidecarPrefix: gatewaySlug,
       baseURL,
       operationKeyToEndpointId,
+      operationKeyToScheme,
       capabilities,
     };
 
@@ -215,6 +235,7 @@ export async function buildNodeConfig(nodeId: number) {
       baseURL,
       capabilities,
       operationKeyToEndpointId,
+      operationKeyToScheme,
       tenantName: tenant.name,
       orgSlug: tenant.org_slug,
     };

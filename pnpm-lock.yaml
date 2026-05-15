@@ -194,6 +194,9 @@ importers:
       '@hono/node-server':
         specifier: 'catalog:'
         version: 1.19.1(hono@4.9.0)
+      hono:
+        specifier: 'catalog:'
+        version: 4.9.0
     devDependencies:
       '@types/node':
         specifier: 'catalog:'

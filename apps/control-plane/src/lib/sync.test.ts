@@ -232,6 +232,13 @@ await t.test(
       networks: ["solana-mainnet-beta"],
       assets: ["EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"],
     });
+    t.same(site.operationKeyToScheme, {
+      "GET /items/{id}": "exact",
+      "POST /items/{id}": "exact",
+      "PUT /items/{id}": "exact",
+      "DELETE /items/{id}": "exact",
+      "PATCH /items/{id}": "exact",
+    });
 
     // Facilitator URL from env
     t.equal(result.sidecar.facilitatorURL, "http://facilitator.example.test");
@@ -247,6 +254,52 @@ await t.test(
     t.equal(tenantConfig.org_slug, "team");
     t.equal(tenantConfig.gateway_slug, "team--my-api");
     t.equal(tenantConfig.name, "my-api");
+  },
+);
+
+await t.test(
+  "mixed exact and flex endpoints advertise both schemes with per-operation map",
+  async (t) => {
+    const org = await createOrg("Team", "team");
+    const walletConfig = {
+      solana: { "mainnet-beta": { address: "SoLAddr123" } },
+    };
+    const wallet = await createWallet(org.id, walletConfig);
+    const node = await createNode("node-1");
+    const tenant = await createTenant(org.id, "mixed-api", wallet.id, {
+      org_slug: "team",
+    });
+    await linkTenantToNode(tenant.id, node.id);
+    await createEndpoint(tenant.id, "/exact", { scheme: "exact" });
+    await createEndpoint(tenant.id, "/flex", { scheme: "flex" });
+    await createTokenPrice(tenant.id, null);
+
+    const result = await buildNodeConfig(node.id);
+    t.not(result, null);
+    if (!result) return;
+
+    const site = result.sidecar.sites["team--mixed-api"] as Record<
+      string,
+      unknown
+    >;
+    t.same(site.capabilities, {
+      schemes: ["exact", "flex"],
+      networks: ["solana-mainnet-beta"],
+      assets: ["EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"],
+    });
+
+    const operationKeyToScheme = site.operationKeyToScheme as Record<
+      string,
+      string
+    >;
+    t.equal(operationKeyToScheme["GET /exact"], "exact");
+    t.equal(operationKeyToScheme["GET /flex"], "flex");
+
+    const gateway = result.gateway["team--mixed-api"] as Record<
+      string,
+      unknown
+    >;
+    t.same(gateway.operationKeyToScheme, operationKeyToScheme);
   },
 );
 
