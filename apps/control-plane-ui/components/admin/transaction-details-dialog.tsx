@@ -46,20 +46,6 @@ function getExplorerUrl(network: string | null, txHash: string): string {
   }
 }
 
-function getFlexAuthorizationId(metadata: unknown): string | null {
-  if (metadata === null || typeof metadata !== "object") return null;
-  const value = metadata as Record<string, unknown>;
-  if (
-    value.scheme === "flex" &&
-    value.settlementStatus === "pending_finalization" &&
-    typeof value.authorizationId === "string" &&
-    value.authorizationId.length > 0
-  ) {
-    return value.authorizationId;
-  }
-  return null;
-}
-
 function getMethodColor(method: string): string {
   switch (method.toUpperCase()) {
     case "GET":
@@ -113,7 +99,6 @@ export function TransactionDetailsDialog({
   onClose,
 }: TransactionDetailsDialogProps) {
   const metadata = transaction.metadata as Record<string, unknown> | null;
-  const flexAuthorizationId = getFlexAuthorizationId(metadata);
   const [jsonCollapsed, setJsonCollapsed] = useState<boolean | number>(1);
 
   return (
@@ -212,19 +197,6 @@ export function TransactionDetailsDialog({
                     >
                       <ExternalLinkIcon className="h-4 w-4" />
                     </a>
-                  </div>
-                </div>
-              )}
-              {flexAuthorizationId && (
-                <div className="mt-4 border-t border-gray-6 pt-4">
-                  <p className="text-xs text-gray-11">Flex Settlement</p>
-                  <div className="mt-1 space-y-2">
-                    <span className="inline-flex rounded-full border border-amber-700 bg-amber-900/30 px-3 py-1 text-sm font-medium text-amber-400">
-                      Pending finalization
-                    </span>
-                    <code className="block break-all rounded-md bg-gray-3 px-3 py-2 font-mono text-xs text-gray-12">
-                      {flexAuthorizationId}
-                    </code>
                   </div>
                 </div>
               )}
