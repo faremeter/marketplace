@@ -268,6 +268,59 @@ await t.test("POST /internal/transactions", async (t) => {
     },
   );
 
+  await t.test(
+    "accepts flex authorization metadata without tx_hash",
+    async (t) => {
+      const org = await createOrg("Team", "team");
+      const tenant = await createTenant(org.id, "my-tenant");
+
+      const res = await app.request("/internal/transactions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          tenant_name: tenant.name,
+          ngx_request_id: "req-flex-auth-001",
+          amount: 1000,
+          network: "solana-devnet",
+          request_path: "/api/flex",
+          metadata: {
+            scheme: "flex",
+            settlementStatus: "pending_finalization",
+            authorizationId: "123456789",
+          },
+        }),
+      });
+      t.equal(res.status, 200);
+    },
+  );
+
+  await t.test(
+    "rejects flex authorization metadata without network",
+    async (t) => {
+      const org = await createOrg("Team", "team");
+      const tenant = await createTenant(org.id, "my-tenant");
+
+      const res = await app.request("/internal/transactions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          tenant_name: tenant.name,
+          ngx_request_id: "req-flex-auth-no-network",
+          amount: 1000,
+          request_path: "/api/flex",
+          metadata: {
+            scheme: "flex",
+            settlementStatus: "pending_finalization",
+            authorizationId: "123456789",
+          },
+        }),
+      });
+      t.equal(res.status, 400);
+      const data = ErrorResponse.assert(await res.json());
+      t.ok(data.error.includes("network"));
+    },
+  );
+
   await t.test("accepts transaction with valid endpoint_id", async (t) => {
     const org = await createOrg("Team", "team");
     const tenant = await createTenant(org.id, "my-tenant");

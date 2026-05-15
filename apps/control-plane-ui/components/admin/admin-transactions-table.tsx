@@ -63,6 +63,20 @@ function getExplorerUrl(network: string | null, txHash: string): string {
   }
 }
 
+function getFlexAuthorizationId(metadata: unknown): string | null {
+  if (metadata === null || typeof metadata !== "object") return null;
+  const value = metadata as Record<string, unknown>;
+  if (
+    value.scheme === "flex" &&
+    value.settlementStatus === "pending_finalization" &&
+    typeof value.authorizationId === "string" &&
+    value.authorizationId.length > 0
+  ) {
+    return value.authorizationId;
+  }
+  return null;
+}
+
 function getMethodColor(method: string): string {
   switch (method.toUpperCase()) {
     case "GET":
@@ -186,7 +200,18 @@ export function AdminTransactionsTable({
                   )}
                 </td>
                 <td className="px-4 py-3">
-                  {tx.tx_hash ? (
+                  {getFlexAuthorizationId(tx.metadata) ? (
+                    <div className="space-y-1">
+                      <span className="inline-flex rounded-full border border-amber-700 bg-amber-900/30 px-2 py-0.5 text-xs text-amber-400">
+                        Pending finalization
+                      </span>
+                      <code className="block rounded bg-gray-3 px-1.5 py-0.5 font-mono text-xs text-gray-12">
+                        {truncateHash(
+                          getFlexAuthorizationId(tx.metadata) ?? "",
+                        )}
+                      </code>
+                    </div>
+                  ) : tx.tx_hash ? (
                     <div className="flex items-center gap-1.5">
                       <code className="rounded bg-gray-3 px-1.5 py-0.5 font-mono text-xs text-gray-12">
                         {truncateHash(tx.tx_hash)}

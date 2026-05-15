@@ -8,6 +8,17 @@ import { buildNodeConfig } from "../lib/sync.js";
 
 export const internalRoutes = new Hono();
 
+function hasFlexAuthorizationMetadata(
+  metadata: Record<string, unknown> | null | undefined,
+): boolean {
+  return (
+    metadata?.scheme === "flex" &&
+    metadata.settlementStatus === "pending_finalization" &&
+    typeof metadata.authorizationId === "string" &&
+    metadata.authorizationId.length > 0
+  );
+}
+
 internalRoutes.get("/nodes/:id/sync", async (c) => {
   const id = parseInt(c.req.param("id"));
 
@@ -24,10 +35,22 @@ internalRoutes.post(
   async (c) => {
     const body = c.req.valid("json");
 
-    // Business logic: paid transactions require tx_hash and network
-    if (body.amount > 0 && (!body.tx_hash || !body.network)) {
+    // Business logic: paid transactions require a network and either a final
+    // transaction hash or flex authorization metadata for async settlement.
+    const metadata = body.metadata as
+      | Record<string, unknown>
+      | null
+      | undefined;
+    if (
+      body.amount > 0 &&
+      (!body.network ||
+        (!body.tx_hash && !hasFlexAuthorizationMetadata(metadata)))
+    ) {
       return c.json(
-        { error: "Paid transactions require tx_hash and network" },
+        {
+          error:
+            "Paid transactions require network and either tx_hash or flex authorization metadata",
+        },
         400,
       );
     }
@@ -86,7 +109,7 @@ internalRoutes.post(
         request_path: body.request_path,
         client_ip: body.client_ip ?? null,
         request_method: body.request_method ?? null,
-        metadata: (body.metadata as Record<string, unknown>) ?? null,
+        metadata: metadata ?? null,
         token_symbol: body.token_symbol ?? null,
         mint_address: body.mint_address ?? null,
       });
