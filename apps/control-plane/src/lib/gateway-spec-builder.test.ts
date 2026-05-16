@@ -359,6 +359,11 @@ await t.test(
       .set({ openapi_spec: JSON.stringify(importedSpec) })
       .where("id", "=", tenant.id)
       .execute();
+    await createTokenPrice(tenant.id, null, {
+      mint: "tenant-default-mint",
+      network: "solana-devnet",
+      amount: 1000,
+    });
 
     const endpoint = await createEndpoint(tenant.id, "/v1/chat/completions", {
       scheme: "flex",
@@ -371,7 +376,16 @@ await t.test(
     if (!result) return;
 
     const assets = result.spec["x-faremeter-assets"] as Record<string, unknown>;
-    t.ok(assets["solana-devnet-USDC"], "must preserve OpenAPI asset");
+    t.same(
+      assets["solana-devnet-USDC"],
+      {
+        chain: "solana-devnet",
+        token: "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU",
+        decimals: 6,
+        recipient: "merchant-token-account",
+      },
+      "must preserve OpenAPI asset over same-alias tenant defaults",
+    );
 
     const pricing = result.spec["x-faremeter-pricing"] as Record<
       string,
@@ -407,6 +421,78 @@ await t.test(
       endpoint.id,
     );
     t.equal(result.operationKeyToScheme["POST /v1/chat/completions"], "flex");
+  },
+);
+
+await t.test(
+  "does not publish imported methods that are not mapped to endpoints",
+  (t) => {
+    const result = buildTenantGatewaySpecFromData({
+      tenantId: 1,
+      tenantName: "method-leak",
+      walletConfig: {
+        solana: { devnet: { address: "tenant-default-wallet" } },
+      },
+      openApiSpec: {
+        openapi: "3.0.3",
+        info: { title: "Imported", version: "1.0.0" },
+        "x-faremeter-assets": {
+          "solana-devnet-USDC": {
+            chain: "solana-devnet",
+            token: "imported-mint",
+            decimals: 6,
+            recipient: "imported-recipient",
+          },
+        },
+        "x-faremeter-pricing": {
+          rates: { "solana-devnet-USDC": 1 },
+        },
+        paths: {
+          "/shared": {
+            post: {
+              responses: { "200": { description: "OK" } },
+              "x-faremeter-pricing": {
+                rules: [{ match: "$", capture: "50" }],
+              },
+            },
+          },
+        },
+      },
+      endpoints: [
+        {
+          id: 1,
+          path: "/shared",
+          path_pattern: "/shared",
+          openapi_source_paths: ["/shared"],
+          price: 1,
+          scheme: "exact",
+          description: null,
+          http_method: "GET",
+        },
+      ],
+      tokenPrices: [
+        {
+          token_symbol: "USDC",
+          mint_address: "tenant-default-mint",
+          network: "solana-devnet",
+          amount: "1000",
+          decimals: 6,
+          endpoint_id: null,
+        },
+      ],
+    });
+    t.not(result, null);
+    if (!result) return;
+
+    const paths = result.spec.paths as Record<string, Record<string, unknown>>;
+    t.ok(paths["/shared"]?.get, "mapped GET operation should be present");
+    t.notOk(
+      paths["/shared"]?.post,
+      "unmapped imported POST operation must not be published",
+    );
+    t.same(result.operationKeyToEndpointId, { "GET /shared": 1 });
+    t.same(result.operationKeyToScheme, { "GET /shared": "exact" });
+    t.end();
   },
 );
 

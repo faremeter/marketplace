@@ -185,12 +185,43 @@ function getOpenApiPaths(
   return isRecord(openApiSpec?.paths) ? openApiSpec.paths : {};
 }
 
+function getOpenApiAssets(
+  openApiSpec: Record<string, unknown> | null,
+): Record<string, unknown> {
+  return isRecord(openApiSpec?.["x-faremeter-assets"])
+    ? openApiSpec["x-faremeter-assets"]
+    : {};
+}
+
 function getOpenApiPathItem(
   openApiSpec: Record<string, unknown> | null,
   path: string,
 ): Record<string, unknown> | null {
   const item = getOpenApiPaths(openApiSpec)[path];
   return isRecord(item) ? item : null;
+}
+
+const OPEN_API_METHODS = new Set([
+  "get",
+  "put",
+  "post",
+  "delete",
+  "options",
+  "head",
+  "patch",
+  "trace",
+]);
+
+function getOpenApiPathMetadata(
+  openApiSpec: Record<string, unknown> | null,
+  path: string,
+): Record<string, unknown> {
+  const pathItem = getOpenApiPathItem(openApiSpec, path);
+  if (!pathItem) return {};
+
+  return Object.fromEntries(
+    Object.entries(pathItem).filter(([key]) => !OPEN_API_METHODS.has(key)),
+  );
 }
 
 function getOpenApiOperation(
@@ -267,9 +298,11 @@ export function buildTenantGatewaySpecFromData(
   // Build x-faremeter-assets from tenant-level token prices (endpoint_id IS NULL)
   const tenantLevelPrices = tokenPrices.filter((tp) => tp.endpoint_id === null);
 
-  const assets: Record<string, unknown> = {};
+  const assets: Record<string, unknown> = { ...getOpenApiAssets(openApiSpec) };
   for (const tp of tenantLevelPrices) {
     const alias = `${tp.network}-${tp.token_symbol}`;
+    if (assets[alias]) continue;
+
     const recipient = resolveWalletAddress(walletConfig, tp.network);
 
     if (!recipient) {
@@ -383,7 +416,7 @@ export function buildTenantGatewaySpecFromData(
         }
 
         const existing = mergeRecordValues(
-          getOpenApiPathItem(openApiSpec, openApiPath),
+          getOpenApiPathMetadata(openApiSpec, openApiPath),
           paths[openApiPath] as Record<string, unknown>,
         );
         existing[methodLower] = {
@@ -419,10 +452,7 @@ export function buildTenantGatewaySpecFromData(
       title: input.tenantName,
       version: "1.0.0",
     },
-    "x-faremeter-assets": mergeRecordValues(
-      openApiSpec?.["x-faremeter-assets"],
-      assets,
-    ),
+    "x-faremeter-assets": assets,
     "x-faremeter-pricing": mergePricingExtension(openApiSpec, rates),
     paths,
   };
