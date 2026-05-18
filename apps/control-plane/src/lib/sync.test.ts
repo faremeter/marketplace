@@ -265,7 +265,7 @@ await t.test(
 );
 
 await t.test(
-  "mixed exact and flex endpoints generate scheme-specific sidecar sites",
+  "mixed exact and flex endpoints share one sidecar site",
   async (t) => {
     const org = await createOrg("Team", "team");
     const walletConfig = {
@@ -285,60 +285,43 @@ await t.test(
     t.not(result, null);
     if (!result) return;
 
-    t.notOk(result.sidecar.sites["team--mixed-api"]);
-    const exactSite = result.sidecar.sites["team--mixed-api--exact"] as Record<
+    const site = result.sidecar.sites["team--mixed-api"] as Record<
       string,
       unknown
     >;
-    const flexSite = result.sidecar.sites["team--mixed-api--flex"] as Record<
-      string,
-      unknown
-    >;
-    t.same(exactSite.capabilities, {
-      schemes: ["exact"],
-      networks: ["solana-mainnet-beta"],
-      assets: ["EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"],
-    });
-    t.same(flexSite.capabilities, {
-      schemes: ["flex"],
+    t.ok(site, "sidecar site uses the tenant gateway slug");
+    t.notOk(result.sidecar.sites["team--mixed-api--exact"]);
+    t.notOk(result.sidecar.sites["team--mixed-api--flex"]);
+    t.same(site.capabilities, {
+      schemes: ["exact", "flex"],
       networks: ["solana-mainnet-beta"],
       assets: ["EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"],
     });
 
-    const exactOperationKeyToScheme = exactSite.operationKeyToScheme as Record<
+    const operationKeyToScheme = site.operationKeyToScheme as Record<
       string,
       string
     >;
-    const flexOperationKeyToScheme = flexSite.operationKeyToScheme as Record<
-      string,
-      string
-    >;
-    t.equal(exactOperationKeyToScheme["GET /exact"], "exact");
-    t.notOk(exactOperationKeyToScheme["GET /flex"]);
-    t.equal(flexOperationKeyToScheme["GET /flex"], "flex");
-    t.notOk(flexOperationKeyToScheme["GET /exact"]);
+    t.equal(operationKeyToScheme["GET /exact"], "exact");
+    t.equal(operationKeyToScheme["GET /flex"], "flex");
 
     const gateway = result.gateway["team--mixed-api"] as Record<
       string,
       unknown
     >;
-    t.same(gateway.sidecarPrefixes, {
-      exact: "team--mixed-api--exact",
-      flex: "team--mixed-api--flex",
-    });
+    t.equal(gateway.sidecarPrefix, "team--mixed-api");
+    t.notOk(gateway.sidecarPrefixes);
     t.match(
       gateway.locationsConf as string,
-      'local sidecar_url = "http://127.0.0.1:4002/sites/team--mixed-api--exact"',
+      'local sidecar_url = "http://127.0.0.1:4002/sites/team--mixed-api"',
     );
-    t.match(
-      gateway.locationsConf as string,
-      'local sidecar_url = "http://127.0.0.1:4002/sites/team--mixed-api--flex"',
-    );
+    t.notMatch(gateway.locationsConf as string, /team--mixed-api--exact/);
+    t.notMatch(gateway.locationsConf as string, /team--mixed-api--flex/);
   },
 );
 
 await t.test(
-  "dynamic flex OpenAPI pricing survives scheme-specific sidecar split",
+  "dynamic OpenAPI pricing survives the shared tenant sidecar site",
   async (t) => {
     const org = await createOrg("Team", "team");
     const walletConfig = {
@@ -352,130 +335,6 @@ await t.test(
     const importedSpec = {
       openapi: "3.0.3",
       info: { title: "Dynamic mixed API", version: "1.0.0" },
-      "x-faremeter-assets": {
-        "solana-devnet-USDC": {
-          chain: "solana-devnet",
-          token: "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU",
-          decimals: 6,
-          recipient: "merchant-token-account",
-        },
-      },
-      "x-faremeter-pricing": {
-        rates: { "solana-devnet-USDC": 1000 },
-      },
-      paths: {
-        "/dynamic-flex": {
-          post: {
-            summary: "Dynamic Flex",
-            responses: { "200": { description: "OK" } },
-            "x-faremeter-pricing": {
-              rules: [
-                {
-                  match: "$",
-                  authorize: "coalesce($.request.body.max_tokens, 10)",
-                  capture: "$.response.body.usage.total_tokens",
-                },
-              ],
-            },
-          },
-        },
-      },
-    };
-
-    await db
-      .updateTable("tenants")
-      .set({ openapi_spec: JSON.stringify(importedSpec) })
-      .where("id", "=", tenant.id)
-      .execute();
-    await linkTenantToNode(tenant.id, node.id);
-    await createEndpoint(tenant.id, "/exact", { scheme: "exact" });
-    await createEndpoint(tenant.id, "/dynamic-flex", {
-      scheme: "flex",
-      http_method: "POST",
-      openapi_source_paths: ["/dynamic-flex"],
-    });
-    await createTokenPrice(tenant.id, null, {
-      network: "solana-devnet",
-      mint: "tenant-default-mint",
-    });
-
-    const result = await buildNodeConfig(node.id);
-    t.not(result, null);
-    if (!result) return;
-
-    const flexSite = result.sidecar.sites[
-      "team--dynamic-mixed--flex"
-    ] as Record<string, unknown>;
-    const exactSite = result.sidecar.sites[
-      "team--dynamic-mixed--exact"
-    ] as Record<string, unknown>;
-    t.same(flexSite.capabilities, {
-      schemes: ["flex"],
-      networks: ["solana-devnet"],
-      assets: ["4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU"],
-    });
-
-    const flexSpec = flexSite.spec as Record<string, unknown>;
-    const paths = flexSpec.paths as Record<string, Record<string, unknown>>;
-    t.ok(paths["/dynamic-flex"]?.post);
-    t.notOk(paths["/exact"]);
-    const operation = paths["/dynamic-flex"]?.post as Record<string, unknown>;
-    const pricing = operation["x-faremeter-pricing"] as Record<string, unknown>;
-    t.same(pricing.rules, [
-      {
-        match: "$",
-        authorize: "coalesce($.request.body.max_tokens, 10)",
-        capture: "$.response.body.usage.total_tokens",
-      },
-    ]);
-    t.same(flexSpec["x-faremeter-pricing"], {
-      rates: { "solana-devnet-USDC": 1000 },
-    });
-
-    const exactSpec = exactSite.spec as Record<string, unknown>;
-    const exactPaths = exactSpec.paths as Record<
-      string,
-      Record<string, unknown>
-    >;
-    const exactGet = exactPaths["/exact"]?.get as Record<string, unknown>;
-    t.same(exactGet["x-faremeter-pricing"], {
-      rates: { "solana-devnet-USDC": 1 },
-      rules: [{ match: "true", capture: "1000" }],
-    });
-    t.same(exactSpec["x-faremeter-pricing"], {
-      rates: { "solana-devnet-USDC": 1000 },
-    });
-
-    const gateway = result.gateway["team--dynamic-mixed"] as Record<
-      string,
-      unknown
-    >;
-    t.match(
-      gateway.locationsConf as string,
-      'local sidecar_url = "http://127.0.0.1:4002/sites/team--dynamic-mixed--exact"',
-    );
-    t.match(
-      gateway.locationsConf as string,
-      'local sidecar_url = "http://127.0.0.1:4002/sites/team--dynamic-mixed--flex"',
-    );
-  },
-);
-
-await t.test(
-  "dynamic exact OpenAPI pricing survives scheme-specific sidecar split",
-  async (t) => {
-    const org = await createOrg("Team", "team");
-    const walletConfig = {
-      solana: { devnet: { address: "SoLAddr123" } },
-    };
-    const wallet = await createWallet(org.id, walletConfig);
-    const node = await createNode("node-1");
-    const tenant = await createTenant(org.id, "dynamic-exact", wallet.id, {
-      org_slug: "team",
-    });
-    const importedSpec = {
-      openapi: "3.0.3",
-      info: { title: "Dynamic exact API", version: "1.0.0" },
       "x-faremeter-assets": {
         "solana-devnet-USDC": {
           chain: "solana-devnet",
@@ -541,31 +400,62 @@ await t.test(
     t.not(result, null);
     if (!result) return;
 
-    const exactSite = result.sidecar.sites[
-      "team--dynamic-exact--exact"
-    ] as Record<string, unknown>;
-    const flexSite = result.sidecar.sites[
-      "team--dynamic-exact--flex"
-    ] as Record<string, unknown>;
-
-    const exactSpec = exactSite.spec as Record<string, unknown>;
-    const exactPaths = exactSpec.paths as Record<
+    const site = result.sidecar.sites["team--dynamic-mixed"] as Record<
       string,
-      Record<string, unknown>
+      unknown
     >;
-    t.ok(exactPaths["/dynamic-exact"]?.post);
-    t.notOk(exactPaths["/dynamic-flex"]);
-    t.same(exactSpec["x-faremeter-pricing"], {
+    t.ok(site, "single shared sidecar site exists");
+    t.notOk(result.sidecar.sites["team--dynamic-mixed--exact"]);
+    t.notOk(result.sidecar.sites["team--dynamic-mixed--flex"]);
+    t.same(site.capabilities, {
+      schemes: ["exact", "flex"],
+      networks: ["solana-devnet"],
+      assets: ["4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU"],
+    });
+
+    const spec = site.spec as Record<string, unknown>;
+    const paths = spec.paths as Record<string, Record<string, unknown>>;
+    t.ok(paths["/dynamic-exact"]?.post);
+    t.ok(paths["/dynamic-flex"]?.post);
+    t.same(spec["x-faremeter-pricing"], {
       rates: { "solana-devnet-USDC": 1000 },
     });
 
-    const flexSpec = flexSite.spec as Record<string, unknown>;
-    const flexPaths = flexSpec.paths as Record<string, Record<string, unknown>>;
-    t.ok(flexPaths["/dynamic-flex"]?.post);
-    t.notOk(flexPaths["/dynamic-exact"]);
-    t.same(flexSpec["x-faremeter-pricing"], {
-      rates: { "solana-devnet-USDC": 1000 },
-    });
+    const exactOperation = paths["/dynamic-exact"]?.post as Record<
+      string,
+      unknown
+    >;
+    const flexOperation = paths["/dynamic-flex"]?.post as Record<
+      string,
+      unknown
+    >;
+    const exactPricing = exactOperation["x-faremeter-pricing"] as Record<
+      string,
+      unknown
+    >;
+    const flexPricing = flexOperation["x-faremeter-pricing"] as Record<
+      string,
+      unknown
+    >;
+    t.same(exactPricing.rules, [
+      { match: "$", capture: "$.response.body.usage.total_tokens" },
+    ]);
+    t.same(flexPricing.rules, [
+      {
+        match: "$",
+        authorize: "coalesce($.request.body.max_tokens, 10)",
+        capture: "$.response.body.usage.total_tokens",
+      },
+    ]);
+
+    const gateway = result.gateway["team--dynamic-mixed"] as Record<
+      string,
+      unknown
+    >;
+    t.match(
+      gateway.locationsConf as string,
+      'local sidecar_url = "http://127.0.0.1:4002/sites/team--dynamic-mixed"',
+    );
   },
 );
 

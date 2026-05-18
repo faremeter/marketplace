@@ -233,6 +233,37 @@ function getOpenApiOperation(
   return isRecord(operation) ? operation : null;
 }
 
+function getOpenApiMethods(
+  openApiSpec: Record<string, unknown> | null,
+  path: string,
+): string[] {
+  const pathItem = getOpenApiPathItem(openApiSpec, path);
+  if (!pathItem) return [];
+
+  return Object.keys(pathItem)
+    .filter((key) => OPEN_API_METHODS.has(key))
+    .map((method) => method.toUpperCase());
+}
+
+function getEndpointMethods(
+  endpoint: Pick<EndpointRow, "http_method">,
+  openApiSpec: Record<string, unknown> | null,
+  openApiPath: string,
+  usesOpenApiSource: boolean,
+): string[] {
+  if (endpoint.http_method !== "ANY") return [endpoint.http_method];
+
+  if (usesOpenApiSource) {
+    return getOpenApiMethods(openApiSpec, openApiPath);
+  }
+
+  // ANY expands to standard content-bearing methods. HEAD is served by
+  // nginx natively from the GET handler, and OPTIONS (CORS preflight)
+  // should not require payment. Tenants can still price HEAD or OPTIONS
+  // individually by setting http_method explicitly on the endpoint.
+  return ["GET", "POST", "PUT", "DELETE", "PATCH"];
+}
+
 function hasExplicitPricingRules(raw: unknown): boolean {
   return isRecord(raw) && Array.isArray(raw.rules);
 }
@@ -359,10 +390,10 @@ export function buildTenantGatewaySpecFromData(
     };
     const scheme = effectiveEndpoint.scheme;
 
-    // Free endpoints are excluded — handled by the catch-all
-    if (!isPricedX402Scheme(scheme) || isFreeEndpoint(endpoint)) continue;
+    if (!isPricedX402Scheme(scheme)) continue;
 
     const sourcePaths = endpoint.openapi_source_paths;
+    const usesOpenApiSource = Boolean(sourcePaths && sourcePaths.length > 0);
     const resolvedPaths: string[] = [];
 
     if (sourcePaths && sourcePaths.length > 0) {
@@ -393,30 +424,44 @@ export function buildTenantGatewaySpecFromData(
     warnings.push(...generatedPricing.warnings);
     Object.assign(assets, generatedPricing.additionalAssets);
 
-    // ANY expands to standard content-bearing methods. HEAD is served by
-    // nginx natively from the GET handler, and OPTIONS (CORS preflight)
-    // should not require payment. Tenants can still price HEAD or OPTIONS
-    // individually by setting http_method explicitly on the endpoint.
-    const methods =
-      endpoint.http_method === "ANY"
-        ? (["GET", "POST", "PUT", "DELETE", "PATCH"] as const)
-        : ([endpoint.http_method] as const);
+    for (const openApiPath of resolvedPaths) {
+      const methods = getEndpointMethods(
+        endpoint,
+        openApiSpec,
+        openApiPath,
+        usesOpenApiSource,
+      );
+      if (usesOpenApiSource && methods.length === 0) {
+        warnings.push(
+          `Endpoint ${endpoint.id}: OpenAPI source path "${openApiPath}" has no operations — skipping`,
+        );
+        continue;
+      }
 
-    for (const method of methods) {
-      const methodLower = method.toLowerCase();
-
-      for (const openApiPath of resolvedPaths) {
+      for (const method of methods) {
+        const methodLower = method.toLowerCase();
         const operationKey = `${method} ${openApiPath}`;
         const sourceOperation = getOpenApiOperation(
           openApiSpec,
           openApiPath,
           methodLower,
         );
+        if (usesOpenApiSource && !sourceOperation) {
+          warnings.push(
+            `Endpoint ${endpoint.id}: OpenAPI source operation "${operationKey}" not found — skipping`,
+          );
+          continue;
+        }
         const usesOpenApiPricing = hasOpenApiPricingRulesForOperation(
           openApiSpec,
           openApiPath,
           methodLower,
         );
+
+        if (!usesOpenApiPricing && isFreeEndpoint(endpoint)) {
+          continue;
+        }
+
         const pricingExtension =
           !usesOpenApiPricing && generatedPricing.rules.length > 0
             ? {

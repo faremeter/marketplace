@@ -76,44 +76,11 @@ function toFiniteAmount(raw: string): number {
 
 function extractTxHash(
   payment: NonNullable<CaptureResponse["payment"]>,
-  scheme: string | undefined,
-): string | null {
-  if (scheme === "flex") {
-    return null;
-  }
-
+): string {
   if (payment.protocol === "mpp") {
     return payment.settlement.reference;
   }
   return payment.settlement.transaction;
-}
-
-function buildPaymentMetadata(
-  payment: NonNullable<CaptureResponse["payment"]>,
-  scheme: string | undefined,
-): Record<string, unknown> | null {
-  if (scheme === "flex") {
-    const authorizationId =
-      payment.protocol === "mpp"
-        ? payment.settlement.reference
-        : payment.settlement.transaction;
-
-    return {
-      scheme: "flex",
-      settlementStatus: "pending_finalization",
-      authorizationId,
-      note: "Flex settlement returned an authorization ID; the final Solana signature is emitted later by facilitator flush.",
-    };
-  }
-
-  if (payment.protocol === "mpp") {
-    return {
-      scheme: "mpp",
-      reference: payment.settlement.reference,
-    };
-  }
-
-  return null;
 }
 
 function normalizeClientIp(value: string | undefined): string | null {
@@ -164,9 +131,16 @@ function buildOnCapture(
       return;
     }
 
-    const addr = pickControlPlaneAddr(addrs);
     const scheme = site.operationKeyToScheme?.[operationKey];
+    if (scheme === "flex") {
+      log(
+        "warn",
+        `Flex capture for "${operationKey}" returned an authorization id; final transaction recording is deferred until facilitator finalization is wired`,
+      );
+      return;
+    }
 
+    const addr = pickControlPlaneAddr(addrs);
     const reqInfo = result.request;
     const forwardedFor =
       reqInfo.headers["x-forwarded-for"] ?? reqInfo.headers["x-real-ip"];
@@ -176,14 +150,14 @@ function buildOnCapture(
       org_slug: site.orgSlug,
       endpoint_id: endpointId,
       amount: toFiniteAmount(amountStr),
-      tx_hash: extractTxHash(result.payment, scheme),
+      tx_hash: extractTxHash(result.payment),
       network: asset.chain,
       token_symbol: assetKey.slice(asset.chain.length + 1),
       mint_address: asset.token,
       request_path: reqInfo.path,
       client_ip: normalizeClientIp(forwardedFor),
       request_method: reqInfo.method,
-      metadata: buildPaymentMetadata(result.payment, scheme),
+      metadata: null,
     };
 
     const response = await fetch(`http://${addr}/internal/transactions`, {

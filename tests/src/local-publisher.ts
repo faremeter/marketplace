@@ -37,11 +37,6 @@ app.post("/v1/local-check/:name", async (c) => {
     id: c.req.param("name"),
     object: "local.check",
     message: "Hello from a dynamically created marketplace endpoint.",
-    usage: {
-      prompt_tokens: 3,
-      completion_tokens: 4,
-      total_tokens: 7,
-    },
     upstream: {
       received: body,
       host: c.req.header("host"),

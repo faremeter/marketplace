@@ -282,6 +282,75 @@ await t.test("skips zero-price flex endpoints", async (t) => {
   t.equal(result.operationKeyToScheme["GET /paid-flex-endpoint"], "flex");
 });
 
+await t.test(
+  "keeps zero-price endpoints when imported OpenAPI pricing rules exist",
+  async (t) => {
+    const org = await createOrg("Team", "team");
+    const walletConfig = {
+      solana: { devnet: { address: "merchant-wallet" } },
+    };
+    const wallet = await createWallet(org.id, walletConfig);
+    const tenant = await createTenant(org.id, "zero-imported", wallet.id);
+
+    await db
+      .updateTable("tenants")
+      .set({
+        openapi_spec: JSON.stringify({
+          openapi: "3.0.3",
+          info: { title: "Imported", version: "1.0.0" },
+          "x-faremeter-assets": {
+            "solana-devnet-USDC": {
+              chain: "solana-devnet",
+              token: "imported-mint",
+              decimals: 6,
+              recipient: "merchant-token-account",
+            },
+          },
+          "x-faremeter-pricing": {
+            rates: { "solana-devnet-USDC": 1000 },
+          },
+          paths: {
+            "/usage-priced": {
+              post: {
+                responses: { "200": { description: "OK" } },
+                "x-faremeter-pricing": {
+                  rules: [
+                    {
+                      match: "$",
+                      capture: "$.response.body.usage.total_tokens",
+                    },
+                  ],
+                },
+              },
+            },
+          },
+        }),
+      })
+      .where("id", "=", tenant.id)
+      .execute();
+
+    const endpoint = await createEndpoint(tenant.id, "/usage-priced", {
+      scheme: "exact",
+      price: 0,
+      http_method: "POST",
+      openapi_source_paths: ["/usage-priced"],
+    });
+
+    const result = await buildTenantGatewaySpec(tenant.id);
+    t.not(result, null);
+    if (!result) return;
+
+    const paths = result.spec.paths as Record<string, Record<string, unknown>>;
+    const operation = paths["/usage-priced"]?.post as Record<string, unknown>;
+    t.ok(operation, "imported dynamic operation must remain published");
+    const pricing = operation["x-faremeter-pricing"] as Record<string, unknown>;
+    t.same(pricing.rules, [
+      { match: "$", capture: "$.response.body.usage.total_tokens" },
+    ]);
+    t.equal(result.operationKeyToEndpointId["POST /usage-priced"], endpoint.id);
+  },
+);
+
 await t.test("uses openapi_source_paths when present", async (t) => {
   const org = await createOrg("Team", "team");
   const walletConfig = {
@@ -289,6 +358,25 @@ await t.test("uses openapi_source_paths when present", async (t) => {
   };
   const wallet = await createWallet(org.id, walletConfig);
   const tenant = await createTenant(org.id, "source-paths", wallet.id);
+
+  await db
+    .updateTable("tenants")
+    .set({
+      openapi_spec: JSON.stringify({
+        openapi: "3.0.3",
+        info: { title: "Imported", version: "1.0.0" },
+        paths: {
+          "/v1/data": {
+            get: { responses: { "200": { description: "OK" } } },
+          },
+          "/v2/data": {
+            get: { responses: { "200": { description: "OK" } } },
+          },
+        },
+      }),
+    })
+    .where("id", "=", tenant.id)
+    .execute();
 
   await createEndpoint(tenant.id, "/api/data", {
     scheme: "exact",
@@ -305,6 +393,64 @@ await t.test("uses openapi_source_paths when present", async (t) => {
   t.ok(paths["/v2/data"]);
   t.notOk(paths["/api/data"]);
 });
+
+await t.test(
+  "ANY imported endpoint publishes only source OpenAPI methods",
+  (t) => {
+    const result = buildTenantGatewaySpecFromData({
+      tenantId: 1,
+      tenantName: "source-any",
+      walletConfig: {
+        solana: { devnet: { address: "tenant-default-wallet" } },
+      },
+      openApiSpec: {
+        openapi: "3.0.3",
+        info: { title: "Imported", version: "1.0.0" },
+        paths: {
+          "/v1/jobs": {
+            post: {
+              responses: { "200": { description: "OK" } },
+              "x-faremeter-pricing": {
+                rules: [{ match: "$", capture: "50" }],
+              },
+            },
+          },
+        },
+      },
+      endpoints: [
+        {
+          id: 1,
+          path: "/jobs",
+          path_pattern: "/jobs",
+          openapi_source_paths: ["/v1/jobs"],
+          price: 1,
+          scheme: "exact",
+          description: null,
+          http_method: "ANY",
+        },
+      ],
+      tokenPrices: [
+        {
+          token_symbol: "USDC",
+          mint_address: "tenant-default-mint",
+          network: "solana-devnet",
+          amount: "1000",
+          decimals: 6,
+          endpoint_id: null,
+        },
+      ],
+    });
+    t.not(result, null);
+    if (!result) return t.end();
+
+    const paths = result.spec.paths as Record<string, Record<string, unknown>>;
+    t.ok(paths["/v1/jobs"]?.post, "source POST operation should be present");
+    t.notOk(paths["/v1/jobs"]?.get, "GET must not be synthesized");
+    t.same(result.operationKeyToEndpointId, { "POST /v1/jobs": 1 });
+    t.same(result.operationKeyToScheme, { "POST /v1/jobs": "exact" });
+    t.end();
+  },
+);
 
 await t.test(
   "preserves imported OpenAPI flex rates, authorize, and response capture rules",
@@ -430,7 +576,7 @@ await t.test(
 );
 
 await t.test(
-  "does not publish imported methods that are not mapped to endpoints",
+  "skips imported source operation when the mapped method is absent",
   (t) => {
     const result = buildTenantGatewaySpecFromData({
       tenantId: 1,
@@ -490,13 +636,14 @@ await t.test(
     if (!result) return;
 
     const paths = result.spec.paths as Record<string, Record<string, unknown>>;
-    t.ok(paths["/shared"]?.get, "mapped GET operation should be present");
-    t.notOk(
-      paths["/shared"]?.post,
-      "unmapped imported POST operation must not be published",
+    t.notOk(paths["/shared"], "missing source GET must not be synthesized");
+    t.same(result.operationKeyToEndpointId, {});
+    t.same(result.operationKeyToScheme, {});
+    t.ok(
+      result.warnings.some((warning) =>
+        warning.includes('OpenAPI source operation "GET /shared" not found'),
+      ),
     );
-    t.same(result.operationKeyToEndpointId, { "GET /shared": 1 });
-    t.same(result.operationKeyToScheme, { "GET /shared": "exact" });
     t.end();
   },
 );
@@ -1100,6 +1247,25 @@ await t.test(
     };
     const wallet = await createWallet(org.id, walletConfig);
     const tenant = await createTenant(org.id, "partial-dup", wallet.id);
+
+    await db
+      .updateTable("tenants")
+      .set({
+        openapi_spec: JSON.stringify({
+          openapi: "3.0.3",
+          info: { title: "Imported", version: "1.0.0" },
+          paths: {
+            "/shared": {
+              get: { responses: { "200": { description: "OK" } } },
+            },
+            "/unique": {
+              get: { responses: { "200": { description: "OK" } } },
+            },
+          },
+        }),
+      })
+      .where("id", "=", tenant.id)
+      .execute();
 
     const first = await createEndpoint(tenant.id, "/shared", {
       scheme: "exact",
