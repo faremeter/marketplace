@@ -95,7 +95,7 @@ await t.test("seedTokenPricesForTenant", async (t) => {
   });
 
   await t.test(
-    "seeds only USD-pegged tokens from supported_tokens table",
+    "seeds USD-pegged tokens from supported_tokens table",
     async (t) => {
       const org = await db
         .insertInto("organizations")
@@ -135,13 +135,11 @@ await t.test("seedTokenPricesForTenant", async (t) => {
         .where("tenant_id", "=", tenant.id)
         .execute();
 
-      // Should seed 3 USD-pegged tokens (USDC solana, USDT solana, USDC base)
-      // EURC is not USD-pegged so should be excluded
       t.equal(prices.length, 3);
       const symbols = prices.map((p) => `${p.token_symbol}:${p.network}`);
       t.ok(symbols.includes("USDC:solana-mainnet-beta"));
-      t.ok(symbols.includes("USDT:solana-mainnet-beta"));
       t.ok(symbols.includes("USDC:base"));
+      t.ok(symbols.includes("USDT:solana-mainnet-beta"));
       t.notOk(symbols.includes("EURC:solana-mainnet-beta"));
     },
   );

@@ -3,7 +3,11 @@ import { db } from "../db/instance.js";
 import { logger } from "../logger.js";
 import { buildTenantDomain, toDomainInfo } from "./domain.js";
 import { buildTenantGatewaySpecFromData } from "./gateway-spec-builder.js";
-import { extractGatewaySpec, generateConfig } from "@faremeter/gateway-nginx";
+import {
+  extractGatewaySpec,
+  generateConfig,
+  type RouteConfig,
+} from "@faremeter/gateway-nginx";
 import { extractSpec } from "@faremeter/middleware-openapi";
 
 const envType = type({
@@ -26,6 +30,179 @@ function deriveSchemes(
     if (scheme) schemes.add(scheme);
   }
   return [...schemes];
+}
+
+const OPEN_API_METHODS = new Set([
+  "get",
+  "put",
+  "post",
+  "delete",
+  "options",
+  "head",
+  "patch",
+  "trace",
+]);
+
+type SchemeConfig = {
+  scheme: string;
+  sidecarSlug: string;
+  spec: Record<string, unknown>;
+  routes: RouteConfig[];
+  capabilities: {
+    schemes: string[];
+    networks: string[];
+    assets: string[];
+  };
+  operationKeyToEndpointId: Record<string, number>;
+  operationKeyToScheme: Record<string, string>;
+};
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function buildSidecarSlug(
+  gatewaySlug: string,
+  schemes: string[],
+  scheme: string,
+) {
+  return schemes.length === 1 ? gatewaySlug : `${gatewaySlug}--${scheme}`;
+}
+
+function filterOperationMap<T>(
+  values: Record<string, T>,
+  operationKeys: Set<string>,
+): Record<string, T> {
+  return Object.fromEntries(
+    Object.entries(values).filter(([operationKey]) =>
+      operationKeys.has(operationKey),
+    ),
+  );
+}
+
+function filterSpecByOperations(
+  spec: Record<string, unknown>,
+  operationKeys: Set<string>,
+): Record<string, unknown> {
+  const paths = isRecord(spec.paths) ? spec.paths : {};
+  const filteredPaths: Record<string, unknown> = {};
+
+  for (const [path, rawPathItem] of Object.entries(paths)) {
+    if (!isRecord(rawPathItem)) continue;
+
+    const filteredPathItem: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(rawPathItem)) {
+      if (!OPEN_API_METHODS.has(key)) {
+        filteredPathItem[key] = value;
+        continue;
+      }
+
+      const operationKey = `${key.toUpperCase()} ${path}`;
+      if (operationKeys.has(operationKey)) {
+        filteredPathItem[key] = value;
+      }
+    }
+
+    if (
+      Object.keys(filteredPathItem).some((key) => OPEN_API_METHODS.has(key))
+    ) {
+      filteredPaths[path] = filteredPathItem;
+    }
+  }
+
+  return {
+    ...spec,
+    paths: filteredPaths,
+  };
+}
+
+function assertNoMixedSchemePaths(
+  routes: RouteConfig[],
+  operationKeyToScheme: Record<string, string>,
+  tenantName: string,
+): boolean {
+  const pathToSchemes = new Map<string, Set<string>>();
+  for (const route of routes) {
+    const operationKey = `${route.method} ${route.path}`;
+    const scheme = operationKeyToScheme[operationKey];
+    if (!scheme) continue;
+    const schemes = pathToSchemes.get(route.path) ?? new Set<string>();
+    schemes.add(scheme);
+    pathToSchemes.set(route.path, schemes);
+  }
+
+  const mixedPaths = [...pathToSchemes.entries()]
+    .filter(([, schemes]) => schemes.size > 1)
+    .map(([path]) => path);
+  if (mixedPaths.length === 0) return true;
+
+  logger.error(
+    `buildNodeConfig: tenant ${tenantName} has exact/flex operations sharing the same path (${mixedPaths.join(", ")}); the current gateway generator cannot route one nginx location to multiple sidecar sites`,
+  );
+  return false;
+}
+
+function buildSchemeConfigs(args: {
+  gatewaySlug: string;
+  tenantName: string;
+  spec: Record<string, unknown>;
+  operationKeyToEndpointId: Record<string, number>;
+  operationKeyToScheme: Record<string, string>;
+}): SchemeConfig[] | null {
+  const parsedSpec = extractGatewaySpec(args.spec);
+  if (
+    !assertNoMixedSchemePaths(
+      parsedSpec.routes,
+      args.operationKeyToScheme,
+      args.tenantName,
+    )
+  ) {
+    return null;
+  }
+
+  const operationKeysByScheme = new Map<string, Set<string>>();
+  for (const operationKey of Object.keys(args.operationKeyToEndpointId)) {
+    const scheme = args.operationKeyToScheme[operationKey];
+    if (!scheme) continue;
+    const keys = operationKeysByScheme.get(scheme) ?? new Set<string>();
+    keys.add(operationKey);
+    operationKeysByScheme.set(scheme, keys);
+  }
+
+  const schemes = [...operationKeysByScheme.keys()];
+  return schemes.map((scheme) => {
+    const operationKeys =
+      operationKeysByScheme.get(scheme) ?? new Set<string>();
+    const spec = filterSpecByOperations(args.spec, operationKeys);
+    const parsedSchemeSpec = extractGatewaySpec(spec);
+    const faremeterSpec = extractSpec(spec);
+    const networks = [
+      ...new Set(Object.values(faremeterSpec.assets).map((a) => a.chain)),
+    ];
+    const assets = [
+      ...new Set(Object.values(faremeterSpec.assets).map((a) => a.token)),
+    ];
+
+    return {
+      scheme,
+      sidecarSlug: buildSidecarSlug(args.gatewaySlug, schemes, scheme),
+      spec,
+      routes: parsedSchemeSpec.routes,
+      capabilities: {
+        schemes: [scheme],
+        networks,
+        assets,
+      },
+      operationKeyToEndpointId: filterOperationMap(
+        args.operationKeyToEndpointId,
+        operationKeys,
+      ),
+      operationKeyToScheme: filterOperationMap(
+        args.operationKeyToScheme,
+        operationKeys,
+      ),
+    };
+  });
 }
 
 function sanitizeSlugPart(raw: string): string {
@@ -155,21 +332,18 @@ export async function buildNodeConfig(nodeId: number) {
     }
 
     const { spec, operationKeyToEndpointId, operationKeyToScheme } = specResult;
-    const parsedSpec = extractGatewaySpec(spec);
-    const faremeterSpec = extractSpec(spec);
+    const schemeConfigs = buildSchemeConfigs({
+      gatewaySlug,
+      tenantName: tenant.name,
+      spec,
+      operationKeyToEndpointId,
+      operationKeyToScheme,
+    });
 
-    const operationKeys = Object.keys(faremeterSpec.operations);
-    const networks = [
-      ...new Set(Object.values(faremeterSpec.assets).map((a) => a.chain)),
-    ];
-    const assets = [
-      ...new Set(Object.values(faremeterSpec.assets).map((a) => a.token)),
-    ];
-    const capabilities = {
-      schemes: deriveSchemes(operationKeys, operationKeyToScheme),
-      networks,
-      assets,
-    };
+    if (!schemeConfigs) {
+      skippedSpecFailed++;
+      continue;
+    }
 
     const extraDirectives: string[] = [];
     if (tenant.upstream_auth_header && tenant.upstream_auth_value) {
@@ -190,13 +364,26 @@ export async function buildNodeConfig(nodeId: number) {
       }
     }
 
-    const { locationsConf, luaFiles, warnings } = generateConfig({
-      routes: parsedSpec.routes,
-      sidecarURL: SIDECAR_URL,
-      upstreamURL: tenant.backend_url,
-      sitePrefix: gatewaySlug,
-      extraDirectives: extraDirectives.length > 0 ? extraDirectives : undefined,
-    });
+    const locationParts: string[] = [];
+    const luaFiles = new Map<string, string>();
+    const warnings: string[] = [];
+    for (const schemeConfig of schemeConfigs) {
+      const generated = generateConfig({
+        routes: schemeConfig.routes,
+        sidecarURL: SIDECAR_URL,
+        upstreamURL: tenant.backend_url,
+        sitePrefix: schemeConfig.sidecarSlug,
+        extraDirectives:
+          extraDirectives.length > 0 ? extraDirectives : undefined,
+      });
+      if (generated.locationsConf.trim() !== "") {
+        locationParts.push(generated.locationsConf);
+      }
+      for (const [filename, content] of generated.luaFiles) {
+        luaFiles.set(filename, content);
+      }
+      warnings.push(...generated.warnings);
+    }
 
     for (const warning of warnings) {
       logger.warn(
@@ -220,25 +407,45 @@ export async function buildNodeConfig(nodeId: number) {
 
     gateway[gatewaySlug] = {
       spec,
-      locationsConf,
+      locationsConf: locationParts.join("\n\n"),
       luaFiles: Object.fromEntries(luaFiles),
       warnings,
-      sidecarPrefix: gatewaySlug,
+      sidecarPrefix: schemeConfigs[0]?.sidecarSlug ?? gatewaySlug,
+      sidecarPrefixes: Object.fromEntries(
+        schemeConfigs.map((config) => [config.scheme, config.sidecarSlug]),
+      ),
       baseURL,
       operationKeyToEndpointId,
       operationKeyToScheme,
-      capabilities,
+      capabilities: {
+        schemes: deriveSchemes(
+          Object.keys(operationKeyToEndpointId),
+          operationKeyToScheme,
+        ),
+        networks: [
+          ...new Set(
+            schemeConfigs.flatMap((config) => config.capabilities.networks),
+          ),
+        ],
+        assets: [
+          ...new Set(
+            schemeConfigs.flatMap((config) => config.capabilities.assets),
+          ),
+        ],
+      },
     };
 
-    sidecarSites[gatewaySlug] = {
-      spec,
-      baseURL,
-      capabilities,
-      operationKeyToEndpointId,
-      operationKeyToScheme,
-      tenantName: tenant.name,
-      orgSlug: tenant.org_slug,
-    };
+    for (const schemeConfig of schemeConfigs) {
+      sidecarSites[schemeConfig.sidecarSlug] = {
+        spec: schemeConfig.spec,
+        baseURL,
+        capabilities: schemeConfig.capabilities,
+        operationKeyToEndpointId: schemeConfig.operationKeyToEndpointId,
+        operationKeyToScheme: schemeConfig.operationKeyToScheme,
+        tenantName: tenant.name,
+        orgSlug: tenant.org_slug,
+      };
+    }
   }
 
   const skipParts: string[] = [];

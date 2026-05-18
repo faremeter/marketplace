@@ -1,10 +1,8 @@
-import { AsyncLocalStorage } from "node:async_hooks";
 import { readFileSync, watchFile } from "fs";
 import { serve } from "@hono/node-server";
-import { createApp } from "@faremeter/sidecar/app";
-import type { CreateAppOpts } from "@faremeter/sidecar/app";
+import { createMultiSiteApp } from "@faremeter/sidecar/app";
+import type { CreateAppOpts, MultiSiteConfig } from "@faremeter/sidecar/app";
 import { createHTTPFacilitatorHandler } from "@faremeter/middleware";
-import type { FacilitatorHandler } from "@faremeter/types/facilitator";
 import { extractSpec } from "@faremeter/middleware-openapi";
 import type {
   CaptureResponse,
@@ -12,7 +10,6 @@ import type {
 } from "@faremeter/middleware-openapi";
 import type { HandlerCapabilities } from "@faremeter/types/pricing";
 import { normalizeNetworkId } from "@faremeter/info";
-import { Hono, type Context } from "hono";
 
 const CONFIG_PATH =
   process.env.SIDECAR_CONFIG_PATH ?? "/etc/faremeter-sidecar/config.json";
@@ -21,7 +18,6 @@ const CONTROL_PLANE_ADDRS_PATH =
 const CONTROL_PLANE_ADDRS = process.env.CONTROL_PLANE_ADDRS;
 const WATCH_CONFIG = process.env.SIDECAR_WATCH_CONFIG === "true";
 const PORT = parseInt(process.env.PORT ?? "4002", 10);
-const schemeContext = new AsyncLocalStorage<{ scheme?: string }>();
 
 type SiteConfig = {
   spec: Record<string, unknown>;
@@ -230,32 +226,6 @@ function normalizeRuntimeCapabilities(
   };
 }
 
-function createSchemeFilteringHTTPHandler(
-  facilitatorURL: string,
-  capabilities: HandlerCapabilities,
-): FacilitatorHandler {
-  const delegate = createHTTPFacilitatorHandler(facilitatorURL, {
-    capabilities,
-  });
-
-  return {
-    ...delegate,
-    capabilities,
-    async getRequirements(args) {
-      const scheme = schemeContext.getStore()?.scheme;
-      const accepts = scheme
-        ? args.accepts.filter((accept) => accept.scheme === scheme)
-        : args.accepts;
-
-      if (scheme && accepts.length === 0) {
-        throw new Error(`No payment requirements matched scheme "${scheme}"`);
-      }
-
-      return delegate.getRequirements({ ...args, accepts });
-    },
-  };
-}
-
 function parseSidecarConfig(raw: string): SidecarConfig {
   const parsed: unknown = JSON.parse(raw);
   // The config file is written by a trusted internal process (config-receiver.lua).
@@ -281,38 +251,8 @@ function loadConfig(): SidecarConfig {
   return parseSidecarConfig(raw);
 }
 
-type SiteRuntime = {
-  app: ReturnType<typeof createApp>["app"];
-  operationKeyToScheme?: Record<string, string>;
-};
-
-function createSiteApp(
-  config: SidecarConfig,
-  site: SiteConfig,
-  transactionRecordingSpec: FaremeterSpec,
-): ReturnType<typeof createApp>["app"] {
-  if (!config.facilitatorURL) {
-    throw new Error("facilitatorURL is required when sites are configured");
-  }
-
-  const runtimeSpec = normalizeRuntimeSpec(transactionRecordingSpec);
-  const capabilities = normalizeRuntimeCapabilities(site.capabilities);
-  const x402Handlers = [
-    createSchemeFilteringHTTPHandler(config.facilitatorURL, capabilities),
-  ];
-
-  const opts: CreateAppOpts = {
-    spec: runtimeSpec,
-    baseURL: site.baseURL,
-    x402Handlers,
-    onCapture: buildOnCapture(site, transactionRecordingSpec),
-  };
-
-  return createApp(opts).app;
-}
-
-function buildSites(config: SidecarConfig): Record<string, SiteRuntime> {
-  const sites: Record<string, SiteRuntime> = {};
+function buildSites(config: SidecarConfig): MultiSiteConfig {
+  const sites: MultiSiteConfig = {};
 
   if (!config.facilitatorURL) {
     if (Object.keys(config.sites).length > 0) {
@@ -323,84 +263,38 @@ function buildSites(config: SidecarConfig): Record<string, SiteRuntime> {
 
   for (const [slug, site] of Object.entries(config.sites)) {
     const transactionRecordingSpec = extractSpec(site.spec);
-    sites[slug] = {
-      app: createSiteApp(config, site, transactionRecordingSpec),
-      ...(site.operationKeyToScheme !== undefined && {
-        operationKeyToScheme: site.operationKeyToScheme,
+    const runtimeSpec = normalizeRuntimeSpec(transactionRecordingSpec);
+    const capabilities = normalizeRuntimeCapabilities(site.capabilities);
+    const x402Handlers = [
+      createHTTPFacilitatorHandler(config.facilitatorURL, {
+        capabilities,
       }),
+    ];
+
+    const opts: CreateAppOpts = {
+      spec: runtimeSpec,
+      baseURL: site.baseURL,
+      x402Handlers,
+      onCapture: buildOnCapture(site, transactionRecordingSpec),
     };
+
+    sites[slug] = opts;
   }
 
   return sites;
 }
 
-async function readOperationKey(req: Request): Promise<string | null> {
-  try {
-    const body: unknown = await req.clone().json();
-    if (typeof body !== "object" || body === null) return null;
-    const operationKey = (body as Record<string, unknown>).operationKey;
-    return typeof operationKey === "string" ? operationKey : null;
-  } catch {
-    return null;
-  }
-}
-
-function stripSitePrefix(req: Request, slug: string): Request {
-  const url = new URL(req.url);
-  const prefix = `/sites/${slug}`;
-  url.pathname = url.pathname.startsWith(prefix)
-    ? url.pathname.slice(prefix.length) || "/"
-    : url.pathname;
-  return new Request(url, req);
-}
-
-function sidecarRouteError(c: Context, error: string) {
-  if (c.req.path.endsWith("/response")) {
-    return c.json({ error }, 422);
-  }
-  return c.json({ status: 400, body: { error } });
-}
-
-function createOperationSchemeApp(sites: Record<string, SiteRuntime>) {
-  const app = new Hono();
-
-  for (const [slug, site] of Object.entries(sites)) {
-    app.all(`/sites/${slug}/*`, async (c) => {
-      const operationKey = await readOperationKey(c.req.raw);
-      const scheme = operationKey
-        ? site.operationKeyToScheme?.[operationKey]
-        : undefined;
-
-      if (!operationKey) {
-        return sidecarRouteError(c, "Missing operationKey");
-      }
-      if (site.operationKeyToScheme && !scheme) {
-        return sidecarRouteError(
-          c,
-          `No payment scheme mapped for operation "${operationKey}"`,
-        );
-      }
-
-      return schemeContext.run(scheme === undefined ? {} : { scheme }, () =>
-        site.app.fetch(stripSitePrefix(c.req.raw, slug), c.env),
-      );
-    });
-  }
-
-  return { app };
-}
-
 const initialConfig = loadConfig();
 const initialSites = buildSites(initialConfig);
 
-let current = createOperationSchemeApp(initialSites);
+let current = createMultiSiteApp(initialSites);
 
 function reloadConfig(reason: string): void {
   log("info", `Reloading config (${reason})...`);
   try {
     const newConfig = loadConfig();
     const newSites = buildSites(newConfig);
-    current = createOperationSchemeApp(newSites);
+    current = createMultiSiteApp(newSites);
     log("info", "Config reloaded successfully");
   } catch (err) {
     log("error", `Failed to reload config, keeping previous: ${String(err)}`);

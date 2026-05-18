@@ -189,6 +189,7 @@ await t.test("builds spec with correct structure", async (t) => {
   const getOp = pathEntry.get as Record<string, unknown>;
   const pricing = getOp["x-faremeter-pricing"] as Record<string, unknown>;
   t.ok(pricing);
+  t.same(pricing.rates, { "solana-mainnet-beta-USDC": 1 });
   const rules = pricing.rules as Record<string, unknown>[];
   t.equal(rules.length, 1);
   const rule0 = rules[0];
@@ -306,7 +307,7 @@ await t.test("uses openapi_source_paths when present", async (t) => {
 });
 
 await t.test(
-  "preserves imported OpenAPI flex authorize and response capture rules",
+  "preserves imported OpenAPI flex rates, authorize, and response capture rules",
   async (t) => {
     const org = await createOrg("Team", "team");
     const walletConfig = {
@@ -327,7 +328,7 @@ await t.test(
         },
       },
       "x-faremeter-pricing": {
-        rates: { "solana-devnet-USDC": 1 },
+        rates: { "solana-devnet-USDC": 1000 },
       },
       paths: {
         "/v1/chat/completions": {
@@ -391,7 +392,11 @@ await t.test(
       string,
       unknown
     >;
-    t.same(pricing.rates, { "solana-devnet-USDC": 1 });
+    t.same(
+      pricing.rates,
+      { "solana-devnet-USDC": 1000 },
+      "must preserve imported dynamic pricing rates",
+    );
 
     const paths = result.spec.paths as Record<string, Record<string, unknown>>;
     const operation = paths["/v1/chat/completions"]?.post as Record<

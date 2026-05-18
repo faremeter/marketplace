@@ -278,6 +278,22 @@ function mergePricingExtension(
   };
 }
 
+function getOpenApiPricingRates(
+  openApiSpec: Record<string, unknown> | null,
+): Record<string, unknown> {
+  const pricing = openApiSpec?.["x-faremeter-pricing"];
+  if (!isRecord(pricing) || !isRecord(pricing.rates)) return {};
+  return pricing.rates;
+}
+
+function buildUnitRatesForAssets(
+  assetAliases: string[],
+): Record<string, number> {
+  return Object.fromEntries(
+    [...new Set(assetAliases)].map((assetAlias) => [assetAlias, 1]),
+  );
+}
+
 export function buildTenantGatewaySpecFromData(
   input: GatewaySpecInput,
 ): GatewaySpecResult | null {
@@ -300,19 +316,19 @@ export function buildTenantGatewaySpecFromData(
 
   const assets: Record<string, unknown> = { ...getOpenApiAssets(openApiSpec) };
   for (const tp of tenantLevelPrices) {
-    const alias = `${tp.network}-${tp.token_symbol}`;
-    if (assets[alias]) continue;
+    const assetAlias = `${tp.network}-${tp.token_symbol}`;
+    if (assets[assetAlias]) continue;
 
     const recipient = resolveWalletAddress(walletConfig, tp.network);
 
     if (!recipient) {
       warnings.push(
-        `No wallet address configured for network "${tp.network}" (required for asset "${alias}")`,
+        `No wallet address configured for network "${tp.network}" (required for asset "${assetAlias}")`,
       );
       continue;
     }
 
-    assets[alias] = {
+    assets[assetAlias] = {
       chain: tp.network,
       token: tp.mint_address,
       decimals: tp.decimals,
@@ -367,15 +383,15 @@ export function buildTenantGatewaySpecFromData(
 
     // Determine pricing rules for this endpoint
     const epPrices = endpointPriceMap.get(endpoint.id) ?? [];
-    const pricingResult = buildPricingRules(
+    const generatedPricing = buildPricingRules(
       effectiveEndpoint,
       epPrices,
       tenantLevelPrices,
       assets,
       walletConfig,
     );
-    warnings.push(...pricingResult.warnings);
-    Object.assign(assets, pricingResult.additionalAssets);
+    warnings.push(...generatedPricing.warnings);
+    Object.assign(assets, generatedPricing.additionalAssets);
 
     // ANY expands to standard content-bearing methods. HEAD is served by
     // nginx natively from the GET handler, and OPTIONS (CORS preflight)
@@ -402,8 +418,15 @@ export function buildTenantGatewaySpecFromData(
           methodLower,
         );
         const pricingExtension =
-          !usesOpenApiPricing && pricingResult.rules.length > 0
-            ? { "x-faremeter-pricing": { rules: pricingResult.rules } }
+          !usesOpenApiPricing && generatedPricing.rules.length > 0
+            ? {
+                "x-faremeter-pricing": {
+                  rates: buildUnitRatesForAssets(
+                    generatedPricing.fixedPriceAssetAliases,
+                  ),
+                  rules: generatedPricing.rules,
+                },
+              }
             : {};
 
         // Endpoints are ordered by priority ASC (lower number = higher priority).
@@ -441,9 +464,11 @@ export function buildTenantGatewaySpecFromData(
   // Rules use absolute atomic amounts as capture values, so rates are 1:1 —
   // the evaluator multiplies coefficient * rate, and with rate=1 the result
   // equals the capture value directly.
-  const rates: Record<string, number> = {};
-  for (const alias of Object.keys(assets)) {
-    rates[alias] = 1;
+  const importedOpenApiRates = getOpenApiPricingRates(openApiSpec);
+  const generatedUnitRates: Record<string, number> = {};
+  for (const assetAlias of Object.keys(assets)) {
+    if (importedOpenApiRates[assetAlias] !== undefined) continue;
+    generatedUnitRates[assetAlias] = 1;
   }
 
   const spec: Record<string, unknown> = {
@@ -453,7 +478,10 @@ export function buildTenantGatewaySpecFromData(
       version: "1.0.0",
     },
     "x-faremeter-assets": assets,
-    "x-faremeter-pricing": mergePricingExtension(openApiSpec, rates),
+    "x-faremeter-pricing": mergePricingExtension(
+      openApiSpec,
+      generatedUnitRates,
+    ),
     paths,
   };
 
@@ -516,6 +544,7 @@ type PricingRulesResult = {
   rules: PricingRule[];
   warnings: string[];
   additionalAssets: Record<string, unknown>;
+  fixedPriceAssetAliases: string[];
 };
 
 type FixedPricePolicy = {
@@ -549,6 +578,7 @@ function buildPricingRules(
     rules: [],
     warnings: [],
     additionalAssets: {},
+    fixedPriceAssetAliases: [],
   };
   const scheme = endpoint.scheme;
 
@@ -559,8 +589,8 @@ function buildPricingRules(
   if (endpointPrices.length > 0) {
     // Endpoint-specific token prices take precedence
     for (const tp of endpointPrices) {
-      const alias = `${tp.network}-${tp.token_symbol}`;
-      if (!existingAssets[alias]) {
+      const assetAlias = `${tp.network}-${tp.token_symbol}`;
+      if (!existingAssets[assetAlias]) {
         // The caller merges additionalAssets into existingAssets after each
         // call, so assets validated by earlier endpoints are already present
         // and this branch is only reached for genuinely new network+token
@@ -568,11 +598,11 @@ function buildPricingRules(
         const recipient = resolveWalletAddress(walletConfig, tp.network);
         if (!recipient) {
           result.warnings.push(
-            `Endpoint ${endpoint.id}: token price references network "${tp.network}" but no wallet address is configured — rule for asset "${alias}" skipped`,
+            `Endpoint ${endpoint.id}: token price references network "${tp.network}" but no wallet address is configured — rule for asset "${assetAlias}" skipped`,
           );
           continue;
         }
-        result.additionalAssets[alias] = {
+        result.additionalAssets[assetAlias] = {
           chain: tp.network,
           token: tp.mint_address,
           decimals: tp.decimals,
@@ -586,6 +616,7 @@ function buildPricingRules(
           amount: normalizeAtomicAmount(tp.amount),
         }),
       );
+      result.fixedPriceAssetAliases.push(assetAlias);
     }
   } else if (tenantPrices.length > 0) {
     // Fall back to tenant-level token prices combined with endpoint.price
@@ -597,8 +628,8 @@ function buildPricingRules(
     const endpointMultiplier = endpoint.price ?? 1;
 
     for (const tp of tenantPrices) {
-      const alias = `${tp.network}-${tp.token_symbol}`;
-      if (!existingAssets[alias]) {
+      const assetAlias = `${tp.network}-${tp.token_symbol}`;
+      if (!existingAssets[assetAlias]) {
         // Already warned when building assets
         continue;
       }
@@ -607,7 +638,7 @@ function buildPricingRules(
       const scaledAmount = scaleAtomicAmount(amount, endpointMultiplier);
       if (scaledAmount === "0" && endpointMultiplier !== 0) {
         result.warnings.push(
-          `Endpoint ${endpoint.id}: scaled amount for asset "${alias}" rounds to 0 (amount=${amount}, multiplier=${endpointMultiplier})`,
+          `Endpoint ${endpoint.id}: scaled amount for asset "${assetAlias}" rounds to 0 (amount=${amount}, multiplier=${endpointMultiplier})`,
         );
       }
       result.rules.push(
@@ -617,6 +648,7 @@ function buildPricingRules(
           amount: scaledAmount,
         }),
       );
+      result.fixedPriceAssetAliases.push(assetAlias);
     }
   }
 
