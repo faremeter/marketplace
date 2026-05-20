@@ -76,10 +76,66 @@ export type GatewaySpecInput = {
   tenantId: number;
   tenantName: string;
   defaultScheme?: string | null;
+  openapiSpec?: unknown;
   walletConfig: unknown;
   endpoints: EndpointRow[];
   tokenPrices: TokenPriceRow[];
 };
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function parseImportedSpec(raw: unknown): Record<string, unknown> | null {
+  if (isRecord(raw)) {
+    return raw;
+  }
+  if (typeof raw !== "string") {
+    return null;
+  }
+
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    return isRecord(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+function getRecordProperty(
+  obj: Record<string, unknown> | null | undefined,
+  key: string,
+): Record<string, unknown> | undefined {
+  const value = obj?.[key];
+  return isRecord(value) ? value : undefined;
+}
+
+function getImportedPricingRules(
+  obj: Record<string, unknown> | null | undefined,
+): Record<string, unknown>[] | null {
+  const pricing = getRecordProperty(obj, "x-faremeter-pricing");
+  const rules = pricing?.rules;
+  if (!Array.isArray(rules)) {
+    return null;
+  }
+  return structuredClone(rules) as Record<string, unknown>[];
+}
+
+function getImportedOperationPricingRules(
+  importedSpec: Record<string, unknown> | null,
+  path: string,
+  method: string,
+): Record<string, unknown>[] | null {
+  const importedPaths = getRecordProperty(importedSpec, "paths");
+  const importedPath = getRecordProperty(importedPaths, path);
+  const importedOperation = getRecordProperty(importedPath, method);
+
+  return (
+    getImportedPricingRules(importedOperation) ??
+    getImportedPricingRules(importedPath) ??
+    getImportedPricingRules(importedSpec)
+  );
+}
 
 export function buildTenantGatewaySpecFromData(
   input: GatewaySpecInput,
@@ -94,15 +150,17 @@ export function buildTenantGatewaySpecFromData(
 
   const walletConfig: GatewayWalletConfig = walletConfigParsed;
   const { endpoints, tokenPrices } = input;
-  const defaultScheme = input.defaultScheme ?? "exact";
   const warnings: string[] = [];
+  const importedSpec = parseImportedSpec(input.openapiSpec);
+  const assets: Record<string, unknown> = {};
 
   // Build x-faremeter-assets from tenant-level token prices (endpoint_id IS NULL)
   const tenantLevelPrices = tokenPrices.filter((tp) => tp.endpoint_id === null);
 
-  const assets: Record<string, unknown> = {};
   for (const tp of tenantLevelPrices) {
     const alias = `${tp.network}-${tp.token_symbol}`;
+    if (assets[alias]) continue;
+
     const recipient = resolveWalletAddress(walletConfig, tp.network);
 
     if (!recipient) {
@@ -136,14 +194,9 @@ export function buildTenantGatewaySpecFromData(
   const operationKeyToEndpointId: Record<string, number> = {};
 
   for (const endpoint of endpoints) {
-    const effectiveEndpoint = {
-      ...endpoint,
-      scheme: endpoint.scheme ?? defaultScheme,
-    };
-    const scheme = effectiveEndpoint.scheme;
-
-    // Free endpoints are excluded — handled by the catch-all
-    if (scheme === "free") continue;
+    // Keep legacy "free" rows excluded while new code treats price 0 as
+    // endpoint payment status rather than as a payment scheme.
+    if (endpoint.price === 0 || endpoint.scheme === "free") continue;
 
     const sourcePaths = endpoint.openapi_source_paths;
     const resolvedPaths: string[] = [];
@@ -167,7 +220,7 @@ export function buildTenantGatewaySpecFromData(
     // Determine pricing rules for this endpoint
     const epPrices = endpointPriceMap.get(endpoint.id) ?? [];
     const pricingResult = buildPricingRules(
-      effectiveEndpoint,
+      endpoint,
       epPrices,
       tenantLevelPrices,
       assets,
@@ -205,11 +258,22 @@ export function buildTenantGatewaySpecFromData(
           continue;
         }
 
-        const existing = (paths[openApiPath] ?? {}) as Record<string, unknown>;
+        const existing =
+          (paths[openApiPath] as Record<string, unknown> | undefined) ?? {};
+        const importedPricingRules = getImportedOperationPricingRules(
+          importedSpec,
+          openApiPath,
+          methodLower,
+        );
+        const operationPricingExtension =
+          importedPricingRules !== null
+            ? { "x-faremeter-pricing": { rules: importedPricingRules } }
+            : pricingExtension;
+
         existing[methodLower] = {
           summary: endpoint.description ?? `Endpoint: ${openApiPath}`,
           responses: { "200": { description: "Successful response" } },
-          ...pricingExtension,
+          ...operationPricingExtension,
         };
         paths[openApiPath] = existing;
 
@@ -221,7 +285,7 @@ export function buildTenantGatewaySpecFromData(
   // Rules use absolute atomic amounts as capture values, so rates are 1:1 —
   // the evaluator multiplies coefficient * rate, and with rate=1 the result
   // equals the capture value directly.
-  const rates: Record<string, number> = {};
+  const rates: Record<string, unknown> = {};
   for (const alias of Object.keys(assets)) {
     rates[alias] = 1;
   }
@@ -233,7 +297,9 @@ export function buildTenantGatewaySpecFromData(
       version: "1.0.0",
     },
     "x-faremeter-assets": assets,
-    "x-faremeter-pricing": { rates },
+    "x-faremeter-pricing": {
+      rates,
+    },
     paths,
   };
 
@@ -250,6 +316,7 @@ export async function buildTenantGatewaySpec(
       "tenants.id",
       "tenants.name",
       "tenants.default_scheme",
+      "tenants.openapi_spec",
       "wallets.wallet_config",
     ])
     .where("tenants.id", "=", tenantId)
@@ -279,6 +346,7 @@ export async function buildTenantGatewaySpec(
     tenantId,
     tenantName: tenantRow.name,
     defaultScheme: tenantRow.default_scheme,
+    openapiSpec: tenantRow.openapi_spec,
     walletConfig: tenantRow.wallet_config,
     endpoints,
     tokenPrices: tokenPrices.map((tp) => ({
@@ -308,12 +376,6 @@ function buildPricingRules(
     warnings: [],
     additionalAssets: {},
   };
-  const scheme = endpoint.scheme;
-
-  if (scheme !== "exact") {
-    // Only exact scheme produces one-phase pricing rules in this builder
-    return result;
-  }
 
   if (endpointPrices.length > 0) {
     // Endpoint-specific token prices take precedence
@@ -348,12 +410,6 @@ function buildPricingRules(
       );
     }
     const endpointMultiplier = endpoint.price ?? 1;
-
-    if (endpointMultiplier === 0) {
-      result.warnings.push(
-        `Endpoint ${endpoint.id}: scheme is "exact" but price is 0 — endpoint will be routed through the payment flow but capture nothing; use scheme "free" to mark it as free`,
-      );
-    }
 
     for (const tp of tenantPrices) {
       const alias = `${tp.network}-${tp.token_symbol}`;
