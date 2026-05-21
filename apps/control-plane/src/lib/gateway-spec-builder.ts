@@ -265,6 +265,11 @@ export function buildTenantGatewaySpecFromData(
           openApiPath,
           methodLower,
         );
+        if (importedPricingRules !== null) {
+          warnings.push(
+            `Endpoint ${endpoint.id}: pricing for "${method} ${openApiPath}" sourced from imported OpenAPI spec — marketplace token prices ignored for this operation`,
+          );
+        }
         const operationPricingExtension =
           importedPricingRules !== null
             ? { "x-faremeter-pricing": { rules: importedPricingRules } }

@@ -333,6 +333,15 @@ async function createFlexTokenPrice(
   }
 }
 
+async function deleteFlexTenant(
+  tenantId: number,
+  authCookie: string,
+): Promise<void> {
+  await apiJson<{ deleted: boolean }>(`/api/tenants/${tenantId}`, authCookie, {
+    method: "DELETE",
+  });
+}
+
 function expectedAuthorizeAmount(): string {
   return String(
     Math.ceil(
@@ -875,6 +884,8 @@ async function main() {
   const initialTransactionCount = (await getTransactions(tenant.id, authCookie))
     .length;
   const flexEscrow = await createFlexEscrow();
+  let runError: unknown;
+  const cleanupErrors: unknown[] = [];
 
   try {
     const handler = createPaymentHandler({
@@ -932,8 +943,27 @@ async function main() {
       ),
     );
     process.stdout.write("\n");
+  } catch (err) {
+    runError = err;
   } finally {
-    await cleanupFlexEscrow(flexEscrow);
+    try {
+      await cleanupFlexEscrow(flexEscrow);
+    } catch (err) {
+      cleanupErrors.push(err);
+    }
+
+    try {
+      await deleteFlexTenant(tenant.id, authCookie);
+    } catch (err) {
+      cleanupErrors.push(err);
+    }
+  }
+
+  if (runError || cleanupErrors.length > 0) {
+    throw new AggregateError(
+      [runError, ...cleanupErrors].filter((err) => err !== undefined),
+      "Local Flex smoke check failed",
+    );
   }
 }
 

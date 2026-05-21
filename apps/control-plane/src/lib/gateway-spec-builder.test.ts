@@ -616,6 +616,9 @@ await t.test(
     t.not(result, null);
     if (!result) return;
 
+    t.match(result.warnings, [
+      `Endpoint ${endpoint.id}: pricing for "POST /v1/chat/completions" sourced from imported OpenAPI spec — marketplace token prices ignored for this operation`,
+    ]);
     t.same(result.operationKeyToEndpointId, {
       "POST /v1/chat/completions": endpoint.id,
     });
