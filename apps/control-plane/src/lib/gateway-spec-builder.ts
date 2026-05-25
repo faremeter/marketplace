@@ -118,7 +118,10 @@ function getImportedPricingRules(
   if (!Array.isArray(rules)) {
     return null;
   }
-  return structuredClone(rules) as Record<string, unknown>[];
+  if (!rules.every(isRecord)) {
+    return null;
+  }
+  return structuredClone(rules);
 }
 
 function getImportedOperationPricingRules(
@@ -258,8 +261,8 @@ export function buildTenantGatewaySpecFromData(
           continue;
         }
 
-        const existing =
-          (paths[openApiPath] as Record<string, unknown> | undefined) ?? {};
+        const existingValue = paths[openApiPath];
+        const existing = isRecord(existingValue) ? existingValue : {};
         const importedPricingRules = getImportedOperationPricingRules(
           importedSpec,
           openApiPath,
