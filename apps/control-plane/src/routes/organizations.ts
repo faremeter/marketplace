@@ -12,8 +12,8 @@ import {
   checkBalancesMeetMinimum,
   BALANCE_CACHE_TTL_MS,
   type WalletBalances,
-  type WalletConfig,
 } from "../lib/balances.js";
+import { getWalletAddresses, type WalletConfig } from "../lib/solana-wallet.js";
 import { logger } from "../logger.js";
 import { syncToNode } from "../lib/sync.js";
 import { createHealthCheck, upsertNodeDnsRecord } from "../lib/dns.js";
@@ -42,6 +42,7 @@ import {
 import { arktypeValidator } from "@hono/arktype-validator";
 import {
   OrgCreateTenantSchema,
+  DEFAULT_TENANT_SCHEME,
   OrgUpdateTenantSchema,
   AddMemberSchema,
   UpdateMemberSchema,
@@ -52,6 +53,11 @@ import {
   seedTokenPricesForTenant,
   getUsdPeggedSymbols,
 } from "../lib/token-seed.js";
+import {
+  applyTenantPricingRules,
+  createOpenApiSpecWithRootPricingRules,
+  validateSpecPricingRules,
+} from "../lib/pricing-rules.js";
 
 export const organizationsRoutes = new Hono();
 
@@ -648,12 +654,43 @@ organizationsRoutes.put(
       updateData.wallet_id = body.wallet_id;
     }
 
-    const result = await db
-      .updateTable("tenants")
-      .set(updateData)
-      .where("id", "=", tenantId)
-      .returningAll()
-      .executeTakeFirst();
+    const transactionResult = await db.transaction().execute(async (trx) => {
+      if (body.pricing_rules !== undefined) {
+        const pricingResult = await applyTenantPricingRules(
+          trx,
+          tenantId,
+          body.pricing_rules,
+        );
+        if (!pricingResult.ok) return pricingResult;
+      }
+
+      if (Object.keys(updateData).length === 0) {
+        const current = await trx
+          .selectFrom("tenants")
+          .selectAll()
+          .where("id", "=", tenantId)
+          .executeTakeFirst();
+        return { ok: true as const, tenant: current };
+      }
+
+      const result = await trx
+        .updateTable("tenants")
+        .set(updateData)
+        .where("id", "=", tenantId)
+        .returningAll()
+        .executeTakeFirst();
+
+      return { ok: true as const, tenant: result };
+    });
+
+    if (!transactionResult.ok) {
+      return c.json(
+        { error: transactionResult.error },
+        transactionResult.status,
+      );
+    }
+
+    const result = transactionResult.tenant;
 
     if (!result) {
       return c.json({ error: "Tenant not found" }, 404);
@@ -688,12 +725,7 @@ organizationsRoutes.put(
       }
 
       if (newWalletConfig) {
-        const addresses = {
-          solana: newWalletConfig.solana?.["mainnet-beta"]?.address,
-          base: newWalletConfig.evm?.base?.address,
-          polygon: newWalletConfig.evm?.polygon?.address,
-          monad: newWalletConfig.evm?.monad?.address,
-        };
+        const addresses = getWalletAddresses(newWalletConfig);
 
         updateAccountAddresses(tenant.name, addresses).catch((err: unknown) =>
           logger.error(
@@ -865,12 +897,7 @@ organizationsRoutes.post(
     const walletConfig = tenant.wallet_config as WalletConfig | null;
     if (walletConfig) {
       const accessToken = Math.random().toString(36).substring(2, 7);
-      const addresses = {
-        solana: walletConfig.solana?.["mainnet-beta"]?.address,
-        base: walletConfig.evm?.base?.address,
-        polygon: walletConfig.evm?.polygon?.address,
-        monad: walletConfig.evm?.monad?.address,
-      };
+      const addresses = getWalletAddresses(walletConfig);
 
       setupAccountWithAddresses(tenant.name, accessToken, addresses).catch(
         (err: unknown) =>
@@ -1204,6 +1231,20 @@ organizationsRoutes.post(
 
     const nodeIds = nodesWithCounts.map((n) => n.id);
 
+    const rootPricingSpec =
+      body.pricing_rules !== undefined
+        ? createOpenApiSpecWithRootPricingRules(
+            sanitizedName,
+            body.pricing_rules,
+          )
+        : null;
+    if (rootPricingSpec) {
+      const validationError = validateSpecPricingRules(rootPricingSpec);
+      if (validationError) {
+        return c.json({ error: validationError }, 400);
+      }
+    }
+
     const tenant = await db.transaction().execute(async (trx) => {
       const t = await trx
         .insertInto("tenants")
@@ -1213,9 +1254,12 @@ organizationsRoutes.post(
           organization_id: orgId,
           wallet_id: body.wallet_id ?? null,
           default_price: body.default_price ?? 0,
-          default_scheme: body.default_scheme ?? "exact",
+          default_scheme: body.default_scheme ?? DEFAULT_TENANT_SCHEME,
           upstream_auth_header: body.upstream_auth_header ?? null,
           upstream_auth_value: body.upstream_auth_value ?? null,
+          ...(rootPricingSpec !== null && {
+            openapi_spec: JSON.stringify(rootPricingSpec),
+          }),
           org_slug: org.slug,
           is_active: !isRegisterOnly,
           status: isRegisterOnly ? "registered" : "pending",
@@ -1305,12 +1349,7 @@ organizationsRoutes.post(
       const walletConfig = wallet.wallet_config as WalletConfig | null;
       if (walletConfig) {
         const accessToken = Math.random().toString(36).substring(2, 7);
-        const addresses = {
-          solana: walletConfig.solana?.["mainnet-beta"]?.address,
-          base: walletConfig.evm?.base?.address,
-          polygon: walletConfig.evm?.polygon?.address,
-          monad: walletConfig.evm?.monad?.address,
-        };
+        const addresses = getWalletAddresses(walletConfig);
 
         setupAccountWithAddresses(tenant.name, accessToken, addresses).catch(
           (err: unknown) =>

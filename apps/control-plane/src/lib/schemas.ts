@@ -15,6 +15,7 @@ export const MAX_PRIORITY = 10000;
 export const MAX_TAGS = 5;
 export const MAX_TAG_LENGTH = 50;
 export const MAX_BACKEND_URL_LENGTH = 2048;
+export const DEFAULT_TENANT_SCHEME = "flex";
 
 const tagType = type(`string > 0 & string <= ${MAX_TAG_LENGTH}`).narrow(
   (s, ctx) => {
@@ -35,6 +36,12 @@ const tagsArrayType = tagType.array().narrow((arr, ctx) => {
     return ctx.mustBe("unique (no duplicates)");
   }
   return true;
+});
+
+const pricingRuleType = type({
+  match: "string > 0",
+  "authorize?": "string > 0",
+  capture: "string > 0",
 });
 
 const backendUrlType = type(
@@ -65,6 +72,7 @@ export const CreateEndpointSchema = type({
   "http_method?":
     "'ANY' | 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE' | 'HEAD' | 'OPTIONS'",
   "openapi_source_paths?": "string[] | null",
+  "pricing_rules?": pricingRuleType.array(),
   "tags?": tagsArrayType,
 });
 
@@ -78,6 +86,7 @@ export const UpdateEndpointSchema = type({
     "'ANY' | 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE' | 'HEAD' | 'OPTIONS'",
   "is_active?": "boolean",
   "openapi_source_paths?": "string[] | null",
+  "pricing_rules?": pricingRuleType.array(),
   "tags?": tagsArrayType,
 });
 
@@ -106,6 +115,7 @@ export const UpdateTenantSchema = type({
   "upstream_auth_value?": `string <= ${MAX_AUTH_VALUE_LENGTH} | null`,
   "is_active?": "boolean",
   "tags?": tagsArrayType,
+  "pricing_rules?": pricingRuleType.array(),
 });
 
 export const CreateNodeSchema = type({
@@ -145,6 +155,7 @@ export const OrgCreateTenantSchema = type({
   "upstream_auth_header?": `string <= ${MAX_AUTH_HEADER_LENGTH} | null`,
   "upstream_auth_value?": `string <= ${MAX_AUTH_VALUE_LENGTH} | null`,
   "register_only?": "boolean",
+  "pricing_rules?": pricingRuleType.array(),
 });
 
 export const OrgUpdateTenantSchema = type({
@@ -156,6 +167,7 @@ export const OrgUpdateTenantSchema = type({
   "upstream_auth_header?": `string <= ${MAX_AUTH_HEADER_LENGTH} | null`,
   "upstream_auth_value?": `string <= ${MAX_AUTH_VALUE_LENGTH} | null`,
   "is_active?": "boolean",
+  "pricing_rules?": pricingRuleType.array(),
 });
 
 export const AddMemberSchema = type({
@@ -180,6 +192,7 @@ export const AdminCreateTenantSchema = type({
   "upstream_auth_value?": `string <= ${MAX_AUTH_VALUE_LENGTH} | null`,
   "register_only?": "boolean",
   "tags?": tagsArrayType,
+  "pricing_rules?": pricingRuleType.array(),
 });
 
 const orgSlug = type(
@@ -207,6 +220,7 @@ export const AdminUpdateTenantSchema = type({
   "upstream_auth_value?": `string <= ${MAX_AUTH_VALUE_LENGTH} | null`,
   "org_slug?": adminOrgSlug,
   "tags?": tagsArrayType,
+  "pricing_rules?": pricingRuleType.array(),
 });
 
 export const AdminUpdateEndpointSchema = type({
@@ -217,6 +231,7 @@ export const AdminUpdateEndpointSchema = type({
   "priority?": `0 <= number <= ${MAX_PRIORITY}`,
   "http_method?":
     "'ANY' | 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE' | 'HEAD' | 'OPTIONS'",
+  "pricing_rules?": pricingRuleType.array(),
   "tags?": tagsArrayType,
 });
 

@@ -12,6 +12,7 @@ const ErrorResponse = type({ error: "string", "+": "delete" });
 const FaremeterPricing = type({
   "price?": "number",
   "scheme?": "string",
+  "rules?": "unknown[]",
   "endpoint_id?": "number",
   "+": "delete",
 });
@@ -26,6 +27,20 @@ const FaremeterPathItem = type({
 
 function fmPath(val: unknown) {
   return FaremeterPathItem.assert(val);
+}
+
+function isTestRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+function expectRecord(
+  value: unknown,
+  message: string,
+): Record<string, unknown> {
+  if (!isTestRecord(value)) {
+    throw new Error(message);
+  }
+  return value;
 }
 
 const ExportedSpec = type({
@@ -62,6 +77,14 @@ const ImportResponse = type({
   created: "number",
   linked: "number",
   paths: { created: "string[]", "+": "delete" },
+  "+": "delete",
+});
+
+const RootPricingSpec = type({
+  "x-faremeter-pricing": {
+    rules: "unknown[]",
+    "+": "delete",
+  },
   "+": "delete",
 });
 
@@ -284,6 +307,32 @@ await t.test("POST /api/tenants/:tenantId/openapi/import", async (t) => {
     t.ok(data.error.includes("No paths"));
   });
 
+  await t.test("rejects path keys without leading slash", async (t) => {
+    const user = await createUser("member@example.com");
+    const org = await createOrg("Team", "team");
+    await addMember(user.id, org.id);
+    const tenant = await createTenant(org.id, "my-tenant");
+
+    const res = await app.request(`/api/tenants/${tenant.id}/openapi/import`, {
+      method: "POST",
+      headers: {
+        Cookie: `auth_token=${user.token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        spec: {
+          openapi: "3.0.0",
+          info: { title: "Test", version: "1.0.0" },
+          paths: { "relative/path": { get: {} } },
+        },
+      }),
+    });
+
+    t.equal(res.status, 400);
+    const data = ErrorResponse.assert(await res.json());
+    t.ok(data.error.includes("Invalid"));
+  });
+
   await t.test("imports valid spec and creates endpoints", async (t) => {
     const user = await createUser("member@example.com");
     const org = await createOrg("Team", "team");
@@ -303,6 +352,61 @@ await t.test("POST /api/tenants/:tenantId/openapi/import", async (t) => {
     t.equal(data.success, true);
     t.ok(data.created >= 2);
   });
+
+  await t.test(
+    "preserves existing root pricing when imported spec has none",
+    async (t) => {
+      const user = await createUser("member@example.com");
+      const org = await createOrg("Team", "team");
+      await addMember(user.id, org.id);
+      const tenant = await createTenant(org.id, "my-tenant");
+      const existingRules = [
+        {
+          selector: { type: "json_path", path: "$.model" },
+          prices: { "gpt-4": "0.04", default: "0.01" },
+        },
+      ];
+
+      await db
+        .updateTable("tenants")
+        .set({
+          openapi_spec: JSON.stringify({
+            openapi: "3.0.0",
+            info: { title: "Existing", version: "1.0.0" },
+            paths: {
+              "/existing": {
+                get: { responses: { "200": { description: "OK" } } },
+              },
+            },
+            "x-faremeter-pricing": { rules: existingRules },
+          }),
+        })
+        .where("id", "=", tenant.id)
+        .execute();
+
+      const res = await app.request(
+        `/api/tenants/${tenant.id}/openapi/import`,
+        {
+          method: "POST",
+          headers: {
+            Cookie: `auth_token=${user.token}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ spec: OPENAPI_USPTO }),
+        },
+      );
+
+      t.equal(res.status, 200);
+      const savedTenant = await db
+        .selectFrom("tenants")
+        .select(["openapi_spec"])
+        .where("id", "=", tenant.id)
+        .executeTakeFirstOrThrow();
+      const savedSpec = RootPricingSpec.assert(savedTenant.openapi_spec);
+
+      t.same(savedSpec["x-faremeter-pricing"].rules, existingRules);
+    },
+  );
 
   await t.test("rejects OpenAPI 2.x spec", async (t) => {
     const user = await createUser("member@example.com");
@@ -1212,6 +1316,154 @@ await t.test("x-402 export extensions", async (t) => {
       t.equal(postsFm["x-faremeter-pricing"].price, 0);
       t.equal(postsFm["x-faremeter-pricing"].scheme, "exact");
       t.notOk(postsFm["x-faremeter-pricing"].endpoint_id);
+    },
+  );
+
+  await t.test(
+    "preserves path-level advanced pricing rules on lineage endpoints",
+    async (t) => {
+      const { user, tenant } = await setupTenant();
+      const rules = [
+        {
+          match: "$",
+          authorize: "12000",
+          capture: "$.response.body.usage.total_tokens * 10",
+        },
+      ];
+
+      await importSpec(
+        tenant.id,
+        user.token,
+        makeSpec({
+          "/api/chat": {
+            "x-faremeter-pricing": {
+              scheme: "flex",
+              rules,
+            },
+            post: { summary: "Chat" },
+          },
+        }),
+      );
+
+      await db
+        .updateTable("endpoints")
+        .set({ price: 1000, scheme: "flex", http_method: "POST" })
+        .where("tenant_id", "=", tenant.id)
+        .where("path", "=", "/api/chat")
+        .execute();
+
+      const { data } = await exportSpec(tenant.id, user.token);
+      const chatPath = fmPath(data.spec.paths["/api/chat"]);
+
+      t.same(chatPath["x-faremeter-pricing"], {
+        scheme: "flex",
+        rules,
+      });
+    },
+  );
+
+  await t.test(
+    "preserves operation-level advanced pricing rules on lineage endpoints",
+    async (t) => {
+      const { user, tenant } = await setupTenant();
+      const rules = [
+        {
+          match: "$",
+          authorize: "12000",
+          capture: "$.response.body.usage.total_tokens * 10",
+        },
+      ];
+
+      await importSpec(
+        tenant.id,
+        user.token,
+        makeSpec({
+          "/api/chat": {
+            post: {
+              summary: "Chat",
+              "x-faremeter-pricing": {
+                rules,
+              },
+            },
+          },
+        }),
+      );
+
+      await db
+        .updateTable("endpoints")
+        .set({ price: 1000, scheme: "flex", http_method: "POST" })
+        .where("tenant_id", "=", tenant.id)
+        .where("path", "=", "/api/chat")
+        .execute();
+
+      const { data } = await exportSpec(tenant.id, user.token);
+      const chatPath = expectRecord(
+        data.spec.paths["/api/chat"],
+        "expected /api/chat path item",
+      );
+      const postOperation = expectRecord(
+        chatPath.post,
+        "expected POST operation",
+      );
+
+      t.notOk(
+        chatPath["x-faremeter-pricing"],
+        "path-level fallback pricing should not be added",
+      );
+      t.same(postOperation["x-faremeter-pricing"], { rules });
+    },
+  );
+
+  await t.test(
+    "keeps ANY fallback pricing when only HEAD has advanced rules",
+    async (t) => {
+      const { user, tenant } = await setupTenant();
+      const rules = [
+        {
+          match: "$",
+          authorize: "12000",
+          capture: "1",
+        },
+      ];
+
+      await importSpec(
+        tenant.id,
+        user.token,
+        makeSpec({
+          "/api/chat": {
+            head: {
+              summary: "Chat metadata",
+              "x-faremeter-pricing": {
+                rules,
+              },
+            },
+            post: { summary: "Chat" },
+          },
+        }),
+      );
+
+      await db
+        .updateTable("endpoints")
+        .set({ price: 1000, scheme: "flex", http_method: "ANY" })
+        .where("tenant_id", "=", tenant.id)
+        .where("path", "=", "/api/chat")
+        .execute();
+
+      const { data } = await exportSpec(tenant.id, user.token);
+      const chatPath = expectRecord(
+        data.spec.paths["/api/chat"],
+        "expected /api/chat path item",
+      );
+      const headOperation = expectRecord(
+        chatPath.head,
+        "expected HEAD operation",
+      );
+
+      t.same(chatPath["x-faremeter-pricing"], {
+        price: 1000,
+        scheme: "flex",
+      });
+      t.same(headOperation["x-faremeter-pricing"], { rules });
     },
   );
 

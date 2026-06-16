@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { db } from "../db/instance.js";
-import { syncToNode } from "../lib/sync.js";
+import { syncTenantNodes, syncToNode } from "../lib/sync.js";
 import { logger } from "../logger.js";
 import {
   upsertNodeDnsRecord,
@@ -16,6 +16,7 @@ import { requireAdmin, requireTenantAccess } from "../middleware/auth.js";
 import { arktypeValidator } from "@hono/arktype-validator";
 import {
   CreateTenantSchema,
+  DEFAULT_TENANT_SCHEME,
   UpdateTenantSchema,
   AssignNodeSchema,
 } from "../lib/schemas.js";
@@ -23,6 +24,11 @@ import {
   seedTokenPricesForTenant,
   getUsdPeggedSymbols,
 } from "../lib/token-seed.js";
+import {
+  applyTenantPricingRules,
+  getOpenApiSpec,
+  getPricingRulesFromObject,
+} from "../lib/pricing-rules.js";
 
 export const tenantsRoutes = new Hono();
 
@@ -91,7 +97,7 @@ tenantsRoutes.post(
           organization_id: body.organization_id ?? null,
           wallet_id: body.wallet_id ?? null,
           default_price: body.default_price ?? 0,
-          default_scheme: body.default_scheme ?? "exact",
+          default_scheme: body.default_scheme ?? DEFAULT_TENANT_SCHEME,
           upstream_auth_header: body.upstream_auth_header ?? null,
           upstream_auth_value: body.upstream_auth_value ?? null,
           is_active: isRegisterOnly ? false : (body.is_active ?? true),
@@ -176,12 +182,43 @@ tenantsRoutes.put(
       updateData.upstream_auth_value = body.upstream_auth_value;
     if (body.is_active !== undefined) updateData.is_active = body.is_active;
 
-    const result = await db
-      .updateTable("tenants")
-      .set(updateData)
-      .where("id", "=", id)
-      .returningAll()
-      .executeTakeFirst();
+    const transactionResult = await db.transaction().execute(async (trx) => {
+      if (body.pricing_rules !== undefined) {
+        const pricingResult = await applyTenantPricingRules(
+          trx,
+          id,
+          body.pricing_rules,
+        );
+        if (!pricingResult.ok) return pricingResult;
+      }
+
+      if (Object.keys(updateData).length === 0) {
+        const current = await trx
+          .selectFrom("tenants")
+          .selectAll()
+          .where("id", "=", id)
+          .executeTakeFirst();
+        return { ok: true as const, tenant: current };
+      }
+
+      const result = await trx
+        .updateTable("tenants")
+        .set(updateData)
+        .where("id", "=", id)
+        .returningAll()
+        .executeTakeFirst();
+
+      return { ok: true as const, tenant: result };
+    });
+
+    if (!transactionResult.ok) {
+      return c.json(
+        { error: transactionResult.error },
+        transactionResult.status,
+      );
+    }
+
+    const result = transactionResult.tenant;
 
     if (!result) {
       return c.json({ error: "Tenant not found" }, 404);
@@ -201,19 +238,31 @@ tenantsRoutes.put(
       }
     }
 
-    const assignedNodes = await db
-      .selectFrom("tenant_nodes")
-      .select(["node_id"])
-      .where("tenant_id", "=", id)
-      .execute();
-
-    for (const { node_id } of assignedNodes) {
-      syncToNode(node_id).catch((err: unknown) => logger.error(String(err)));
-    }
+    void syncTenantNodes(id);
 
     return c.json(result);
   },
 );
+
+tenantsRoutes.get("/:id/pricing-rules", async (c) => {
+  const id = parseInt(c.req.param("id"));
+
+  const tenant = await db
+    .selectFrom("tenants")
+    .select(["id", "openapi_spec"])
+    .where("id", "=", id)
+    .executeTakeFirst();
+
+  if (!tenant) {
+    return c.json({ error: "Tenant not found" }, 404);
+  }
+
+  const spec = getOpenApiSpec(tenant.openapi_spec);
+  return c.json({
+    rules: spec ? (getPricingRulesFromObject(spec) ?? []) : [],
+    editable: true,
+  });
+});
 
 tenantsRoutes.delete("/:id", async (c) => {
   const memberRole = c.get("memberRole");
