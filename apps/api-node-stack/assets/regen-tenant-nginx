@@ -10,6 +10,12 @@ BASE_DOMAIN=$(jq -r '.base_domain' "$DOMAIN_CONFIG")
 mapfile -t ALT_DOMAINS < <(jq -r '.alt_domains[]' "$DOMAIN_CONFIG" 2>/dev/null)
 
 cat <<'BASE' >"$OUTPUT_FILE"
+# Tenant server_name entries accumulate as proxies are onboarded; the nginx
+# default bucket size (64) is too small for our long multi-label FQDNs and makes
+# nginx fail to start once enough tenants exist. Size these up front.
+server_names_hash_max_size 2048;
+server_names_hash_bucket_size 128;
+
 lua_package_path '/etc/nginx/?.lua;/etc/nginx/sites-available/api-node.d/?.lua;;';
 lua_shared_dict tenants 10m;
 lua_shared_dict word_dict 10m;
